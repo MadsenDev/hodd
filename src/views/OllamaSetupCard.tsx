@@ -205,23 +205,47 @@ export function OllamaSetupCard() {
           </div>
         );
 
-      case 'installing':
+      case 'installing': {
+        const MILESTONES = [
+          { match: 'Installing ollama to',              pct: 10, label: 'Downloading binary' },
+          { match: 'Creating ollama user',              pct: 35, label: 'Creating system user' },
+          { match: 'Adding ollama user to video group', pct: 50, label: 'Configuring permissions' },
+          { match: 'Adding current user to ollama',     pct: 60, label: 'Configuring permissions' },
+          { match: 'Creating ollama systemd service',   pct: 75, label: 'Installing service' },
+          { match: 'Enabling and starting ollama',      pct: 88, label: 'Starting service' },
+          { match: 'Install complete',                  pct: 100, label: 'Complete' },
+        ];
+        const fullLog = installLog.join('\n');
+        let installPct = 5;
+        let installLabel = 'Preparing…';
+        for (const m of MILESTONES) {
+          if (fullLog.includes(m.match)) { installPct = m.pct; installLabel = m.label; }
+        }
         return (
           <>
-            <p className="settings-hint" style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <I.refresh size={14} className="spin" />
-              Installing Ollama…
-            </p>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 7 }}>
+                <span className="settings-hint" style={{ display: 'flex', alignItems: 'center', gap: 7, margin: 0 }}>
+                  {installPct < 100 && <I.refresh size={13} className="spin" />}
+                  {installPct === 100 ? <I.check size={13} stroke={2.5} style={{ color: 'var(--success, #5ba47a)' }} /> : null}
+                  {installLabel}
+                </span>
+                <span style={{ fontSize: 12, color: 'var(--mute)', fontVariantNumeric: 'tabular-nums' }}>{installPct}%</span>
+              </div>
+              <div style={{ height: 6, borderRadius: 6, background: 'var(--panel-3)', overflow: 'hidden' }}>
+                <div style={{ height: '100%', borderRadius: 6, background: 'var(--accent)', width: `${installPct}%`, transition: 'width 0.6s var(--ease)' }} />
+              </div>
+            </div>
             <div
               ref={logRef}
               style={{
                 fontFamily: '"SF Mono", ui-monospace, monospace',
-                fontSize: 12,
+                fontSize: 11.5,
                 lineHeight: 1.55,
                 background: 'var(--panel-2)',
                 borderRadius: 'var(--radius-sm)',
                 padding: '10px 14px',
-                maxHeight: 200,
+                maxHeight: 160,
                 overflowY: 'auto',
                 border: '1px solid var(--border-soft)',
                 color: 'var(--text-2)',
@@ -241,6 +265,7 @@ export function OllamaSetupCard() {
             </div>
           </>
         );
+      }
 
       case 'not-running':
         return (
