@@ -113,7 +113,7 @@ export function Home({ ctx }) {
   return (
     <div className="view-enter">
       <div className="stats">
-        {D.headlineStats.map(s => <HeadlineStat key={s.id} s={s} />)}
+        {(D.headlineStats || []).map(s => <HeadlineStat key={s.id} s={s} />)}
       </div>
 
       <div className="section-head"><div className="eyebrow">Featured shelf</div><a className="link" onClick={() => ctx.openCollection("featured")}>View all <I.arrowRight size={14} /></a></div>
@@ -161,7 +161,7 @@ export function Home({ ctx }) {
         <div>
           <div className="section-head"><div className="eyebrow">Recently added</div><a className="link" onClick={() => ctx.go("timeline")}>View all</a></div>
           <div className="recent-grid">
-            {D.recent.map(it => (
+            {(D.recent || []).map(it => (
               <div className="recent-card" key={it.id} onClick={() => ctx.openItem(it)}>
                 <Cover item={it} h={phone ? 150 : 196} onClick={() => ctx.openItem(it)} />
                 <div className="title">{it.title}</div>
@@ -282,7 +282,7 @@ export function HomeNew({ ctx, art = "Covers" }) {
 
       <div className="section-head" style={{ marginTop: 34 }}><div className="eyebrow">Recently added</div><a className="link" onClick={() => ctx.go("timeline")}>View all</a></div>
       <div className="recent-grid">
-        {D.recent.map(it => (
+        {(D.recent || []).map(it => (
           <div className="recent-card" key={it.id} onClick={() => ctx.openItem(it)}>
             <Cover item={it} h={phone ? 150 : 196} onClick={() => ctx.openItem(it)} />
             <div className="title">{it.title}</div>

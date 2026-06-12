@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { I } from './icons';
 import { Cover, Sidebar, Topbar, MobileTopBar, MobileTabs, useNarrow } from './components';
 import { useTweaks, TweaksPanel, TweakSection, TweakRadio, TweakColor, TweakSelect } from './tweaks';
-import { useUser } from './hooks';
+import { useUser, useCollections } from './hooks';
 import { OllamaClient, addItem, lookupMetadata, invalidateCache } from './api';
 import { TYPE_COLL, TYPE_LABEL, parseHoardLines } from './engine';
 import { typeIcon } from './icons';
@@ -111,12 +111,12 @@ function ConfBadge({ c }) {
   return <span className={"conf " + c}>{c === "high" ? "Confident" : "Confirm"}</span>;
 }
 
-function AddCard({ item, onChange, onRemove }) {
+function AddCard({ item, onChange, onRemove, collOpts }) {
   const setField = (i, v) => {
     const fields = item.fields.map((f, j) => j === i ? { ...f, v, c: "high" } : f);
     onChange({ ...item, fields, askCount: fields.filter(f => f.c === "ask").length });
   };
-  const collections = [...new Set(Object.values(TYPE_COLL))];
+  const opts = collOpts && collOpts.length ? collOpts.map(c => c.name) : [...new Set(Object.values(TYPE_COLL))];
   return (
     <div className="add-card">
       <div className="add-card-cover"><Cover item={{ title: item.title, type: item.type, color: item.color }} h={84} /></div>
@@ -127,7 +127,7 @@ function AddCard({ item, onChange, onRemove }) {
             <span className="add-type">{typeIcon(item.type, { size: 13, stroke: 1.8 })} {TYPE_LABEL[item.type]}</span>
             <span className="add-arrow">→</span>
             <select className="add-coll" value={item.collection} onChange={e => onChange({ ...item, collection: e.target.value })}>
-              {collections.map(c => <option key={c} value={c}>{c}</option>)}
+              {opts.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
         </div>
@@ -203,6 +203,8 @@ function AddDesktop({ onClose, ctx, ollamaModel }) {
   const [items, setItems] = useState([]);
   const inputRef = useRef(null);
   useEffect(() => { inputRef.current && inputRef.current.focus(); }, []);
+  const colls = useCollections();
+  const collOpts = colls.data || [];
 
   const lineCount = text.split("\n").map(s => s.trim()).filter(Boolean).length;
 
@@ -238,14 +240,15 @@ function AddDesktop({ onClose, ctx, ollamaModel }) {
   }
 
   function confirmAdd() {
+    const nameToId = Object.fromEntries(collOpts.map(c => [c.name, c.id]));
     items.forEach(it => {
-      const collId = COLL_NAME_TO_ID[it.collection] || "games";
+      const collId = nameToId[it.collection] || COLL_NAME_TO_ID[it.collection] || "games";
       addItem(collId, buildDraft(it));
     });
     invalidateCache();
     onClose();
-    // Navigate to the first item's collection
-    const firstCollId = COLL_NAME_TO_ID[items[0]?.collection] || "games";
+    const firstName = items[0]?.collection;
+    const firstCollId = (firstName && (nameToId[firstName] || COLL_NAME_TO_ID[firstName])) || "games";
     ctx.openCollection(firstCollId);
   }
 
@@ -296,7 +299,7 @@ function AddDesktop({ onClose, ctx, ollamaModel }) {
               </div>
               <div className="add-list">
                 {items.map((it, i) => (
-                  <AddCard key={it.id} item={it}
+                  <AddCard key={it.id} item={it} collOpts={collOpts}
                     onChange={u => setItems(items.map((x, j) => j === i ? u : x))}
                     onRemove={() => setItems(items.filter((_, j) => j !== i))} />
                 ))}

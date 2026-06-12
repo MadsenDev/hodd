@@ -270,7 +270,7 @@ export async function getHome() {
 
   home.recent = dynamic?.recent?.length
     ? dynamic.recent
-    : await getItems(home.recentIds);
+    : await getItems(home.recentIds || []);
 
   if (dynamic?.addedThisMonth !== undefined && home.headlineStats) {
     const stats = [...home.headlineStats];
