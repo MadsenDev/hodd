@@ -342,6 +342,15 @@ export async function getHome() {
           stats[i] = { ...s, value: String(typeMatch.pct), ring: typeMatch.pct };
         }
       });
+
+      // Patch "unread books" stat from live holdings
+      const unreadIdx = stats.findIndex((s: any) => s.id === 'unread');
+      if (unreadIdx >= 0) {
+        const catUnread = (_catalog as any[]).filter(c => c.type === 'book' && (_holdings as any)[c.id] && !(_holdings as any)[c.id].watched).length;
+        const userUnread = Object.values(_userItems as Record<string, any[]> || {}).flat()
+          .filter((i: any) => i.type === 'book' && i.owned !== false && !i.watched).length;
+        stats[unreadIdx] = { ...stats[unreadIdx], value: String(catUnread + userUnread) };
+      }
     }
 
     home.headlineStats = stats;
