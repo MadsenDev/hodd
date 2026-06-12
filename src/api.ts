@@ -49,6 +49,17 @@ export function removeHolding(id) {
   if (_holdings) delete _holdings[id];
   const a = ipc(); if (a) a.removeHolding(id);
 }
+
+export function removeItem(id) {
+  if (_userItems) {
+    for (const collId of Object.keys(_userItems)) {
+      _userItems[collId] = (_userItems[collId] || []).filter(i => i.id !== id);
+    }
+  }
+  if (_holdings) delete _holdings[id];
+  if (_catOv) delete _catOv[id];
+  const a = ipc(); if (a) a.deleteItem(id);
+}
 export function saveCatalog(id, patch) {
   if (!_catOv) _catOv = {};
   _catOv[id] = Object.assign({}, _catOv[id] || {}, patch);

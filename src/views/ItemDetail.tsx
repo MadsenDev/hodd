@@ -3,7 +3,7 @@ import React from 'react';
 import { I } from '../icons';
 import { Cover, FluidCover, useNarrow } from '../components';
 import { useCollection, useStory } from '../hooks';
-import { saveCatalog, saveStory, saveHolding, removeHolding, OllamaClient } from '../api';
+import { saveCatalog, saveStory, saveHolding, removeHolding, removeItem, OllamaClient } from '../api';
 import { ItemEditForm, SUBLABELS } from '../forms';
 
 function fallbackStory(item) {
@@ -19,8 +19,10 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
   const [editing, setEditing] = React.useState(false);
   const [storyOv, setStoryOv] = React.useState(null);
   const [generatingStory, setGeneratingStory] = React.useState(false);
-  React.useEffect(() => { setItem(initialItem); setEditing(false); setStoryOv(null); }, [initialItem]);
-  const fallback = useCollection(collection ? null : "featured");
+  const [confirmDelete, setConfirmDelete] = React.useState(false);
+  React.useEffect(() => { setItem(initialItem); setEditing(false); setStoryOv(null); setConfirmDelete(false); }, [initialItem]);
+  const isUserItem = item.id && String(item.id).startsWith("i-");
+  const fallback = useCollection((collection || isUserItem) ? null : "featured");
   const storyState = useStory(item.id);
   const type = item.type || "game";
   const story = storyOv || storyState.data || fallbackStory(item);
@@ -55,11 +57,11 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
           <FluidCover item={item} ghost={item.owned === false} maxWidth={narrow ? 300 : 360} />
         </div>
         <div>
-          <div className="eyebrow" style={{ color: "var(--gold-deep)" }}>{collection ? collection.name : (item.sub || type)}</div>
+          <div className="eyebrow" style={{ color: "var(--gold-deep)" }}>{collection ? collection.name : (item.collName || item.sub || type)}</div>
           <h1>{item.title}</h1>
           <div className="byline">{item.sub || subLabel}</div>
           {!editing && (
-            <div style={{ display: "flex", gap: 10, marginTop: 18, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 10, marginTop: 18, flexWrap: "wrap", alignItems: "center" }}>
               {item.owned === false
                 ? <span className="badge badge-missing" style={{ fontSize: 12, padding: "8px 14px", border: "1px solid var(--border-soft)", borderRadius: 20 }}><I.plus size={13} stroke={2} /> Not in collection</span>
                 : <span className="badge badge-owned" style={{ fontSize: 12, padding: "8px 14px", border: "1px solid var(--border)", borderRadius: 20, background: "var(--accent-wash)" }}><I.check size={13} stroke={2.2} /> In your collection</span>}
@@ -67,6 +69,20 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
               {item.owned === false
                 ? <button className="btn solid" onClick={() => setEditing(true)}><I.plus size={16} /> Add to collection</button>
                 : <button className="btn"><I.heart size={16} /> Mark favorite</button>}
+              {isUserItem && !confirmDelete && (
+                <button className="btn" style={{ marginLeft: "auto", color: "var(--danger, #cf6b5a)" }} onClick={() => setConfirmDelete(true)}>
+                  <I.trash size={15} /> Remove
+                </button>
+              )}
+              {isUserItem && confirmDelete && (
+                <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+                  <span style={{ fontSize: 13, color: "var(--mute)" }}>Remove this item?</span>
+                  <button className="btn" style={{ color: "var(--danger, #cf6b5a)" }} onClick={() => { removeItem(item.id); ctx.back(); }}>
+                    Yes, remove
+                  </button>
+                  <button className="btn" onClick={() => setConfirmDelete(false)}>Cancel</button>
+                </div>
+              )}
             </div>
           )}
 

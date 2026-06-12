@@ -541,6 +541,14 @@ export function addUserItem(collectionId: string, draft: Record<string, unknown>
   return { ...draft, id, collectionId, owned: draft.owned !== false };
 }
 
+export function deleteUserItem(id: string): void {
+  db.run('DELETE FROM user_items WHERE id = ?', [id]);
+  db.run('DELETE FROM holdings WHERE item_id = ?', [id]);
+  db.run('DELETE FROM catalog_overrides WHERE item_id = ?', [id]);
+  db.run('DELETE FROM stories WHERE item_id = ?', [id]);
+  scheduleWrite();
+}
+
 export function saveSetting(key: string, value: string): void {
   db.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [key, value]);
   scheduleWrite();

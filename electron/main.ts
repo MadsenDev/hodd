@@ -125,6 +125,7 @@ function registerIpc(): void {
   ipcMain.handle('hodd:story:save',      (_e, id: string, paragraphs: string[])           => db.saveStory(id, paragraphs));
   ipcMain.handle('hodd:collection:create', (_e, def: { name: string; type: string; accent: string; template: string[] }) => db.createCollection(def));
   ipcMain.handle('hodd:item:add',        (_e, collId: string, draft: Record<string, unknown>) => db.addUserItem(collId, draft));
+  ipcMain.handle('hodd:item:delete',     (_e, id: string)                                      => db.deleteUserItem(id));
   ipcMain.handle('hodd:setting:save',    (_e, key: string, value: string)                 => db.saveSetting(key, value));
 
   // Archive export
