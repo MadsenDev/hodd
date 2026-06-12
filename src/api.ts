@@ -340,12 +340,12 @@ export async function getSearchIndex() {
     if (c.collectionId === "pokemon") item.completed = item.owned && c.year < 1999;
     return item;
   });
-  const ui = _userItems || {}, uc = _userColls || [], userIdx = [];
+  const ui = _userItems || {}, uc = _userColls || [], bc = _baseCols || [], userIdx = [];
   Object.keys(ui).forEach(collId => {
-    const coll = uc.find(c => c.id === collId);
+    const coll = uc.find(c => c.id === collId) || bc.find(c => c.id === collId);
     (ui[collId] || []).forEach(it => {
       const item = applyEdits(it);
-      item.coll = coll ? coll.name : "My Collection";
+      item.coll = coll ? (coll.name as string) : "My Collection";
       userIdx.push(item);
     });
   });
