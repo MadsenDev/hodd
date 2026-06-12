@@ -419,7 +419,14 @@ export default function App() {
   const greeting = greetingFor(new Date());
   const name = user.data ? user.data.name : "";
   let bar;
-  if (view === "home") bar = { title: name ? `${greeting}, ${name}.` : `${greeting}.`, subtitle: "Every item has a story. What will you discover tonight?" };
+  if (view === "home") {
+    const h = new Date().getHours();
+    const homeSub = h < 5  ? "Still awake? Your hoard never sleeps."
+      : h < 12 ? "Good collections start with good mornings."
+      : h < 18 ? "A good afternoon to explore the hoard."
+      : "Every item has a story. What will you discover tonight?";
+    bar = { title: name ? `${greeting}, ${name}.` : `${greeting}.`, subtitle: homeSub };
+  }
   else if (view === "collections") bar = { title: "Collections", subtitle: "Everything you value, gathered in one place." };
   else if (view === "search") bar = { title: "Search", subtitle: "Ask in plain language — Hodd translates it into your hoard." };
   else if (view === "wishlist")   bar = { title: "Wishlist", subtitle: "What's still out there." };

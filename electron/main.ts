@@ -131,6 +131,7 @@ function registerIpc(): void {
   ipcMain.handle('hodd:holding:remove',  (_e, id: string)                                 => db.removeHolding(id));
   ipcMain.handle('hodd:catalog:save',    (_e, id: string, patch: Record<string, unknown>) => db.saveCatalogOverride(id, patch));
   ipcMain.handle('hodd:story:save',      (_e, id: string, paragraphs: string[])           => db.saveStory(id, paragraphs));
+  ipcMain.handle('hodd:stories:all',     ()                                                 => db.getAllStories());
   ipcMain.handle('hodd:collection:create', (_e, def: { name: string; type: string; accent: string; template: string[] }) => db.createCollection(def));
   ipcMain.handle('hodd:item:add',        (_e, collId: string, draft: Record<string, unknown>) => db.addUserItem(collId, draft));
   ipcMain.handle('hodd:item:delete',     (_e, id: string)                                      => db.deleteUserItem(id));

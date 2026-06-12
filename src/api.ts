@@ -369,7 +369,11 @@ export async function exportData() {
   await ensureCache();
   const fn = (window as any).hoddDesktop?.exportArchive;
   if (!fn) return null;
-  const user = await getUser();
+  const a = ipc();
+  const [user, stories] = await Promise.all([
+    getUser(),
+    a ? a.getAllStories().catch(() => ({})) : Promise.resolve({}),
+  ]);
   const payload = {
     version: 1,
     exported: new Date().toISOString(),
@@ -378,6 +382,7 @@ export async function exportData() {
     userItems: _userItems || {},
     holdings: _holdings || {},
     catalogOverrides: _catOv || {},
+    stories: stories || {},
   };
   return fn(payload);
 }

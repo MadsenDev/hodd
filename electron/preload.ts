@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld('hoddDesktop', {
     getHomeConfig:        () => ipcRenderer.invoke('hodd:home-config'),
     getStatsConfig:       () => ipcRenderer.invoke('hodd:stats-config'),
     getStory:             (id: string) => ipcRenderer.invoke('hodd:story:get', id),
+    getAllStories:        ()           => ipcRenderer.invoke('hodd:stories:all'),
 
     saveHolding:  (id: string, patch: Record<string, unknown>) => ipcRenderer.invoke('hodd:holding:save', id, patch),
     removeHolding:(id: string)                                  => ipcRenderer.invoke('hodd:holding:remove', id),

@@ -676,6 +676,17 @@ export function importArchive(payload: Record<string, unknown>): { imported: num
     ]);
   }
 
+  // Stories (only restore if the archive includes them, to protect against old-format imports)
+  const stories = payload.stories as Record<string, unknown> | undefined;
+  if (stories && Object.keys(stories).length > 0) {
+    db.run('DELETE FROM stories');
+    for (const [id, paragraphs] of Object.entries(stories)) {
+      if (Array.isArray(paragraphs)) {
+        db.run('INSERT OR REPLACE INTO stories (item_id, paragraphs) VALUES (?, ?)', [id, JSON.stringify(paragraphs)]);
+      }
+    }
+  }
+
   // User profile settings
   const user = payload.user as Record<string, unknown> | undefined;
   if (user?.name)   db.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ['user.name',   sv(user.name)]);
@@ -701,6 +712,16 @@ export function getRecentUserItems(limit = 6): Record<string, unknown>[] {
     obj.owned = obj.owned === 1;
     return obj;
   });
+}
+
+export function getAllStories(): Record<string, string[]> {
+  const res = db.exec('SELECT item_id, paragraphs FROM stories');
+  if (!res.length) return {};
+  const map: Record<string, string[]> = {};
+  for (const row of res[0].values) {
+    try { map[row[0] as string] = JSON.parse(row[1] as string) as string[]; } catch (_) {}
+  }
+  return map;
 }
 
 export function getAllUserItemsWithTimestamps(): Record<string, unknown>[] {
