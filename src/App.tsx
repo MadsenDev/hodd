@@ -375,6 +375,7 @@ export default function App() {
   }, []);
   const histRef = useRef([]);
   const scrollRef = useRef(null);
+  const searchNavRef = useRef(0);
 
   function push(v) { histRef.current.push({ view, collId, item, itemColl }); setView(v); }
   function scrollTop() { if (scrollRef.current) scrollRef.current.scrollTop = 0; window.scrollTo(0, 0); }
@@ -458,7 +459,7 @@ export default function App() {
         <div className="canvas">
           <Topbar {...bar}
             onAdd={() => setAddOpen(true)}
-            onSearch={() => { if (view !== "search") ctx.search(""); }}
+            onSearch={() => { const t = Date.now(); if (view !== "search" && t - searchNavRef.current > 50) { searchNavRef.current = t; ctx.search(""); } }}
             searchValue={topSearch}
             onSearchChange={setTopSearch}
             onSearchSubmit={(q) => { setTopSearch(""); ctx.search(q); }} />
