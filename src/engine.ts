@@ -165,14 +165,27 @@ export function searchHoard(query, idx) {
   if (/haven'?t watched|unwatched|not watched|still to watch/.test(q)) { intent = "unwatched"; tokens.push(["Watched", "No"]); res = res.filter(i => i.type === "movie" && i.owned !== false && i.watched === false); }
   if (/haven'?t (completed|finished)|incomplete|unfinished|not (completed|finished)/.test(q)) { intent = "incomplete"; tokens.push(["Progress", "Not completed"]); res = res.filter(i => i.type === "game" && i.owned !== false && !i.completed); }
 
-  if (!typeHit && !decade && !intent && q.trim()) {
-    const words = q.split(/\s+/).filter(w => w.length > 2);
+  // Always try to narrow results with meaningful title/series keywords.
+  // Strip common function words and words already handled by other filters.
+  const STOP = new Set([
+    "the", "and", "for", "with", "that", "this", "they", "them", "from", "into",
+    "have", "been", "are", "was", "what", "which", "where", "when", "but", "all",
+    "you", "your", "own", "owned", "having", "missing", "not", "still", "some",
+    "completed", "finished", "watched", "unwatched", "unfinished", "incomplete",
+    "book", "books", "game", "games", "movie", "movies", "coin", "coins",
+    "vinyl", "comic", "comics", "record", "records", "film", "films", "lp",
+  ]);
+  const words = q.split(/\s+/).filter(w => w.length > 2 && !STOP.has(w));
+  if (words.length) {
     const m = res.filter(i => words.some(w =>
       (i.title || "").toLowerCase().includes(w) ||
       (i.series || "").toLowerCase().includes(w) ||
       (i.sub || "").toLowerCase().includes(w)
     ));
-    if (m.length) { res = m; tokens.push(["Match", "Title / series"]); }
+    if (m.length) {
+      res = m;
+      if (!tokens.find(t => t[0] === "Match")) tokens.push(["Match", "Title / series"]);
+    }
   }
 
   const summary = writeAnswer(query, res, { typeHit, intent });
