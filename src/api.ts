@@ -185,6 +185,7 @@ function joinHolding(cat, h) {
     condition:    (h && h.condition)    || null,
     acquired:     (h && h.acquired)     || null,
     watched:      h ? h.watched : undefined,
+    completed:    h ? h.completed : undefined,
     custom:       (h && h.custom)       || null,
   });
 }

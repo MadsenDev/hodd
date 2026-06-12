@@ -300,7 +300,7 @@ export function AddItemModal({ collection, onClose, onAdded }) {
   const subLabel = SUBLABELS[type] || "Detail";
   const [owned, setOwned] = React.useState(true);
   const [c, setC] = React.useState({ title: "", sub: "", year: "", series: "", region: "" });
-  const [f, setF] = React.useState({ format: "", completeness: "", grade: "", pressing: "", edition: "", condition: "", acquired: "", watched: false });
+  const [f, setF] = React.useState({ format: "", completeness: "", grade: "", pressing: "", edition: "", condition: "", acquired: "", watched: false, completed: false });
   const [custom, setCustom] = React.useState((collection.template || []).map(l => ({ label: l, value: "" })));
   const setCan = (k, v) => setC(p => ({ ...p, [k]: v }));
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
@@ -322,7 +322,7 @@ export function AddItemModal({ collection, onClose, onAdded }) {
       draft.format = f.format || null;
       draft.condition = f.condition || null;
       draft.acquired = f.acquired || null;
-      if (type === "game")  draft.completeness = f.completeness || null;
+      if (type === "game")  { draft.completeness = f.completeness || null; draft.completed = f.completed; }
       if (type === "coin")  draft.grade = f.grade || null;
       if (type === "vinyl") draft.pressing = f.pressing || null;
       if (type === "book")  draft.edition = f.edition || null;
@@ -372,6 +372,7 @@ export function AddItemModal({ collection, onClose, onAdded }) {
                 <EFSelect label="Condition" value={f.condition} options={CONDITION_OPTIONS} placeholder="Condition" onChange={v => set("condition", v)} />
                 <EFText label="Acquired" value={f.acquired} placeholder="e.g. May 2024" onChange={v => set("acquired", v)} />
                 {type === "movie" && <EFToggle label="Watched" value={f.watched} onChange={v => set("watched", v)} hint={["Yes", "Not yet"]} />}
+                {type === "game"  && <EFToggle label="Completed" value={f.completed} onChange={v => set("completed", v)} hint={["Yes", "Not yet"]} />}
               </div>
 
               <div className="ef-section ef-section-row">
