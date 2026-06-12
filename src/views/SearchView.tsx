@@ -106,8 +106,8 @@ export function SearchView({ initial, ctx, ollamaModel }) {
               </div>
               <div className="items-grid">
                 {out.results.map(it => (
-                  <div className={"item-cell" + (it.owned === false ? " missing" : "")} key={it.id}>
-                    <Cover item={it} h={200} ghost={it.owned === false} onClick={() => ctx.openItem(it)} />
+                  <div className={"item-cell" + (it.owned === false ? " missing" : "")} key={it.id} onClick={() => ctx.openItem(it)}>
+                    <Cover item={it} h={200} ghost={it.owned === false} />
                     <div className="nm">{it.title}</div>
                     <div className="yr">{it.platform || it.author || it.sub || it.coll}{it.year ? ` · ${it.year}` : ""}</div>
                     {it.owned === false

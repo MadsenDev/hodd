@@ -7,12 +7,12 @@ import { useCollection } from '../hooks';
 export function CollectionDetail({ collId, ctx }) {
   const { data, loading, error, refetch } = useCollection(collId);
   const [filter, setFilter] = React.useState("all");
+  const [sort, setSort] = React.useState("default");
 
   if (loading) return <Loading />;
   if (error) return <ErrorState error={error} onRetry={refetch} />;
   if (!data) return <EmptyState title="Collection not found" />;
 
-  const [sort, setSort] = React.useState("default");
   const { name, sub, accent, owned, missing, pct, type, items } = data;
   const filtered = items.filter(i => filter === "all" ? true : filter === "owned" ? i.owned : !i.owned);
   const shown = [...filtered].sort((a, b) => {
@@ -50,8 +50,8 @@ export function CollectionDetail({ collId, ctx }) {
         ? <EmptyState title={`No ${filter} items`} sub="Try a different filter." />
         : <div className="items-grid">
             {shown.map(it => (
-              <div className={"item-cell" + (it.owned ? "" : " missing")} key={it.id}>
-                <Cover item={{ ...it, type }} h={210} ghost={!it.owned} onClick={() => ctx.openItem({ ...it, type }, { name, items, type })} />
+              <div className={"item-cell" + (it.owned ? "" : " missing")} key={it.id} onClick={() => ctx.openItem({ ...it, type }, { name, items, type })}>
+                <Cover item={{ ...it, type }} h={210} ghost={!it.owned} />
                 <div className="nm">{it.title}</div>
                 <div className="yr">{it.sub || ""}{it.year ? ` · ${it.year}` : ""}</div>
                 {it.owned

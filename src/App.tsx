@@ -202,7 +202,7 @@ function QuickCapture({ onClose }) {
   );
 }
 
-function AddDesktop({ onClose, ctx, ollamaModel }) {
+function AddDesktop({ onClose, onAdded, ctx, ollamaModel }) {
   const [text, setText] = useState("");
   const [stage, setStage] = useState("input"); // input | thinking | review
   const [statusMsg, setStatusMsg] = useState("");
@@ -252,6 +252,7 @@ function AddDesktop({ onClose, ctx, ollamaModel }) {
       addItem(collId, buildDraft(it));
     });
     invalidateCache();
+    if (onAdded) onAdded();
     onClose();
     const firstName = items[0]?.collection;
     const firstCollId = (firstName && (nameToId[firstName] || COLL_NAME_TO_ID[firstName])) || "games";
@@ -330,10 +331,10 @@ function AddDesktop({ onClose, ctx, ollamaModel }) {
   );
 }
 
-function AddModal({ onClose, ctx, ollamaModel }) {
+function AddModal({ onClose, onAdded, ctx, ollamaModel }) {
   const narrow = useNarrow();
   if (narrow) return <QuickCapture onClose={onClose} />;
-  return <AddDesktop onClose={onClose} ctx={ctx} ollamaModel={ollamaModel} />;
+  return <AddDesktop onClose={onClose} onAdded={onAdded} ctx={ctx} ollamaModel={ollamaModel} />;
 }
 
 function greetingFor(d) {
@@ -448,7 +449,7 @@ export default function App() {
         </div>
       </div>
       <MobileTabs active={activeNav} onNav={navTo} />
-      {addOpen && <AddModal onClose={() => setAddOpen(false)} ctx={ctx} ollamaModel={t.ollamaModel} />}
+      {addOpen && <AddModal onClose={() => setAddOpen(false)} onAdded={bumpData} ctx={ctx} ollamaModel={t.ollamaModel} />}
       {createCollOpen && <CreateCollectionModal
         onClose={() => setCreateCollOpen(false)}
         onCreated={(rec) => { setCreateCollOpen(false); bumpData(); ctx.openCollection(rec.id); }} />}
