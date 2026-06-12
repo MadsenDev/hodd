@@ -402,7 +402,6 @@ export async function getSearchIndex() {
     item.coll = bcMap[c.collectionId] || COLL_NAME[c.collectionId] || "Hoard";
     if (c.type === "game")  item.platform = c.sub;
     if (c.type === "book")  item.author   = c.sub;
-    if (c.collectionId === "pokemon") item.completed = item.owned && c.year < 1999;
     return item;
   });
   const ui = _userItems || {}, uc = _userColls || [], bc = _baseCols || [], userIdx = [];

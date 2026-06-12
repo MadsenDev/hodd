@@ -82,6 +82,7 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
     condition: item.condition || "",
     acquired: item.acquired || "",
     watched: !!item.watched,
+    completed: !!item.completed,
   };
   const [owned, setOwned] = React.useState(item.owned !== false);
   const [f, setF] = React.useState(init);
@@ -129,7 +130,7 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
       acquired: f.acquired || null,
       custom: customClean.length ? customClean : null,
     };
-    if (etype === "game")  holding.completeness = f.completeness || null;
+    if (etype === "game")  { holding.completeness = f.completeness || null; holding.completed = f.completed; }
     if (etype === "coin")  holding.grade = f.grade || null;
     if (etype === "vinyl") holding.pressing = f.pressing || null;
     if (etype === "book")  holding.edition = f.edition || null;
@@ -166,6 +167,7 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
             <EFSelect label="Condition" value={f.condition} options={CONDITION_OPTIONS} placeholder="Condition" onChange={v => set("condition", v)} />
             <EFText label="Acquired" value={f.acquired} placeholder="e.g. May 2024" onChange={v => set("acquired", v)} />
             {etype === "movie" && <EFToggle label="Watched" value={f.watched} onChange={v => set("watched", v)} hint={["Yes", "Not yet"]} />}
+            {etype === "game"  && <EFToggle label="Completed" value={f.completed} onChange={v => set("completed", v)} hint={["Yes", "Not yet"]} />}
           </div>
 
           <div className="ef-section ef-section-row">

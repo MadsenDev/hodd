@@ -40,7 +40,7 @@ export function SearchView({ initial, ctx, ollamaModel }) {
     }
 
     setOut({ ...searchHoard(query, index.data), q: query, aiPowered: false });
-    setTimeout(() => setPhase("done"), 850);
+    setTimeout(() => setPhase("done"), 220);
   }
 
   React.useEffect(() => { if (initial && index.data) run(initial); /* eslint-disable-next-line */ }, [index.data]);

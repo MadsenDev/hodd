@@ -45,6 +45,7 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
     ["Series", item.series],
     type === "game" && ["Region", item.region],
     owned && type === "game" && ["Completeness", item.completeness],
+    owned && type === "game" && typeof item.completed === "boolean" && ["Completed", item.completed ? "Yes" : "Not yet"],
     owned && type === "coin" && ["Grade", item.grade],
     owned && type === "book" && ["Edition", item.edition],
     owned && type === "vinyl" && ["Pressing", item.pressing],
@@ -105,7 +106,7 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
                   if (isOwned === false) {
                     removeHolding(item.id);
                     if (isUserItem) setItemOwned(item.id, false);
-                    setItem({ ...item, ...(canonical || {}), owned: false, format: null, completeness: null, grade: null, pressing: null, edition: null, condition: null, acquired: null, watched: undefined });
+                    setItem({ ...item, ...(canonical || {}), owned: false, format: null, completeness: null, completed: null, grade: null, pressing: null, edition: null, condition: null, acquired: null, watched: undefined });
                   } else {
                     saveHolding(item.id, holding);
                     if (isUserItem && item.owned === false) setItemOwned(item.id, true);

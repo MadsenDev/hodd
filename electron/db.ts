@@ -72,6 +72,7 @@ const SCHEMA = `
     condition_val TEXT,
     acquired TEXT,
     watched INTEGER,
+    completed INTEGER,
     custom TEXT
   );
 
@@ -122,6 +123,7 @@ const SCHEMA = `
     condition_val TEXT,
     acquired TEXT,
     watched INTEGER,
+    completed INTEGER,
     custom TEXT,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
   );
@@ -234,6 +236,8 @@ export async function initDb(): Promise<void> {
     try { db.run(`ALTER TABLE catalog_overrides ADD COLUMN ${col}`); } catch (_) {}
     try { db.run(`ALTER TABLE user_items ADD COLUMN ${col}`); } catch (_) {}
   }
+  try { db.run('ALTER TABLE holdings ADD COLUMN completed INTEGER'); } catch (_) {}
+  try { db.run('ALTER TABLE user_items ADD COLUMN completed INTEGER'); } catch (_) {}
 
   // Check if seeded
   const seeded = db.exec("SELECT value FROM meta WHERE key = 'seeded'");
@@ -357,7 +361,7 @@ export function getCatalog(): Record<string, unknown>[] {
 }
 
 export function getHoldings(): Record<string, Record<string, unknown>> {
-  const res = db.exec('SELECT item_id, format, completeness, grade, pressing, edition, condition_val, acquired, watched, custom FROM holdings');
+  const res = db.exec('SELECT item_id, format, completeness, grade, pressing, edition, condition_val, acquired, watched, completed, custom FROM holdings');
   if (!res.length) return {};
   const [{ columns, values }] = res;
   const map: Record<string, Record<string, unknown>> = {};
@@ -370,6 +374,7 @@ export function getHoldings(): Record<string, Record<string, unknown>> {
     const id = obj.item_id as string;
     delete obj.item_id;
     if (obj.watched !== null) obj.watched = obj.watched === 1;
+    if (obj.completed !== null) obj.completed = obj.completed === 1;
     if (obj.custom) { try { obj.custom = JSON.parse(obj.custom as string); } catch (_) {} }
     map[id] = obj;
   }
@@ -411,7 +416,7 @@ export function getUserCollections(): Record<string, unknown>[] {
 }
 
 export function getUserItems(): Record<string, Record<string, unknown>[]> {
-  const res = db.exec('SELECT id, collection_id, title, sub, year, type, color, owned, format, completeness, grade, pressing, edition, condition_val, acquired, watched, custom, series, region FROM user_items ORDER BY collection_id, created_at');
+  const res = db.exec('SELECT id, collection_id, title, sub, year, type, color, owned, format, completeness, grade, pressing, edition, condition_val, acquired, watched, completed, custom, series, region FROM user_items ORDER BY collection_id, created_at');
   if (!res.length) return {};
   const [{ columns, values }] = res;
   const map: Record<string, Record<string, unknown>[]> = {};
@@ -423,6 +428,7 @@ export function getUserItems(): Record<string, Record<string, unknown>[]> {
     });
     obj.owned = obj.owned === 1;
     if (obj.watched !== null) obj.watched = obj.watched === 1;
+    if (obj.completed !== null) obj.completed = obj.completed === 1;
     if (obj.custom) { try { obj.custom = JSON.parse(obj.custom as string); } catch (_) {} }
     delete obj.created_at;
     const collId = obj.collectionId as string;
@@ -465,22 +471,27 @@ export function saveHolding(itemId: string, patch: Record<string, unknown>): voi
     if (merged.watched !== null && merged.watched !== undefined) {
       merged.watched = merged.watched ? 1 : 0;
     }
+    if (merged.completed !== null && merged.completed !== undefined) {
+      merged.completed = merged.completed ? 1 : 0;
+    }
     if (merged.custom && typeof merged.custom !== 'string') merged.custom = JSON.stringify(merged.custom);
     db.run(`UPDATE holdings SET format=?, completeness=?, grade=?, pressing=?, edition=?,
-      condition_val=?, acquired=?, watched=?, custom=? WHERE item_id=?`, [
+      condition_val=?, acquired=?, watched=?, completed=?, custom=? WHERE item_id=?`, [
       sv(merged.format), sv(merged.completeness), sv(merged.grade),
       sv(merged.pressing), sv(merged.edition), sv(merged.condition_val),
-      sv(merged.acquired), sv(merged.watched), sv(merged.custom), itemId,
+      sv(merged.acquired), sv(merged.watched), sv(merged.completed), sv(merged.custom), itemId,
     ]);
   } else {
     const w = patch.watched;
+    const cp = patch.completed;
     db.run(`INSERT INTO holdings (item_id, format, completeness, grade, pressing, edition,
-      condition_val, acquired, watched, custom) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+      condition_val, acquired, watched, completed, custom) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
       itemId,
       sv(patch.format), sv(patch.completeness), sv(patch.grade),
       sv(patch.pressing), sv(patch.edition), sv(patch.condition),
       sv(patch.acquired),
       w == null ? null : (w ? 1 : 0),
+      cp == null ? null : (cp ? 1 : 0),
       patch.custom ? JSON.stringify(patch.custom) : null,
     ]);
   }
@@ -551,9 +562,10 @@ export function deleteUserCollection(collectionId: string): void {
 export function addUserItem(collectionId: string, draft: Record<string, unknown>): Record<string, unknown> {
   const id = 'i-' + Math.random().toString(36).slice(2, 9);
   const w = draft.watched;
+  const cp = draft.completed;
   db.run(`INSERT INTO user_items (id, collection_id, title, sub, year, type, color, owned,
-    format, completeness, grade, pressing, edition, condition_val, acquired, watched, custom, series, region)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+    format, completeness, grade, pressing, edition, condition_val, acquired, watched, completed, custom, series, region)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
     id, collectionId,
     sv(draft.title) ?? '', sv(draft.sub), sv(draft.year),
     sv(draft.type), sv(draft.color),
@@ -562,6 +574,7 @@ export function addUserItem(collectionId: string, draft: Record<string, unknown>
     sv(draft.pressing), sv(draft.edition), sv(draft.condition),
     sv(draft.acquired),
     w == null ? null : (w ? 1 : 0),
+    cp == null ? null : (cp ? 1 : 0),
     draft.custom ? JSON.stringify(draft.custom) : null,
     sv(draft.series), sv(draft.region),
   ]);
@@ -646,11 +659,12 @@ export function importArchive(payload: Record<string, unknown>): { imported: num
   for (const [collId, collItems] of Object.entries(items)) {
     for (const it of (collItems || [])) {
       const w = it.watched;
+      const cp = it.completed;
       db.run(`INSERT OR REPLACE INTO user_items
         (id, collection_id, title, sub, year, type, color, owned,
          format, completeness, grade, pressing, edition, condition_val,
-         acquired, watched, custom, series, region)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+         acquired, watched, completed, custom, series, region)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
         sv(it.id), collId,
         sv(it.title) ?? '', sv(it.sub), sv(it.year), sv(it.type), sv(it.color),
         it.owned !== false ? 1 : 0,
@@ -658,6 +672,7 @@ export function importArchive(payload: Record<string, unknown>): { imported: num
         sv(it.pressing), sv(it.edition), sv(it.condition),
         sv(it.acquired),
         w == null ? null : (w ? 1 : 0),
+        cp == null ? null : (cp ? 1 : 0),
         it.custom ? JSON.stringify(it.custom) : null,
         sv(it.series), sv(it.region),
       ]);
@@ -669,15 +684,17 @@ export function importArchive(payload: Record<string, unknown>): { imported: num
   const holdings = (payload.holdings as Record<string, Record<string, unknown>>) || {};
   for (const [id, h] of Object.entries(holdings)) {
     const w = h.watched;
+    const cp = h.completed;
     db.run(`INSERT OR REPLACE INTO holdings
       (item_id, format, completeness, grade, pressing, edition,
-       condition_val, acquired, watched, custom)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+       condition_val, acquired, watched, completed, custom)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
       id,
       sv(h.format), sv(h.completeness), sv(h.grade),
       sv(h.pressing), sv(h.edition), sv(h.condition),
       sv(h.acquired),
       w == null ? null : (w ? 1 : 0),
+      cp == null ? null : (cp ? 1 : 0),
       h.custom ? JSON.stringify(h.custom) : null,
     ]);
   }
