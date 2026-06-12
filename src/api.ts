@@ -246,6 +246,18 @@ export async function getStory(id) {
   const a = ipc(); return a ? a.getStory(id) : null;
 }
 
+export async function getSettings() {
+  const a = ipc(); return a ? a.getSettings() : {};
+}
+
+export function saveSetting(key, value) {
+  const a = ipc(); if (a) a.saveSetting(key, value);
+}
+
+export async function lookupMetadata(type, query) {
+  const a = ipc(); return a ? a.lookup(type, query) : null;
+}
+
 export async function getSearchIndex() {
   await ensureCache();
   const cat = _catalog || [], h = _holdings || {};
@@ -347,6 +359,24 @@ export const OllamaClient = {
       console.warn("[HODD Ollama] search failed, falling back to heuristic:", e.message);
       return null;
     }
+  },
+
+  async enrichItem(rawText, type, model) {
+    const prompts = {
+      game:  `Input: "${rawText}"\nType: game\nReturn JSON only: {"title":"exact title","year":YYYY,"platform":"Game Boy|SNES|GBA|NES|N64|PS1|PS2|etc","completeness":"CIB|Loose|Sealed|null","condition":"Mint|Near Mint|Very Good|Good|Fair|Poor|null"}`,
+      book:  `Input: "${rawText}"\nType: book\nReturn JSON only: {"title":"exact title","year":YYYY,"author":"Full Name","edition":"First Edition|Paperback|Hardcover|Mass Market|null"}`,
+      movie: `Input: "${rawText}"\nType: movie\nReturn JSON only: {"title":"exact title","year":YYYY,"director":"Full Name or null","format":"4K Blu-ray|Blu-ray|DVD|Digital|VHS|null"}`,
+      vinyl: `Input: "${rawText}"\nType: vinyl\nReturn JSON only: {"title":"exact title","year":YYYY,"artist":"Full Name","pressing":"180g|Original Press|Limited|null"}`,
+      coin:  `Input: "${rawText}"\nType: coin\nReturn JSON only: {"title":"coin name","year":YYYY,"mint":"Philadelphia|Denver|San Francisco|New Orleans|Carson City|null","grade":"MS-63|MS-64|etc or null"}`,
+      comic: `Input: "${rawText}"\nType: comic\nReturn JSON only: {"title":"exact title","year":YYYY,"publisher":"Marvel|DC|Image|Dark Horse|etc","format":"Single Issue|TPB|Hardcover|Omnibus|null"}`,
+    };
+    const prompt = prompts[type] || `Input: "${rawText}"\nReturn JSON only: {"title":"exact title","year":YYYY}`;
+    try {
+      const raw = await ollamaGenerate(model, prompt,
+        "You are a collectibles database. Return ONLY valid JSON. No markdown, no explanations. Use null for unknown fields.");
+      const cleaned = (raw as string).trim().replace(/^```(?:json)?\s*/m, "").replace(/\s*```$/m, "");
+      return JSON.parse(cleaned);
+    } catch (_) { return null; }
   },
 
   async generateStory(item, model) {

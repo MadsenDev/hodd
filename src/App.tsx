@@ -4,7 +4,7 @@ import { I } from './icons';
 import { Cover, Sidebar, Topbar, MobileTopBar, MobileTabs, useNarrow } from './components';
 import { useTweaks, TweaksPanel, TweakSection, TweakRadio, TweakColor, TweakSelect } from './tweaks';
 import { useUser } from './hooks';
-import { OllamaClient } from './api';
+import { OllamaClient, addItem, lookupMetadata, invalidateCache } from './api';
 import { TYPE_COLL, TYPE_LABEL, parseHoardLines } from './engine';
 import { typeIcon } from './icons';
 import { CreateCollectionModal, AddItemModal } from './forms';
@@ -15,6 +15,8 @@ import { ItemDetail } from './views/ItemDetail';
 import { SearchView } from './views/SearchView';
 import { Statistics } from './views/Statistics';
 import { ComingSoon } from './views/ComingSoon';
+import { Settings } from './views/Settings';
+import { Wishlist } from './views/Wishlist';
 
 const ACCENTS = {
   "#4f46e5": ["#4f46e5", "#6366f1", "#4338ca"],
@@ -45,6 +47,63 @@ const TWEAK_DEFAULTS = {
 };
 
 const ADD_EXAMPLES = ["Pokemon Red CIB", "Morgan Dollar 1884-O", "Dune hardcover", "Blade Runner 2049 4K", "Kind of Blue 180g"];
+
+const COLL_NAME_TO_ID = {
+  "Games": "games", "Books": "books", "Movies": "movies",
+  "Coins": "coins", "Comics": "comics", "Vinyl": "vinyl",
+};
+
+const ENRICH_FIELD_MAP = {
+  year: "Year", platform: "Platform", author: "Author", artist: "Artist",
+  mint: "Mint", director: "Director", publisher: "Publisher",
+  edition: "Edition", completeness: "Completeness", grade: "Grade", pressing: "Pressing",
+};
+
+function applyEnrichment(item, enrich) {
+  if (!enrich) return item;
+  let fields = [...item.fields];
+  let title = item.title;
+
+  if (enrich.title && typeof enrich.title === "string" && enrich.title !== item.title) {
+    title = enrich.title;
+    fields = fields.map(f => f.k === "Title" ? { ...f, v: enrich.title, c: "high" } : f);
+  }
+  Object.entries(enrich).forEach(([key, val]) => {
+    if (!val || val === "null" || key === "title") return;
+    const fieldKey = ENRICH_FIELD_MAP[key];
+    if (!fieldKey) return;
+    const idx = fields.findIndex(f => f.k === fieldKey);
+    if (idx >= 0 && fields[idx].c === "ask") {
+      fields = fields.map((f, i) => i === idx ? { ...f, v: String(val), c: "high" } : f);
+    } else if (idx < 0) {
+      fields = [...fields, { k: fieldKey, v: String(val), c: "high" }];
+    }
+  });
+  return { ...item, title, fields, askCount: fields.filter(f => f.c === "ask").length };
+}
+
+function buildDraft(item) {
+  const byKey = {};
+  item.fields.forEach(f => { byKey[f.k] = f.v; });
+  const yearRaw = byKey["Year"];
+  const year = typeof yearRaw === "number" ? yearRaw
+    : (yearRaw && !/^Confirm/i.test(String(yearRaw))) ? parseInt(String(yearRaw), 10) : null;
+  const sub = ["Platform", "Author", "Artist", "Mint", "Director", "Publisher"]
+    .map(k => byKey[k]).find(v => v && !/^Confirm/i.test(String(v)));
+  const edition = byKey["Edition"];
+  const completeness = byKey["Completeness"];
+  const grade = byKey["Grade"];
+  const pressing = byKey["Pressing"];
+  return {
+    title: item.title, type: item.type, color: item.color,
+    year: Number.isFinite(year) ? year : null,
+    sub: sub || null, owned: true,
+    ...(edition && !/^Standard$|^Confirm/i.test(String(edition)) ? { edition: String(edition) } : {}),
+    ...(completeness && !/^Confirm/i.test(String(completeness)) ? { completeness: String(completeness) } : {}),
+    ...(grade && !/^Confirm|^Add/i.test(String(grade)) ? { grade: String(grade) } : {}),
+    ...(pressing && !/^Confirm/i.test(String(pressing)) ? { pressing: String(pressing) } : {}),
+  };
+}
 
 function ConfBadge({ c }) {
   return <span className={"conf " + c}>{c === "high" ? "Confident" : "Confirm"}</span>;
@@ -135,25 +194,61 @@ function QuickCapture({ onClose }) {
   );
 }
 
-function AddDesktop({ onClose, ctx }) {
+function AddDesktop({ onClose, ctx, ollamaModel }) {
   const [text, setText] = useState("");
-  const [stage, setStage] = useState("input");
+  const [stage, setStage] = useState("input"); // input | thinking | review
+  const [statusMsg, setStatusMsg] = useState("");
   const [items, setItems] = useState([]);
   const inputRef = useRef(null);
   useEffect(() => { inputRef.current && inputRef.current.focus(); }, []);
 
   const lineCount = text.split("\n").map(s => s.trim()).filter(Boolean).length;
 
-  function analyze() {
+  async function analyze() {
     if (!text.trim()) return;
     setStage("thinking");
-    setTimeout(() => { setItems(parseHoardLines(text)); setStage("review"); }, 1000);
+    setStatusMsg("Parsing shorthand…");
+
+    // 1. Heuristic parse (instant)
+    let parsed = parseHoardLines(text);
+
+    // 2. Enrich each item in parallel: Ollama + online lookup
+    setStatusMsg("Enriching with AI and metadata sources…");
+    parsed = await Promise.all(parsed.map(async item => {
+      const [aiEnrich, onlineLookup] = await Promise.all([
+        ollamaModel ? OllamaClient.enrichItem(item.raw, item.type, ollamaModel).catch(() => null) : null,
+        lookupMetadata(item.type, item.raw).catch(() => null),
+      ]);
+      // Apply online lookup first (lower confidence), then AI on top (higher confidence)
+      const afterLookup = onlineLookup && onlineLookup.length
+        ? applyEnrichment(item, onlineLookup[0])
+        : item;
+      return aiEnrich ? applyEnrichment(afterLookup, aiEnrich) : afterLookup;
+    }));
+
+    setItems(parsed);
+    setStage("review");
   }
+
   function addExample(s) {
     setText(t => (t.trim() ? t.replace(/\n*$/, "") + "\n" : "") + s);
     inputRef.current && inputRef.current.focus();
   }
+
+  function confirmAdd() {
+    items.forEach(it => {
+      const collId = COLL_NAME_TO_ID[it.collection] || "games";
+      addItem(collId, buildDraft(it));
+    });
+    invalidateCache();
+    onClose();
+    // Navigate to the first item's collection
+    const firstCollId = COLL_NAME_TO_ID[items[0]?.collection] || "games";
+    ctx.openCollection(firstCollId);
+  }
+
   const totalAsk = items.reduce((n, it) => n + it.askCount, 0);
+  const enrichLabel = ollamaModel ? "Ollama + metadata" : "online metadata";
 
   return (
     <div className="modal-scrim" onClick={onClose}>
@@ -163,7 +258,7 @@ function AddDesktop({ onClose, ctx }) {
             <I.sparkle size={20} style={{ color: "var(--accent)" }} />
             <div>
               <div className="lbl">Add to your hoard</div>
-              <h3>{stage === "review" ? `${items.length} item${items.length !== 1 ? "s" : ""} recognized` : "What did you collect?"}</h3>
+              <h3>{stage === "review" ? `${items.length} item${items.length !== 1 ? "s" : ""} ready to add` : "What did you collect?"}</h3>
             </div>
           </div>
           <button className="icon-btn" onClick={onClose} style={{ width: 38, height: 38 }}><I.close size={18} /></button>
@@ -176,14 +271,14 @@ function AddDesktop({ onClose, ctx }) {
                 placeholder={"Type or paste — one item per line\n\nPokemon Red CIB\nMorgan Dollar 1884-O\nDune hardcover"}
                 value={text} onChange={e => setText(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) analyze(); }} />
-              <div className="ai-hint"><I.sparkle size={13} /> Local AI reads your shorthand line by line and fills in the details. Nothing is saved until you confirm.</div>
+              <div className="ai-hint"><I.sparkle size={13} /> Shorthand is parsed on-device, then enriched via {enrichLabel}. Nothing saves until you confirm.</div>
               <div className="add-examples">
                 <span className="add-examples-lbl">Try</span>
                 {ADD_EXAMPLES.map(s => <div className="chip" key={s} onClick={() => addExample(s)}>{s}</div>)}
               </div>
               {stage === "thinking" && (
                 <div className="parse-status" style={{ marginTop: 20 }}>
-                  <span className="ai-spinner" /> Reading locally — extracting titles, platforms, editions…
+                  <span className="ai-spinner" /> {statusMsg}
                 </div>
               )}
             </>
@@ -192,8 +287,10 @@ function AddDesktop({ onClose, ctx }) {
           {stage === "review" && (
             <div className="parse">
               <div className="parse-status">
-                <I.check size={16} stroke={2.4} /> Parsed on-device.{" "}
-                {totalAsk > 0 ? <span>{totalAsk} field{totalAsk !== 1 ? "s" : ""} need a quick confirm.</span> : <span>Everything looks confident.</span>}
+                <I.check size={16} stroke={2.4} /> Ready.{" "}
+                {totalAsk > 0
+                  ? <span>{totalAsk} field{totalAsk !== 1 ? "s" : ""} still need a confirm — fill them in or leave blank.</span>
+                  : <span>All fields filled in — looking good.</span>}
               </div>
               <div className="add-list">
                 {items.map((it, i) => (
@@ -202,7 +299,7 @@ function AddDesktop({ onClose, ctx }) {
                     onRemove={() => setItems(items.filter((_, j) => j !== i))} />
                 ))}
               </div>
-              <button className="add-more" onClick={() => { setStage("input"); }}><I.plus size={15} /> Add more shorthand</button>
+              <button className="add-more" onClick={() => setStage("input")}><I.plus size={15} /> Add more shorthand</button>
             </div>
           )}
         </div>
@@ -212,18 +309,20 @@ function AddDesktop({ onClose, ctx }) {
             <I.lock size={13} /> Runs on-device · Nothing saved until you confirm
           </div>
           {stage === "review"
-            ? <button className="btn solid" disabled={!items.length} onClick={() => { onClose(); ctx.openCollection("featured"); }}><I.check size={16} /> Add {items.length} item{items.length !== 1 ? "s" : ""}</button>
-            : <button className="btn solid" disabled={!lineCount} onClick={analyze}><I.sparkle size={15} /> Parse {lineCount || ""} item{lineCount !== 1 ? "s" : ""}</button>}
+            ? <button className="btn solid" disabled={!items.length} onClick={confirmAdd}><I.check size={16} /> Add {items.length} item{items.length !== 1 ? "s" : ""}</button>
+            : <button className="btn solid" disabled={!lineCount || stage === "thinking"} onClick={analyze}>
+                <I.sparkle size={15} /> {stage === "thinking" ? "Analysing…" : `Parse ${lineCount || ""} item${lineCount !== 1 ? "s" : ""}`}
+              </button>}
         </div>
       </div>
     </div>
   );
 }
 
-function AddModal({ onClose, ctx }) {
+function AddModal({ onClose, ctx, ollamaModel }) {
   const narrow = useNarrow();
   if (narrow) return <QuickCapture onClose={onClose} />;
-  return <AddDesktop onClose={onClose} ctx={ctx} />;
+  return <AddDesktop onClose={onClose} ctx={ctx} ollamaModel={ollamaModel} />;
 }
 
 function greetingFor(d) {
@@ -306,6 +405,8 @@ export default function App() {
   else if (view === "item") body = <ItemDetail item={item} collection={itemColl} ctx={ctx} ollamaModel={t.ollamaModel} />;
   else if (view === "search") body = <SearchView initial={searchInit} ctx={ctx} ollamaModel={t.ollamaModel} />;
   else if (view === "statistics") body = <Statistics ctx={ctx} />;
+  else if (view === "wishlist")   body = <Wishlist ctx={ctx} />;
+  else if (view === "settings")   body = <Settings />;
   else body = <ComingSoon name={bar.title || "Coming soon"} />;
 
   const activeNav = ["collection"].includes(view) ? "collections" : ["item"].includes(view) ? null : view;
@@ -332,7 +433,7 @@ export default function App() {
         </div>
       </div>
       <MobileTabs active={activeNav} onNav={navTo} />
-      {addOpen && <AddModal onClose={() => setAddOpen(false)} ctx={ctx} />}
+      {addOpen && <AddModal onClose={() => setAddOpen(false)} ctx={ctx} ollamaModel={t.ollamaModel} />}
       {createCollOpen && <CreateCollectionModal
         onClose={() => setCreateCollOpen(false)}
         onCreated={(rec) => { setCreateCollOpen(false); bumpData(); ctx.openCollection(rec.id); }} />}

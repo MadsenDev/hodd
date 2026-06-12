@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('hoddDesktop', {
     addItem: (collectionId: string, draft: Record<string, unknown>) =>
       ipcRenderer.invoke('hodd:item:add', collectionId, draft),
     saveSetting: (key: string, value: string) => ipcRenderer.invoke('hodd:setting:save', key, value),
+    lookup: (type: string, query: string) => ipcRenderer.invoke('hodd:lookup', type, query),
   },
 
   // Ollama local AI

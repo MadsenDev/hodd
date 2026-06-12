@@ -143,6 +143,56 @@ function registerIpc(): void {
   ipcMain.handle('hodd:ollama:status', () => ollamaStatus());
   ipcMain.handle('hodd:ollama:chat',   (_e, model: string, messages: { role: string; content: string }[]) => ollamaChat(model, messages));
   ipcMain.handle('hodd:ollama:generate', (_e, model: string, prompt: string, system?: string) => ollamaGenerate(model, prompt, system));
+
+  // Online metadata lookup — free APIs (books/vinyl) + optional key-gated APIs (games/movies)
+  ipcMain.handle('hodd:lookup', async (_e, type: string, query: string) => {
+    const settings = db.getSettings();
+    try {
+      if (type === 'book') {
+        const res = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=5&fields=title,author_name,first_publish_year`);
+        const data = await res.json() as { docs?: { title?: string; author_name?: string[]; first_publish_year?: number }[] };
+        return (data.docs ?? []).slice(0, 3).map(d => ({
+          title: d.title ?? query,
+          year:  d.first_publish_year ?? null,
+          sub:   d.author_name?.[0] ?? null,
+        }));
+      }
+      if (type === 'vinyl') {
+        const res = await fetch(
+          `https://musicbrainz.org/ws/2/release/?query=${encodeURIComponent(query)}&fmt=json&limit=3`,
+          { headers: { 'User-Agent': 'HODD-Desktop/1.0 (hodd-app)' } }
+        );
+        const data = await res.json() as { releases?: { title?: string; date?: string; 'artist-credit'?: { artist?: { name?: string } }[] }[] };
+        return (data.releases ?? []).slice(0, 3).map(d => ({
+          title: d.title ?? query,
+          year:  d.date ? parseInt(d.date.slice(0, 4)) : null,
+          sub:   d['artist-credit']?.[0]?.artist?.name ?? null,
+        }));
+      }
+      if (type === 'game' && settings['api.rawg']) {
+        const res = await fetch(`https://api.rawg.io/api/games?search=${encodeURIComponent(query)}&page_size=3&key=${settings['api.rawg']}`);
+        const data = await res.json() as { results?: { name?: string; released?: string; platforms?: { platform?: { name?: string } }[] }[] };
+        return (data.results ?? []).slice(0, 3).map(d => ({
+          title: d.name ?? query,
+          year:  d.released ? parseInt(d.released.slice(0, 4)) : null,
+          sub:   d.platforms?.[0]?.platform?.name ?? null,
+        }));
+      }
+      if (type === 'movie' && settings['api.omdb']) {
+        const res = await fetch(`https://www.omdbapi.com/?s=${encodeURIComponent(query)}&apikey=${settings['api.omdb']}&type=movie`);
+        const data = await res.json() as { Search?: { Title?: string; Year?: string }[] };
+        return (data.Search ?? []).slice(0, 3).map(d => ({
+          title: d.Title ?? query,
+          year:  d.Year ? parseInt(d.Year) : null,
+          sub:   null,
+        }));
+      }
+      return null;
+    } catch (e) {
+      console.warn('[HODD lookup]', type, (e as Error).message);
+      return null;
+    }
+  });
 }
 
 // ─── Boot ──────────────────────────────────────────────────────────────────

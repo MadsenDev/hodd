@@ -16,3 +16,37 @@ body { margin: 0; }
   font-weight: 800;
   background: linear-gradient(145deg, #766ef2, #4237bb);
 }
+
+/* ── Settings view ─────────────────────────────────────────────────────────── */
+.settings-layout {
+  max-width: 620px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.settings-panel {
+  padding: 24px;
+}
+.settings-hint {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--mute);
+  margin: 0;
+}
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.key-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  background: var(--accent-wash);
+  color: var(--accent);
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
