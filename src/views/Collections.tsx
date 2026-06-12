@@ -12,6 +12,10 @@ export function Collections({ ctx }) {
   if (!data.length) return <EmptyState title="No collections yet" sub="Start a collection from the + button and it'll appear here." />;
   return (
     <div className="view-enter">
+      <div className="section-head">
+        <div className="eyebrow">{data.length} collection{data.length !== 1 ? "s" : ""}</div>
+        <button className="btn" onClick={() => ctx.newCollection()}><I.plus size={14} /> New collection</button>
+      </div>
       <div className="coll-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
         {data.map(c => <CollCard key={c.id} c={c} onClick={() => ctx.openCollection(c.id)} />)}
       </div>
