@@ -12,8 +12,15 @@ export function CollectionDetail({ collId, ctx }) {
   if (error) return <ErrorState error={error} onRetry={refetch} />;
   if (!data) return <EmptyState title="Collection not found" />;
 
+  const [sort, setSort] = React.useState("default");
   const { name, sub, accent, owned, missing, pct, type, items } = data;
-  const shown = items.filter(i => filter === "all" ? true : filter === "owned" ? i.owned : !i.owned);
+  const filtered = items.filter(i => filter === "all" ? true : filter === "owned" ? i.owned : !i.owned);
+  const shown = [...filtered].sort((a, b) => {
+    if (sort === "title") return (a.title || "").localeCompare(b.title || "");
+    if (sort === "year")  return (a.year || 9999) - (b.year || 9999);
+    if (sort === "status") return (b.owned ? 1 : 0) - (a.owned ? 1 : 0);
+    return 0;
+  });
   return (
     <div className="view-enter">
       <div className="back" onClick={ctx.back}><I.arrowLeft size={16} /> Back</div>
@@ -29,6 +36,11 @@ export function CollectionDetail({ collId, ctx }) {
         <div className="seg">
           {["all", "owned", "missing"].map(f => (
             <button key={f} className={filter === f ? "on" : ""} onClick={() => setFilter(f)}>{f[0].toUpperCase() + f.slice(1)}</button>
+          ))}
+        </div>
+        <div className="seg">
+          {[["default", "Default"], ["title", "A–Z"], ["year", "Year"], ["status", "Status"]].map(([v, l]) => (
+            <button key={v} className={sort === v ? "on" : ""} onClick={() => setSort(v)}>{l}</button>
           ))}
         </div>
       </div>
