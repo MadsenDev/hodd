@@ -299,7 +299,7 @@ function registerIpc(): void {
     });
   });
 
-  ipcMain.handle('hodd:ollama:install', (event) => {
+  ipcMain.handle('hodd:ollama:install', (event, password?: string) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     const send = (type: string, data: string) =>
       win?.webContents.send('hodd:ollama:stream', { type, data });
@@ -307,10 +307,14 @@ function registerIpc(): void {
     let cmd: string;
     let args: string[];
     if (process.platform === 'linux') {
-      cmd = 'sh';
-      args = ['-c', 'curl -fsSL https://ollama.com/install.sh | sh'];
+      if (password) {
+        cmd = 'sudo';
+        args = ['-S', 'sh', '-c', 'curl -fsSL https://ollama.com/install.sh | sh'];
+      } else {
+        cmd = 'sh';
+        args = ['-c', 'curl -fsSL https://ollama.com/install.sh | sh'];
+      }
     } else if (process.platform === 'darwin') {
-      // Try brew first; fall back to a message
       cmd = 'sh';
       args = ['-c', 'which brew >/dev/null 2>&1 && brew install ollama || echo "__NO_BREW__"'];
     } else {
@@ -321,11 +325,22 @@ function registerIpc(): void {
     const proc = spawn(cmd, args, { shell: false });
     activeInstallProc = proc;
 
+    if (password && proc.stdin) {
+      proc.stdin.write(password + '\n');
+      proc.stdin.end();
+    }
+
     proc.stdout.on('data', (d: Buffer) => send('stdout', d.toString()));
     proc.stderr.on('data', (d: Buffer) => {
       const s = d.toString();
-      // Filter progress noise from curl
-      if (!s.startsWith('\r') && s.trim()) send('stderr', s);
+      // sudo writes its password prompt to stderr — suppress it, surface real errors
+      if (s.includes('[sudo]') || s.startsWith('\r') || !s.trim()) return;
+      // Wrong password
+      if (s.toLowerCase().includes('incorrect password') || s.toLowerCase().includes('sorry, try again')) {
+        send('auth-error', 'Incorrect password. Please try again.');
+        return;
+      }
+      send('stderr', s);
     });
     proc.on('close', code => {
       activeInstallProc = null;

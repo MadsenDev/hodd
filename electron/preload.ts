@@ -56,7 +56,7 @@ contextBridge.exposeInMainWorld('hoddDesktop', {
     chat:     (model: string, messages: { role: string; content: string }[]) => ipcRenderer.invoke('hodd:ollama:chat', model, messages),
     generate: (model: string, prompt: string, system?: string)               => ipcRenderer.invoke('hodd:ollama:generate', model, prompt, system),
     checkInstalled: () => ipcRenderer.invoke('hodd:ollama:check-installed'),
-    install:        () => ipcRenderer.invoke('hodd:ollama:install'),
+    install:        (password?: string) => ipcRenderer.invoke('hodd:ollama:install', password),
     cancelInstall:  () => ipcRenderer.invoke('hodd:ollama:cancel-install'),
     start:          () => ipcRenderer.invoke('hodd:ollama:start'),
     pullModel:      (name: string) => ipcRenderer.invoke('hodd:ollama:pull', name),

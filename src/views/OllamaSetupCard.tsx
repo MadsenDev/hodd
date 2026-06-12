@@ -29,6 +29,8 @@ export function OllamaSetupCard() {
   const [pullStatus, setPullStatus] = useState('');
   const [pullPct, setPullPct] = useState<number | null>(null);
   const [activeModel, setActiveModel] = useState('');
+  const [installPassword, setInstallPassword] = useState('');
+  const [authError, setAuthError] = useState('');
   const logRef = useRef<HTMLDivElement>(null);
 
   function getOllama() {
@@ -61,7 +63,11 @@ export function OllamaSetupCard() {
         if (event.type === 'stdout' || event.type === 'stderr') {
           setInstallLog(prev => [...prev, event.data]);
         } else if (event.type === 'done') {
+          setInstallPassword('');
           setStep('not-running');
+        } else if (event.type === 'auth-error') {
+          setAuthError(event.data || 'Incorrect password.');
+          setStep('confirm-install');
         } else if (event.type === 'error') {
           setError(event.data || 'Install failed');
           setStep('error');
@@ -107,9 +113,10 @@ export function OllamaSetupCard() {
     const ollama = getOllama();
     if (!ollama) return;
     setInstallLog([]);
+    setAuthError('');
     setStep('installing');
     try {
-      await ollama.install();
+      await ollama.install(installPassword || undefined);
     } catch (e: any) {
       setError(e?.message || 'Install failed');
       setStep('error');
@@ -193,12 +200,30 @@ export function OllamaSetupCard() {
         return (
           <div style={{ background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '16px 18px' }}>
             <p className="settings-hint" style={{ marginBottom: 14 }}>
-              This will run the official install script on your machine.
-              No data leaves your device.
+              This will run the official Ollama install script on your machine.
+              Installing system-wide requires your sudo password.
             </p>
+            {authError && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 11px', borderRadius: 'var(--radius-sm)', background: 'rgba(207,107,90,0.10)', border: '1px solid rgba(207,107,90,0.25)', marginBottom: 12 }}>
+                <I.alert size={13} style={{ color: '#cf6b5a', flexShrink: 0 }} />
+                <span className="settings-hint" style={{ color: '#cf6b5a', margin: 0 }}>{authError}</span>
+              </div>
+            )}
+            <label className="ef-field ef-wide" style={{ marginBottom: 14 }}>
+              <span className="ef-k">Sudo password</span>
+              <input
+                className="ef-control"
+                type="password"
+                autoComplete="current-password"
+                placeholder="Required to install system-wide"
+                value={installPassword}
+                onChange={e => setInstallPassword(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && installPassword) startInstall(); }}
+              />
+            </label>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button className="btn ghost" onClick={() => setStep('not-installed')}>Cancel</button>
-              <button className="btn solid" onClick={startInstall}>
+              <button className="btn ghost" onClick={() => { setStep('not-installed'); setAuthError(''); setInstallPassword(''); }}>Cancel</button>
+              <button className="btn solid" disabled={!installPassword} onClick={startInstall}>
                 <I.check size={15} /> Confirm &amp; Install
               </button>
             </div>
