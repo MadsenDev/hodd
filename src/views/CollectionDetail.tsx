@@ -11,6 +11,20 @@ export function CollectionDetail({ collId, ctx }) {
   const [sort, setSort] = React.useState("default");
   const [search, setSearch] = React.useState("");
   const [confirmDelete, setConfirmDelete] = React.useState(false);
+  const searchRef = React.useRef(null);
+
+  const hasSearch = data && data.items && data.items.length > 12;
+  React.useEffect(() => {
+    if (!hasSearch) return;
+    function onKey(e) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
+        e.preventDefault();
+        searchRef.current && searchRef.current.focus();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [hasSearch]);
 
   if (loading) return <Loading />;
   if (error) return <ErrorState error={error} onRetry={refetch} />;
@@ -65,10 +79,10 @@ export function CollectionDetail({ collId, ctx }) {
             <button key={v} className={sort === v ? "on" : ""} onClick={() => setSort(v)}>{l}</button>
           ))}
         </div>
-        {items.length > 12 && (
+        {hasSearch && (
           <div className="coll-search">
             <I.search size={14} stroke={1.8} />
-            <input placeholder="Filter items…" value={search} onChange={e => setSearch(e.target.value)} />
+            <input ref={searchRef} placeholder="Filter items…" value={search} onChange={e => setSearch(e.target.value)} />
             {search && <button onClick={() => setSearch("")}><I.close size={13} /></button>}
           </div>
         )}

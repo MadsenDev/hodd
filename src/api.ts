@@ -470,6 +470,8 @@ export const OllamaClient = {
         if (filters.status === "missing" && i.owned !== false) return false;
         if (filters.watched === "no"     && (i.owned === false || i.watched !== false)) return false;
         if (filters.watched === "yes"    && !i.watched) return false;
+        if (filters.completed === "no"   && (i.owned === false || i.completed !== false)) return false;
+        if (filters.completed === "yes"  && !i.completed) return false;
         if (filters.yearFrom && i.year < filters.yearFrom) return false;
         if (filters.yearTo   && i.year > filters.yearTo)   return false;
         if (filters.keywords && filters.keywords.length) {
