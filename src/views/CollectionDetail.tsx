@@ -9,6 +9,7 @@ export function CollectionDetail({ collId, ctx }) {
   const { data, loading, error, refetch } = useCollection(collId);
   const [filter, setFilter] = React.useState("all");
   const [sort, setSort] = React.useState("default");
+  const [search, setSearch] = React.useState("");
   const [confirmDelete, setConfirmDelete] = React.useState(false);
 
   if (loading) return <Loading />;
@@ -16,7 +17,12 @@ export function CollectionDetail({ collId, ctx }) {
   if (!data) return <EmptyState title="Collection not found" />;
 
   const { name, sub, accent, owned, missing, pct, type, items } = data;
-  const filtered = items.filter(i => filter === "all" ? true : filter === "owned" ? i.owned : !i.owned);
+  const sq = search.trim().toLowerCase();
+  const filtered = items.filter(i => {
+    if (filter !== "all" && (filter === "owned" ? !i.owned : i.owned)) return false;
+    if (sq && !(i.title || "").toLowerCase().includes(sq) && !(i.sub || "").toLowerCase().includes(sq)) return false;
+    return true;
+  });
   const shown = [...filtered].sort((a, b) => {
     if (sort === "title") return (a.title || "").localeCompare(b.title || "");
     if (sort === "year")  return (a.year || 9999) - (b.year || 9999);
@@ -59,11 +65,18 @@ export function CollectionDetail({ collId, ctx }) {
             <button key={v} className={sort === v ? "on" : ""} onClick={() => setSort(v)}>{l}</button>
           ))}
         </div>
+        {items.length > 12 && (
+          <div className="coll-search">
+            <I.search size={14} stroke={1.8} />
+            <input placeholder="Filter items…" value={search} onChange={e => setSearch(e.target.value)} />
+            {search && <button onClick={() => setSearch("")}><I.close size={13} /></button>}
+          </div>
+        )}
       </div>
       {items.length === 0
         ? <EmptyState title={`${name} is empty`} sub="Add your first item to start the collection." />
         : shown.length === 0
-        ? <EmptyState title={`No ${filter} items`} sub="Try a different filter." />
+        ? <EmptyState title={sq ? `No matches for "${search}"` : `No ${filter} items`} sub={sq ? "Try a different search term." : "Try a different filter."} />
         : <div className="items-grid">
             {shown.map(it => (
               <div className={"item-cell" + (it.owned ? "" : " missing")} key={it.id} onClick={() => ctx.openItem({ ...it, type }, { name, items, type })}>
