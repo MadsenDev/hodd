@@ -1,299 +1,236 @@
 // @ts-nocheck
 import React from 'react';
 /* ============================================================================
- * HODD API CLIENT  —  the ONLY module that knows the data is mocked.
- * ----------------------------------------------------------------------------
- * Data model (mirrors a normalized backend):
- *   catalog.json   — canonical item records, shared. "What exists in the world."
- *   holdings.json  — per-user records keyed by catalog id. "What you own."
- * The view-models the components consume are JOINS of the two, performed here
- * by joinHolding(). A production backend would do this join in SQL / an ORM and
- * return the same composed shape; swap the body of `request()` for a real fetch
- * and delete mockItemsFor(), and nothing downstream changes.
- *
- * Endpoints (see each payload's meta.endpoint):
- *   GET /api/user                 GET /api/catalog        GET /api/holdings
- *   GET /api/collections          GET /api/collections/:id
- *   GET /api/home                 GET /api/stats          GET /api/search/index
- *   GET /api/items/:id/story
+ * HODD API CLIENT — SQLite-backed via Electron IPC.
+ * All data lives in ~/Library/Application Support/HODD/hodd.db (macOS) or
+ * equivalent userData path. Writes update an in-memory cache immediately so
+ * the UI never blocks on IPC, then persist to SQLite asynchronously.
  * ==========================================================================*/
 (function () {
   "use strict";
 
-  var BASE = "./data";
-  var SIMULATED_LATENCY_MS = 0; // raise (e.g. 220) to feel the loading states.
+  // In-memory caches populated from SQLite via IPC on first access
+  var _catalog   = null;  // CatalogItem[]
+  var _holdings  = null;  // { itemId: HoldingRecord }
+  var _catOv     = null;  // { itemId: CatalogOverride }
+  var _userColls = null;  // UserCollection[]
+  var _userItems = null;  // { collectionId: UserItem[] }
+  var _baseCols  = null;  // CollectionMeta[]
 
-  // Collections backed by curated catalog rows. Everything else is summary +
-  // generated items (a stand-in for collections we have no seed data for).
-  var CURATED = { pokemon: true, books: true };
-  // Display name per collection id (the catalog groups some ids under a parent).
-  var COLL_NAME = { pokemon: "Games", books: "Books", movies: "Movies", games: "Games", coins: "Coins", comics: "Comics", vinyl: "Vinyl" };
+  var COLL_NAME = { pokemon: "Pokémon Games", books: "Books", movies: "Movies", games: "Games", coins: "Coins", comics: "Comics", vinyl: "Vinyl" };
+  var HOLDING_FIELDS = ["format", "completeness", "grade", "pressing", "edition", "condition", "acquired", "watched", "custom"];
+  var USER_HUES = ["#6366f1", "#5BA47A", "#5C8AD6", "#C9A24C", "#CF6B5A", "#7FB0C4", "#9B7BD4", "#C0392B"];
 
   function resolveId(id) { return id === "featured" ? "pokemon" : id; }
-  function delay(ms) { return ms > 0 ? new Promise(function (r) { setTimeout(r, ms); }) : Promise.resolve(); }
+  function api() { return window.hoddDesktop && window.hoddDesktop.api; }
 
-  /* The single network boundary. Returns the unwrapped `data` field. */
-  async function request(path) {
-    await delay(SIMULATED_LATENCY_MS);
-    var res = await fetch(BASE + "/" + path);
-    if (!res.ok) throw new Error("HODD API " + res.status + " — " + path);
-    return (await res.json()).data;
+  // Warm all caches in parallel; safe to call many times — skips if already warm.
+  async function ensureCache() {
+    if (_catalog && _holdings && _catOv && _userColls && _userItems && _baseCols) return;
+    var a = api();
+    if (!a) throw new Error("Electron IPC not available");
+    var [cat, h, co, uc, ui, bc] = await Promise.all([
+      _catalog   || a.getCatalog(),
+      _holdings  || a.getHoldings(),
+      _catOv     || a.getCatalogOverrides(),
+      _userColls || a.getUserCollections(),
+      _userItems || a.getUserItems(),
+      _baseCols  || a.getBaseCollections(),
+    ]);
+    _catalog = cat; _holdings = h; _catOv = co; _userColls = uc; _userItems = ui; _baseCols = bc;
   }
 
-  /* ---- the two tables, fetched once and cached ----------------------------- */
-  var _catalog = null, _holdingsBase = null;
+  // Invalidate mutable caches so the next read re-fetches
+  function invalidate() { _holdings = null; _catOv = null; _userColls = null; _userItems = null; }
 
-  /* Local edits live in localStorage as a patch layer over holdings.json, so a
-   * user's changes persist across reloads and flow through the same join the
-   * rest of the app reads. A row tagged { _deleted:true } means "no longer owned". */
-  var OVERRIDE_KEY = "hodd:holdings:v1";
-  function readOverrides() {
-    try { return JSON.parse(localStorage.getItem(OVERRIDE_KEY)) || {}; } catch (e) { return {}; }
-  }
-  function writeOverrides(o) {
-    try { localStorage.setItem(OVERRIDE_KEY, JSON.stringify(o)); } catch (e) {}
-  }
-  /* Personal columns a holding row may carry (everything outside the catalog). */
-  var HOLDING_FIELDS = ["format", "completeness", "grade", "pressing", "edition", "condition", "acquired", "watched", "custom"];
+  // Sync reads (from cache; callers must have ensureCache()'d first)
+  function readOverrides()  { return _holdings  || {}; }
+  function readCatalogOv()  { return _catOv     || {}; }
+  function readUserColls()  { return _userColls || []; }
+  function readUserItems()  { return _userItems || {}; }
+
+  // ── Write operations ── update cache immediately, persist async ──────────
+
   function saveHolding(id, patch) {
-    var o = readOverrides(), next = Object.assign({}, o[id], patch);
-    delete next._deleted;            // saving implies the item is owned
-    o[id] = next;
-    writeOverrides(o);
+    if (!_holdings) _holdings = {};
+    _holdings[id] = Object.assign({}, _holdings[id] || {}, patch);
+    var a = api(); if (a) a.saveHolding(id, patch);
   }
-  function removeHolding(id) {        // mark as no longer in the collection
-    var o = readOverrides();
-    o[id] = { _deleted: true };
-    writeOverrides(o);
-  }
-
-  /* Canonical (catalog) edits — title / secondary field / year — kept in their
-   * own patch layer so a correction to the item itself persists too. */
-  var CATALOG_OVERRIDE_KEY = "hodd:catalog:v1";
-  var CATALOG_FIELDS = ["title", "sub", "year", "type"];
-  function readCatalogOv() {
-    try { return JSON.parse(localStorage.getItem(CATALOG_OVERRIDE_KEY)) || {}; } catch (e) { return {}; }
+  function removeHolding(id) {
+    if (_holdings) delete _holdings[id];
+    var a = api(); if (a) a.removeHolding(id);
   }
   function saveCatalog(id, patch) {
-    var o = readCatalogOv(); o[id] = Object.assign({}, o[id], patch);
-    try { localStorage.setItem(CATALOG_OVERRIDE_KEY, JSON.stringify(o)); } catch (e) {}
+    if (!_catOv) _catOv = {};
+    _catOv[id] = Object.assign({}, _catOv[id] || {}, patch);
+    var a = api(); if (a) a.saveCatalog(id, patch);
   }
+  function saveStory(id, paragraphs) {
+    var a = api(); if (a) a.saveStory(id, paragraphs);
+  }
+
+  function createCollection(def) {
+    var colls = readUserColls();
+    var base = (def.name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "coll";
+    var id = "u-" + base; var n = 2;
+    var taken = colls.map(function(c) { return c.id; });
+    while (taken.indexOf(id) !== -1) { id = "u-" + base + "-" + n; n++; }
+    var rec = {
+      id: id,
+      name: (def.name || "").trim() || "Untitled collection",
+      type: def.type || "other",
+      accent: def.accent || USER_HUES[colls.length % USER_HUES.length],
+      template: (def.template || []).map(function(s) { return String(s).trim(); }).filter(Boolean),
+      user: true,
+    };
+    if (!_userColls) _userColls = [];
+    _userColls.push(rec);
+    var a = api(); if (a) a.createCollection(def).then(function(p) { if (p && p.id && p.id !== rec.id) rec.id = p.id; });
+    return rec;
+  }
+
+  function addItem(collectionId, draft) {
+    var id = "i-" + Math.random().toString(36).slice(2, 9);
+    if (!_userItems) _userItems = {};
+    if (!_userItems[collectionId]) _userItems[collectionId] = [];
+    var list = _userItems[collectionId];
+    var rec = Object.assign({ id: id, collectionId: collectionId, owned: true,
+      color: draft.color || USER_HUES[list.length % USER_HUES.length] }, draft);
+    list.push(rec);
+    var a = api(); if (a) a.addItem(collectionId, draft);
+    return rec;
+  }
+
+  // ── JOIN logic ────────────────────────────────────────────────────────────
+
   function applyCatalogOv(cat) {
     var o = readCatalogOv()[cat.id];
     return o ? Object.assign({}, cat, o) : cat;
   }
 
-  /* ---- USER-CREATED collections & items ------------------------------------
-   * A collection the app never anticipated lives entirely client-side: its
-   * definition (name, type, accent, and a default field TEMPLATE) in one layer,
-   * its items in another keyed by collection id. New items get real ids, so the
-   * same saveHolding / saveCatalog edit layers patch them like any other item. */
-  var USERCOLL_KEY = "hodd:usercoll:v1";
-  var USERITEMS_KEY = "hodd:useritems:v1";
-  function readJSON(k, d) { try { return JSON.parse(localStorage.getItem(k)) || d; } catch (e) { return d; } }
-  function writeJSON(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
-  function readUserColls() { return readJSON(USERCOLL_KEY, []); }
-  function readUserItems() { return readJSON(USERITEMS_KEY, {}); }
-  var USER_HUES = ["#6366f1", "#5BA47A", "#5C8AD6", "#C9A24C", "#CF6B5A", "#7FB0C4", "#9B7BD4", "#C0392B"];
-  function slugify(s) { return (String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")) || "coll"; }
-
-  function createCollection(def) {
-    var colls = readUserColls(), base = slugify(def.name), id = "u-" + base, n = 2;
-    var taken = colls.map(function (c) { return c.id; });
-    while (taken.indexOf(id) !== -1) { id = "u-" + base + "-" + n; n++; }
-    var rec = {
-      id: id, name: (def.name || "").trim() || "Untitled collection",
-      type: def.type || "other", accent: def.accent || USER_HUES[colls.length % USER_HUES.length],
-      template: (def.template || []).map(function (s) { return String(s).trim(); }).filter(Boolean),
-      user: true
-    };
-    colls.push(rec); writeJSON(USERCOLL_KEY, colls);
-    return rec;
-  }
-
-  function addItem(collectionId, draft) {
-    var store = readUserItems(), list = store[collectionId] || [];
-    var id = "i-" + Math.random().toString(36).slice(2, 9);
-    var rec = Object.assign({ id: id, collectionId: collectionId, owned: true,
-      color: draft.color || USER_HUES[list.length % USER_HUES.length] }, draft);
-    list.push(rec); store[collectionId] = list; writeJSON(USERITEMS_KEY, store);
-    return rec;
-  }
-
-  /* Merge the personal + canonical edit layers onto any item record. */
   function applyEdits(it) {
     var hv = readOverrides()[it.id];
-    if (hv && hv._deleted) {
-      it = Object.assign({}, it, { owned: false });
-      HOLDING_FIELDS.forEach(function (k) { it[k] = k === "watched" ? undefined : null; });
-    } else if (hv) {
-      it = Object.assign({}, it, hv, { owned: true });
-    }
+    if (hv) it = Object.assign({}, it, hv, { owned: true });
     var cv = readCatalogOv()[it.id];
     if (cv) it = Object.assign({}, it, cv);
     return it;
   }
+
   function userItemsFor(collectionId) {
-    return (readUserItems()[collectionId] || []).map(applyEdits);
+    return ((_userItems && _userItems[collectionId]) || []).map(applyEdits);
   }
 
-  async function getCatalog() {
-    if (!_catalog) _catalog = await request("catalog.json");
-    return _catalog;
-  }
-  async function getHoldings() {
-    if (!_holdingsBase) _holdingsBase = await request("holdings.json");
-    var ov = readOverrides(), merged = Object.assign({}, _holdingsBase);
-    Object.keys(ov).forEach(function (id) {
-      var o = ov[id];
-      if (o && o._deleted) delete merged[id];
-      else merged[id] = Object.assign({}, merged[id], o);
-    });
-    return merged;
-  }
-
-  /* ---- THE JOIN: canonical item + (optional) personal holding -> view-model -*/
   function joinHolding(cat, h) {
     cat = applyCatalogOv(cat);
     return Object.assign({}, cat, {
       owned: !!h,
-      format: (h && h.format) || "—",
+      format:       (h && h.format)       || "—",
       completeness: (h && h.completeness) || null,
-      grade: (h && h.grade) || null,
-      pressing: (h && h.pressing) || null,
-      edition: (h && h.edition) || null,
-      condition: (h && h.condition) || null,
-      acquired: (h && h.acquired) || null,
-      watched: h ? h.watched : undefined,
-      custom: (h && h.custom) || null,
+      grade:        (h && h.grade)        || null,
+      pressing:     (h && h.pressing)     || null,
+      edition:      (h && h.edition)      || null,
+      condition:    (h && h.condition)    || null,
+      acquired:     (h && h.acquired)     || null,
+      watched:      h ? h.watched : undefined,
+      custom:       (h && h.custom)       || null,
     });
+  }
+
+  // ── API endpoints ─────────────────────────────────────────────────────────
+
+  function getUser() {
+    var a = api();
+    return a ? a.getUser() : Promise.resolve({ id: "local", name: "Collector", joined: "2019" });
+  }
+
+  async function getCatalog() {
+    await ensureCache(); return _catalog;
+  }
+
+  async function getHoldings() {
+    await ensureCache(); return _holdings;
   }
 
   async function getItem(id) {
-    var cat = await getCatalog(), h = await getHoldings();
-    var row = cat.filter(function (c) { return c.id === id; })[0];
-    return row ? joinHolding(row, h[id]) : null;
+    await ensureCache();
+    var row = (_catalog || []).find(function(c) { return c.id === id; });
+    if (!row) return null;
+    return joinHolding(row, _holdings && _holdings[id]);
   }
+
   async function getItems(ids) {
     var out = [];
-    for (var i = 0; i < ids.length; i++) out.push(await getItem(ids[i]));
-    return out.filter(Boolean);
+    for (var i = 0; i < ids.length; i++) { var it = await getItem(ids[i]); if (it) out.push(it); }
+    return out;
   }
+
   async function getCollectionItems(collectionId) {
-    var cat = await getCatalog(), h = await getHoldings();
-    return cat
-      .filter(function (c) { return c.collectionId === collectionId; })
-      .map(function (c) { return joinHolding(c, h[c.id]); });
+    await ensureCache();
+    return (_catalog || [])
+      .filter(function(c) { return c.collectionId === collectionId; })
+      .map(function(c) { return joinHolding(c, _holdings && _holdings[c.id]); });
   }
 
-  /* ---- mock backend: synthesize items for non-curated collections ----------
-   * Each row is [title, sub, year]; `sub` is the type's natural secondary
-   * field (Director / Platform / Mint / Artist / Author / Publisher). Personal,
-   * type-specific columns (grade, pressing, completeness, watched…) are attached
-   * per type below — mirroring how the holdings table carries different columns
-   * for different item types. */
-  var FALLBACK = {
-    movie: [["Blade Runner 2049","Denis Villeneuve",2017],["Dune","Denis Villeneuve",2021],["Arrival","Denis Villeneuve",2016],["Sicario","Denis Villeneuve",2015],["Prisoners","Denis Villeneuve",2013],["Enemy","Denis Villeneuve",2013],["Interstellar","Christopher Nolan",2014],["The Northman","Robert Eggers",2022],["Drive","Nicolas W. Refn",2011],["Annihilation","Alex Garland",2018]],
-    game:  [["Link's Awakening","Game Boy",1993],["Metroid II","Game Boy",1991],["Tetris","Game Boy",1989],["Wario Land","Game Boy",1994],["Kirby's Dream Land","Game Boy",1992],["Donkey Kong","Game Boy",1994],["Super Mario Land","Game Boy",1989],["Castlevania","Game Boy",1989]],
-    coin:  [["Morgan 1884-O","New Orleans Mint",1884],["Peace 1922","Philadelphia Mint",1922],["Walking Liberty","Philadelphia Mint",1943],["Mercury Dime","Philadelphia Mint",1942],["Buffalo Nickel","Denver Mint",1936],["Indian Head","Philadelphia Mint",1907],["Barber Half","San Francisco Mint",1899],["Standing Liberty","Denver Mint",1917]],
-    comic: [["Saga #1","Image Comics",2012],["Sandman #1","DC / Vertigo",1989],["Watchmen","DC Comics",1986],["Daytripper","DC / Vertigo",2010],["Hellboy","Dark Horse",1994],["Bone","Cartoon Books",1991],["Locke & Key","IDW",2008],["Paper Girls","Image Comics",2015]],
-    vinyl: [["Kind of Blue","Miles Davis",1959],["Blue Train","John Coltrane",1957],["Rumours","Fleetwood Mac",1977],["OK Computer","Radiohead",1997],["In Rainbows","Radiohead",2007],["Random Access Memories","Daft Punk",2013],["Discovery","Daft Punk",2001],["Currents","Tame Impala",2015]],
-    book:  [["Dune","Frank Herbert",1965],["The Hobbit","J.R.R. Tolkien",1937],["Foundation","Isaac Asimov",1951],["Hyperion","Dan Simmons",1989],["Neuromancer","William Gibson",1984],["Snow Crash","Neal Stephenson",1992],["The Left Hand of Darkness","Ursula K. Le Guin",1969],["Solaris","Stanisław Lem",1961]]
-  };
-  var SPINE_HUES = ["#C0392B","#2C6FB0","#D4A02A","#3B9C6D","#9B7BD4","#CF6B5A","#5BA47A","#7FB0C4"];
-  /* Physical medium per type — the "Format" of a copy (never a status). */
-  var MEDIUM = { game: "Cartridge", book: "Hardcover", movie: "Blu-ray", coin: "Silver dollar", vinyl: "Vinyl LP", comic: "Single issue" };
-  function mockItemsFor(summary) {
-    var type = summary.type, ov = readOverrides(), catOv = readCatalogOv();
-    return (FALLBACK[type] || []).map(function (row, i) {
-      var id = type + "-" + i;
-      var owned = i % 3 !== 2;
-      var it = {
-        id: id, title: row[0], sub: row[1], type: type,
-        year: row[2], owned: owned, color: SPINE_HUES[i % SPINE_HUES.length]
-      };
-      if (owned) {
-        it.format = MEDIUM[type] || "Standard";
-        if (type === "game")  { it.completeness = i % 2 ? "Complete in box" : "Loose"; it.condition = i % 3 ? "Very Good" : "Mint"; }
-        else if (type === "coin")  { it.grade = "MS-6" + (2 + (i % 4)); }
-        else if (type === "vinyl") { it.pressing = i % 2 ? "180g" : "Standard weight"; }
-        else if (type === "movie") { it.watched = i % 2 === 0; }
-        else if (type === "comic") { it.condition = i % 2 ? "Near Mint" : "Very Fine"; }
-        else if (type === "book" && i % 3 === 0) { it.edition = "First Edition"; }
-      }
-      var o = ov[id];
-      if (o && o._deleted) {
-        it.owned = false;
-        HOLDING_FIELDS.forEach(function (k) { it[k] = k === "watched" ? undefined : null; });
-      } else if (o) {
-        it.owned = true;
-        Object.assign(it, o);
-        if (!it.format) it.format = MEDIUM[type] || "Standard";
-      }
-      var co = catOv[id];
-      if (co) Object.assign(it, co);   // canonical edits (title / sub / year)
-      return it;
-    });
-  }
-
-  /* ---- endpoints ----------------------------------------------------------- */
-  function getUser() { return request("user.json"); }
   async function getCollections() {
-    var base = await request("collections.json");
-    var store = readUserItems();
-    // bump built-in counts by any items the user has added to them
-    base = base.map(function (c) {
-      var extra = (store[c.id] || []).map(applyEdits);
-      if (!extra.length) return c;
-      var ownedExtra = extra.filter(function (i) { return i.owned !== false; }).length;
-      var owned = c.owned + ownedExtra, total = c.owned + c.missing + extra.length;
-      return Object.assign({}, c, { owned: owned, pct: total ? Math.round(owned / total * 100) : c.pct });
+    await ensureCache();
+    var cat = _catalog || [], h = _holdings || {}, ui = _userItems || {};
+
+    var built = (_baseCols || []).map(function(coll) {
+      var catItems = cat.filter(function(c) { return c.collectionId === coll.id; });
+      var extra    = (ui[coll.id] || []).map(applyEdits);
+      var all      = catItems.map(function(c) { return joinHolding(c, h[c.id]); }).concat(extra);
+      var owned    = all.filter(function(i) { return i.owned !== false; }).length;
+      var total    = all.length;
+      return Object.assign({}, coll, { owned: owned, missing: total - owned, pct: total ? Math.round(owned / total * 100) : 0 });
     });
-    var made = readUserColls().map(function (rc) {
-      var its = (store[rc.id] || []).map(applyEdits);
-      var owned = its.filter(function (i) { return i.owned !== false; }).length;
-      return {
-        id: rc.id, name: rc.name, type: rc.type, accent: rc.accent,
+
+    var made = (_userColls || []).map(function(rc) {
+      var its   = (ui[rc.id] || []).map(applyEdits);
+      var owned = its.filter(function(i) { return i.owned !== false; }).length;
+      return { id: rc.id, name: rc.name, type: rc.type, accent: rc.accent,
         owned: owned, missing: 0, pct: its.length ? Math.round(owned / its.length * 100) : 0,
-        user: true, template: rc.template
-      };
+        user: true, template: rc.template };
     });
-    return base.concat(made);
+
+    return built.concat(made);
   }
-  function getStats() { return request("stats.json"); }
+
+  async function getStats() {
+    var a = api();
+    return a ? a.getStatsConfig() : { growth: [] };
+  }
 
   async function getCollection(id) {
+    await ensureCache();
     var resolved = resolveId(id);
-    var made = readUserColls().filter(function (c) { return c.id === resolved; })[0];
+    var made  = (_userColls || []).find(function(c) { return c.id === resolved; });
     var extra = userItemsFor(resolved);
+
     if (made) {
-      var ownedN = extra.filter(function (i) { return i.owned !== false; }).length;
-      return {
-        id: made.id, name: made.name, type: made.type, accent: made.accent,
+      var ownedN = extra.filter(function(i) { return i.owned !== false; }).length;
+      return { id: made.id, name: made.name, type: made.type, accent: made.accent,
         user: true, template: made.template, owned: ownedN, missing: 0,
         pct: extra.length ? Math.round(ownedN / extra.length * 100) : 0,
-        sub: ownedN + (ownedN === 1 ? " item" : " items"), items: extra
-      };
+        sub: ownedN + (ownedN === 1 ? " item" : " items"), items: extra };
     }
-    if (CURATED[resolved]) {
-      var summary = resolved === "pokemon"
-        ? await request("collections/pokemon.json")
-        : (await getCollections()).filter(function (c) { return c.id === resolved; })[0];
-      return Object.assign({}, summary, {
-        sub: summary.sub || (summary.owned + " owned · " + summary.missing + " missing"),
-        items: (await getCollectionItems(resolved)).concat(extra)
-      });
-    }
-    var all = await getCollections();
-    var s = all.filter(function (c) { return c.id === resolved; })[0] || all[0];
-    return Object.assign({}, s, { sub: s.owned + " owned · " + s.missing + " missing", items: mockItemsFor(s).concat(extra) });
+
+    var cat      = _catalog || [], h = _holdings || {};
+    var catItems = cat.filter(function(c) { return c.collectionId === resolved; })
+      .map(function(c) { return joinHolding(c, h[c.id]); });
+    var all      = catItems.concat(extra);
+    var owned    = all.filter(function(i) { return i.owned !== false; }).length;
+    var total    = all.length;
+    var pct      = total ? Math.round(owned / total * 100) : 0;
+
+    var meta = (_baseCols || []).find(function(c) { return c.id === resolved; })
+      || { id: resolved, name: resolved, type: "game", accent: "#6366f1" };
+
+    return Object.assign({}, meta, { owned: owned, missing: total - owned, pct: pct,
+      sub: owned + " owned · " + (total - owned) + " missing", items: all });
   }
 
-  /* Collection summaries, each expanded with its joined items — so a grid can
-   * show real cover art per collection without N round-trips at the call site. */
   async function getCollectionsExpanded() {
-    var list = await getCollections();
-    var out = [];
+    var list = await getCollections(), out = [];
     for (var i = 0; i < list.length; i++) {
       var full = await getCollection(list[i].id);
       out.push(Object.assign({}, list[i], { items: full.items || [] }));
@@ -302,67 +239,168 @@ import React from 'react';
   }
 
   async function getHome() {
-    var home = await request("home.json");
+    var a = api();
+    var homeConf = a ? (await a.getHomeConfig()) : null;
+    if (!homeConf) return null;
+    var home     = Object.assign({}, homeConf);
     home.featured = await getCollection(home.featuredCollectionId);
-    home.recent = await getItems(home.recentIds);
+    home.recent   = await getItems(home.recentIds);
     home.wishlist = Object.assign({}, home.wishlist, { items: await getItems(home.wishlist.itemIds) });
-    var redItem = await getItem(home.rediscover.itemId);
-    home.rediscover = Object.assign({}, redItem, home.rediscover); // note overrides nothing on item
+    var redItem   = await getItem(home.rediscover.itemId);
+    home.rediscover = Object.assign({}, redItem, home.rediscover);
     return home;
   }
 
-  /* Story bundle, fetched once. In production this is a field on the item. */
-  var _stories = null;
-  var STORY_OVERRIDE_KEY = "hodd:stories:v1";
-  function readStoryOv() {
-    try { return JSON.parse(localStorage.getItem(STORY_OVERRIDE_KEY)) || {}; } catch (e) { return {}; }
-  }
-  function saveStory(id, paragraphs) {
-    var o = readStoryOv(); o[id] = paragraphs;
-    try { localStorage.setItem(STORY_OVERRIDE_KEY, JSON.stringify(o)); } catch (e) {}
-  }
   async function getStory(id) {
     if (!id) return null;
-    if (!_stories) _stories = await request("stories.json");
-    var ov = readStoryOv()[id];
-    return ov || _stories[id] || null;
+    var a = api(); return a ? a.getStory(id) : null;
   }
 
-  /* Search index: every catalog item joined with its holding, plus the
-   * denormalized fields the on-device engine filters over. */
   async function getSearchIndex() {
-    var cat = await getCatalog(), h = await getHoldings();
-    return cat.map(function (c) {
+    await ensureCache();
+    var cat = _catalog || [], h = _holdings || {};
+    var catIdx = cat.map(function(c) {
       var item = joinHolding(c, h[c.id]);
       item.coll = COLL_NAME[c.collectionId] || "Hoard";
-      if (c.type === "game") item.platform = c.sub;
-      if (c.type === "book") item.author = c.sub;
-      // "completed" is a derived projection for the main-line Pokémon set.
+      if (c.type === "game")  item.platform = c.sub;
+      if (c.type === "book")  item.author   = c.sub;
       if (c.collectionId === "pokemon") item.completed = item.owned && c.year < 1999;
       return item;
     });
+    var ui = _userItems || {}, uc = _userColls || [], userIdx = [];
+    Object.keys(ui).forEach(function(collId) {
+      var coll = uc.find(function(c) { return c.id === collId; });
+      (ui[collId] || []).forEach(function(it) {
+        var item = applyEdits(it);
+        item.coll = coll ? coll.name : "My Collection";
+        userIdx.push(item);
+      });
+    });
+    return catIdx.concat(userIdx);
   }
 
   window.HoddAPI = {
-    getUser: getUser,
-    getCatalog: getCatalog,
-    getHoldings: getHoldings,
-    getCollections: getCollections,
-    getCollectionsExpanded: getCollectionsExpanded,
-    getCollection: getCollection,
-    getItem: getItem,
-    getHome: getHome,
-    getStats: getStats,
-    getStory: getStory,
-    getSearchIndex: getSearchIndex,
-    saveHolding: saveHolding,
-    removeHolding: removeHolding,
-    saveCatalog: saveCatalog,
-    saveStory: saveStory,
-    createCollection: createCollection,
-    addItem: addItem,
-    HOLDING_FIELDS: HOLDING_FIELDS
+    getUser, getCatalog, getHoldings, getCollections, getCollectionsExpanded,
+    getCollection, getItem, getHome, getStats, getStory, getSearchIndex,
+    saveHolding, removeHolding, saveCatalog, saveStory, createCollection, addItem,
+    HOLDING_FIELDS,
+    invalidateCache: invalidate,
   };
+})();
+
+/* ============================================================================
+ * OLLAMA — local AI client (optional; gracefully absent if Ollama not running)
+ * ==========================================================================*/
+(function () {
+  "use strict";
+
+  var _status = null;  // { running: bool, models: string[] } — cached after first check
+
+  async function checkStatus() {
+    if (_status) return _status;
+    var o = window.hoddDesktop && window.hoddDesktop.ollama;
+    _status = o ? (await o.status()) : { running: false, models: [] };
+    return _status;
+  }
+
+  function invalidateStatus() { _status = null; }
+
+  async function isRunning() { return (await checkStatus()).running; }
+  async function getModels()  { return (await checkStatus()).models;  }
+
+  async function chat(model, messages) {
+    var o = window.hoddDesktop && window.hoddDesktop.ollama;
+    if (!o) throw new Error("Ollama not available");
+    return o.chat(model, messages);
+  }
+
+  async function generate(model, prompt, system) {
+    var o = window.hoddDesktop && window.hoddDesktop.ollama;
+    if (!o) throw new Error("Ollama not available");
+    return o.generate(model, prompt, system);
+  }
+
+  // Ask Ollama to parse a natural-language search query into structured filters,
+  // then apply those filters to the local index, then write a natural-language answer.
+  async function ollamaSearch(query, idx, model) {
+    var systemPrompt = [
+      "You are a query parser for HODD, a personal collection management app.",
+      "The collection may contain: games, books, movies, coins, comics, vinyl records.",
+      "Parse the user's query and respond with ONLY valid JSON (no markdown):",
+      '{ "type": "game|book|movie|coin|comic|vinyl|null",',
+      '  "status": "owned|missing|null",',
+      '  "watched": "yes|no|null",',
+      '  "completed": "yes|no|null",',
+      '  "yearFrom": number_or_null,',
+      '  "yearTo": number_or_null,',
+      '  "keywords": ["word1", "word2"] }',
+    ].join(" ");
+
+    var raw = "";
+    try {
+      raw = await generate(model, query, systemPrompt);
+      var filters = JSON.parse(raw.trim().replace(/^```json\s*/, "").replace(/```$/, ""));
+      var results = idx.filter(function(i) {
+        if (filters.type && i.type !== filters.type) return false;
+        if (filters.status === "owned"   && i.owned === false) return false;
+        if (filters.status === "missing" && i.owned !== false) return false;
+        if (filters.watched === "no"     && (i.owned === false || i.watched !== false)) return false;
+        if (filters.watched === "yes"    && !i.watched) return false;
+        if (filters.yearFrom && i.year < filters.yearFrom) return false;
+        if (filters.yearTo   && i.year > filters.yearTo)   return false;
+        if (filters.keywords && filters.keywords.length) {
+          var haystack = ((i.title || "") + " " + (i.sub || "") + " " + (i.coll || "")).toLowerCase();
+          return filters.keywords.some(function(kw) { return haystack.includes(kw.toLowerCase()); });
+        }
+        return true;
+      });
+
+      // Ask Ollama for a natural-language answer based on the results
+      var snippet = results.slice(0, 8).map(function(i) {
+        return i.title + (i.year ? " (" + i.year + ")" : "") + " — " + (i.owned ? "owned" : "not owned");
+      }).join("; ");
+      var answerPrompt = [
+        'The user asked: "' + query + '".',
+        results.length
+          ? "Found " + results.length + " matching items: " + snippet + "."
+          : "No matching items found.",
+        "Write a short, friendly answer (1-2 sentences) about what was found. Be specific.",
+      ].join(" ");
+      var answer = await generate(model, answerPrompt, "You are a helpful assistant for a personal collection app. Be concise and warm.");
+      return { tokens: [], results: results.slice(0, 12), total: results.length, summary: answer.trim(), q: query, aiPowered: true };
+    } catch (e) {
+      console.warn("[HODD Ollama] search failed, falling back to heuristic:", e.message);
+      return null; // signal fallback
+    }
+  }
+
+  async function generateStory(item, model) {
+    var subLabel = item.type === "book" ? "Author" : item.type === "game" ? "Platform"
+      : item.type === "coin" ? "Mint" : item.type === "vinyl" ? "Artist"
+      : item.type === "movie" ? "Director" : item.type === "comic" ? "Publisher" : "Detail";
+    var details = [
+      "Title: " + item.title,
+      item.year    ? "Year: "    + item.year         : null,
+      item.sub     ? subLabel + ": " + item.sub      : null,
+      item.format  ? "Format: "  + item.format       : null,
+      item.edition ? "Edition: " + item.edition      : null,
+      item.grade   ? "Grade: "   + item.grade        : null,
+      item.acquired? "Acquired: "+ item.acquired      : null,
+    ].filter(Boolean).join("; ");
+
+    var prompt = [
+      "Write a 2–3 paragraph provenance story for this collectible item owned by a collector.",
+      "Details: " + details + ".",
+      "Write in second person (\"you\"). Be evocative, specific, and collector-appropriate.",
+      "Don't be generic. Reference the real history, era, or cultural context of this item.",
+    ].join(" ");
+
+    var text = await generate(model, prompt,
+      "You are a writer helping collectors tell the stories of their treasured items. Write warmly and with depth.");
+    return text.trim().split(/\n{2,}/).filter(function(p) { return p.trim(); });
+  }
+
+  window.OllamaClient = { checkStatus, invalidateStatus, isRunning, getModels, chat, generate, ollamaSearch, generateStory };
 })();
 /* HODD icons — the hoard mark + UI line icons. All stroke = currentColor. */
 
@@ -1858,11 +1896,12 @@ function CollectionDetail({ collId, ctx }) {
 }
 
 /* ---------- ITEM DETAIL ---------- */
-function ItemDetail({ item: initialItem, collection, ctx }) {
+function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) {
   const narrow = useNarrow();
   const [item, setItem] = React.useState(initialItem);
   const [editing, setEditing] = React.useState(false);
   const [storyOv, setStoryOv] = React.useState(null);
+  const [generatingStory, setGeneratingStory] = React.useState(false);
   React.useEffect(() => { setItem(initialItem); setEditing(false); setStoryOv(null); }, [initialItem]);
   // Related strip: use the passed-in collection, else fall back to the
   // featured collection. Only fetch the fallback when we actually need it.
@@ -1940,7 +1979,25 @@ function ItemDetail({ item: initialItem, collection, ctx }) {
                 ))}
               </div>}
 
-          <div className="eyebrow" style={{ marginTop: 30 }}>The story</div>
+          <div style={{ marginTop: 30, display: "flex", alignItems: "baseline", gap: 12 }}>
+            <div className="eyebrow">The story</div>
+            {ollamaModel && (
+              <button className="btn" style={{ padding: "3px 10px", fontSize: 11 }}
+                disabled={generatingStory}
+                onClick={async () => {
+                  if (!window.OllamaClient) return;
+                  setGeneratingStory(true);
+                  try {
+                    const paras = await window.OllamaClient.generateStory(item, ollamaModel);
+                    window.HoddAPI.saveStory(item.id, paras);
+                    setStoryOv(paras);
+                  } catch (e) { console.warn("[HODD] story gen failed:", e); }
+                  setGeneratingStory(false);
+                }}>
+                <I.sparkle size={12} /> {generatingStory ? "Writing…" : "Generate with AI"}
+              </button>
+            )}
+          </div>
           <div className="story">{story.map((p, i) => <p key={i}>{p}</p>)}</div>
 
           {related.length > 0 && (
@@ -1966,21 +2023,39 @@ const SEARCH_SAMPLES = [
   "Vinyl I'm still missing",
 ];
 
-function SearchView({ initial, ctx }) {
+function SearchView({ initial, ctx, ollamaModel }) {
   const index = useSearchIndex();
   const [value, setValue] = React.useState(initial || "");
-  const [out, setOut] = React.useState(null);     // { tokens, results, total, summary, q }
+  const [out, setOut] = React.useState(null);
   const [phase, setPhase] = React.useState("idle"); // idle | thinking | done
+  const [ollamaOn, setOllamaOn] = React.useState(false);
+  const [ollamaAvail, setOllamaAvail] = React.useState(false);
 
-  function run(q) {
+  React.useEffect(() => {
+    if (window.OllamaClient) {
+      window.OllamaClient.isRunning().then(r => setOllamaAvail(r));
+    }
+  }, []);
+
+  async function run(q) {
     const query = (q == null ? value : q);
     if (!query.trim() || !index.data) return;
     setValue(query);
     setPhase("thinking");
-    setOut({ ...window.searchHoard(query, index.data), q: query });
+
+    // Try Ollama first if enabled and available
+    if (ollamaOn && ollamaAvail && window.OllamaClient && ollamaModel) {
+      try {
+        const result = await window.OllamaClient.ollamaSearch(query, index.data, ollamaModel);
+        if (result) { setOut(result); setPhase("done"); return; }
+      } catch (_) {}
+    }
+
+    // Fallback: heuristic engine
+    setOut({ ...window.searchHoard(query, index.data), q: query, aiPowered: false });
     setTimeout(() => setPhase("done"), 850);
   }
-  // Run the initial query once the index has loaded.
+
   React.useEffect(() => { if (initial && index.data) run(initial); /* eslint-disable-next-line */ }, [index.data]);
 
   if (index.loading) return <Loading label="Indexing your hoard…" />;
@@ -1989,23 +2064,40 @@ function SearchView({ initial, ctx }) {
   return (
     <div className="view-enter">
       <div className="ai-input-wrap" style={{ maxWidth: 760 }}>
-        <input className="ai-input" autoFocus placeholder="Ask anything… e.g. “Game Boy games I haven't completed”"
+        <input className="ai-input" autoFocus placeholder={"Ask anything… e.g. “Game Boy games I haven’t completed”"}
           value={value} onChange={e => setValue(e.target.value)} onKeyDown={e => { if (e.key === "Enter") run(); }} />
         <button className="ai-go" onClick={() => run()}><I.sparkle size={18} /></button>
       </div>
-      <div className="ai-hint" style={{ marginTop: 13 }}><I.lock size={13} /> Parsed on-device — your hoard never leaves this machine.</div>
+      <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+        {ollamaAvail ? (
+          <button className={"btn" + (ollamaOn ? " solid" : "")} style={{ padding: "5px 12px", fontSize: 12 }}
+            onClick={() => setOllamaOn(v => !v)}>
+            <I.sparkle size={13} /> {ollamaOn ? "Ollama: on" : "Ollama: off"}
+          </button>
+        ) : (
+          <div className="ai-hint"><I.lock size={13} /> Heuristic — run Ollama locally for AI search</div>
+        )}
+        {ollamaOn && ollamaAvail && (
+          <div className="ai-hint" style={{ marginTop: 0 }}>
+            <I.sparkle size={13} /> AI-powered search via {ollamaModel || "Ollama"}
+          </div>
+        )}
+        {!ollamaOn && (
+          <div className="ai-hint" style={{ marginTop: 0 }}><I.lock size={13} /> Parsed on-device</div>
+        )}
+      </div>
       <div className="add-examples" style={{ marginTop: 12 }}>
         <span className="add-examples-lbl">Try</span>
         {SEARCH_SAMPLES.map(s => <div key={s} className="chip" onClick={() => run(s)}>{s}</div>)}
       </div>
 
-      {out && (
+      {out && !out.aiPowered && (
         <div className="search-translate">
           <div className="translate-eyebrow">
             <I.sparkle size={15} /> {phase === "thinking" ? "Translating…" : "Understood as"}
           </div>
           <div className="translate-row">
-            {out.tokens.length
+            {out.tokens && out.tokens.length
               ? out.tokens.map(([k, v], i) => (
                   <div className="token" key={i} style={{ opacity: phase === "thinking" ? 0.35 : 1, transition: `opacity .4s ${i * 0.1}s` }}>{k}: <b>{v}</b></div>
                 ))
@@ -2843,7 +2935,8 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "headline": "Bricolage",
   "homeStyle": "Collection-first",
   "collStyle": "Shelves",
-  "shelfArt": "Covers"
+  "shelfArt": "Covers",
+  "ollamaModel": ""
 }/*EDITMODE-END*/;
 
 /* ---- Add-item flow: batch shorthand → local parse → confirm ---- */
@@ -3063,6 +3156,10 @@ function App() {
   const [dataVer, setDataVer] = useState(0);
   const bumpData = () => setDataVer(v => v + 1);
   const [topSearch, setTopSearch] = useState("");
+  const [ollamaModels, setOllamaModels] = useState([]);
+  useEffect(() => {
+    if (window.OllamaClient) window.OllamaClient.getModels().then(setOllamaModels).catch(() => {});
+  }, []);
   const histRef = useRef([]);
   const scrollRef = useRef(null);
 
@@ -3105,8 +3202,8 @@ function App() {
   if (view === "home") body = t.homeStyle === "Dashboard" ? <Home ctx={ctx} /> : <HomeNew ctx={ctx} art={t.shelfArt} />;
   else if (view === "collections") body = t.collStyle === "Cards" ? <Collections ctx={ctx} /> : <CollectionsNew ctx={ctx} art={t.shelfArt} />;
   else if (view === "collection") body = <CollectionDetail collId={collId} ctx={ctx} />;
-  else if (view === "item") body = <ItemDetail item={item} collection={itemColl} ctx={ctx} />;
-  else if (view === "search") body = <SearchView initial={searchInit} ctx={ctx} />;
+  else if (view === "item") body = <ItemDetail item={item} collection={itemColl} ctx={ctx} ollamaModel={t.ollamaModel} />;
+  else if (view === "search") body = <SearchView initial={searchInit} ctx={ctx} ollamaModel={t.ollamaModel} />;
   else if (view === "statistics") body = <Statistics ctx={ctx} />;
   else body = <ComingSoon name={bar.title || "Coming soon"} />;
 
@@ -3158,6 +3255,10 @@ function App() {
         <TweakSection label="Typography" />
         <TweakRadio label="Headline" value={t.headline} options={["Bricolage", "Space Grotesk"]}
           onChange={v => setTweak("headline", v)} />
+        <TweakSection label="Local AI" />
+        <TweakSelect label="Ollama model" value={t.ollamaModel}
+          options={ollamaModels.length ? ["", ...ollamaModels] : [""]}
+          onChange={v => setTweak("ollamaModel", v)} />
       </TweaksPanel>
     </div>
   );
