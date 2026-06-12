@@ -10,6 +10,7 @@ const SEARCH_SAMPLES = [
   "Which Tolkien books am I missing?",
   "Game Boy games I haven't completed",
   "Movies I own but haven't watched",
+  "Books I haven't read yet",
   "Coins from the 1920s",
   "Vinyl I'm still missing",
 ];
