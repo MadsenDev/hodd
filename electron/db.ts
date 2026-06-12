@@ -582,6 +582,7 @@ export function deleteUserItem(id: string): void {
   db.run('DELETE FROM holdings WHERE item_id = ?', [id]);
   db.run('DELETE FROM catalog_overrides WHERE item_id = ?', [id]);
   db.run('DELETE FROM stories WHERE item_id = ?', [id]);
+  db.run('DELETE FROM favorites WHERE item_id = ?', [id]);
   scheduleWrite();
 }
 

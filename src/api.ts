@@ -58,6 +58,7 @@ export function removeItem(id) {
   }
   if (_holdings) delete _holdings[id];
   if (_catOv) delete _catOv[id];
+  if (_favorites) _favorites = _favorites.filter(f => f !== id);
   const a = ipc(); if (a) a.deleteItem(id);
 }
 
