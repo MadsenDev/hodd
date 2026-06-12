@@ -17,6 +17,7 @@ import { Statistics } from './views/Statistics';
 import { ComingSoon } from './views/ComingSoon';
 import { Settings } from './views/Settings';
 import { Wishlist } from './views/Wishlist';
+import { Favorites } from './views/Favorites';
 import { Timeline } from './views/Timeline';
 import { Discover } from './views/Discover';
 
@@ -396,7 +397,8 @@ export default function App() {
   if (view === "home") bar = { title: name ? `${greeting}, ${name}.` : `${greeting}.`, subtitle: "Every item has a story. What will you discover tonight?" };
   else if (view === "collections") bar = { title: "Collections", subtitle: "Everything you value, gathered in one place." };
   else if (view === "search") bar = { title: "Search", subtitle: "Ask in plain language — Hodd translates it into your hoard." };
-  else if (view === "wishlist") bar = { title: "Wishlist", subtitle: "What's still out there." };
+  else if (view === "wishlist")   bar = { title: "Wishlist", subtitle: "What's still out there." };
+  else if (view === "favorites")  bar = { title: "Favorites", subtitle: "Your most treasured pieces." };
   else if (view === "timeline") bar = { title: "Timeline", subtitle: "How your collection has grown." };
   else if (view === "discover") bar = { title: "Discover", subtitle: "Find what connects, and what's missing." };
   else if (view === "statistics") bar = { title: "Statistics", subtitle: "The shape of your hoard." };
@@ -411,6 +413,7 @@ export default function App() {
   else if (view === "search") body = <SearchView initial={searchInit} ctx={ctx} ollamaModel={t.ollamaModel} />;
   else if (view === "statistics") body = <Statistics ctx={ctx} />;
   else if (view === "wishlist")   body = <Wishlist ctx={ctx} />;
+  else if (view === "favorites")  body = <Favorites ctx={ctx} />;
   else if (view === "timeline")   body = <Timeline ctx={ctx} />;
   else if (view === "discover")   body = <Discover ctx={ctx} />;
   else if (view === "settings")   body = <Settings />;

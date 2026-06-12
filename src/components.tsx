@@ -208,6 +208,7 @@ export function Sidebar({ active, onNav }) {
     ["home", "Home", I.home],
     ["collections", "Collections", I.grid],
     ["wishlist", "Wishlist", I.heart],
+    ["favorites", "Favorites", I.heartFill],
     ["timeline", "Timeline", I.clock],
     ["discover", "Discover", I.compass],
     ["statistics", "Statistics", I.chart],
