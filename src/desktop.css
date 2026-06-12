@@ -72,17 +72,19 @@ body { margin: 0; }
 .discover-hero {
   display: flex;
   align-items: center;
-  gap: 32px;
+  gap: 28px;
   background: var(--panel);
   border-radius: var(--radius);
   padding: 28px 32px;
   margin-bottom: 8px;
+  flex-wrap: wrap;
 }
 .discover-big-ring { flex-shrink: 0; }
 .discover-hero-stats {
   display: flex;
-  gap: 32px;
+  gap: 28px;
   flex-wrap: wrap;
+  flex: 1;
 }
 .d-stat { text-align: center; }
 .d-big { font-size: 32px; font-weight: 800; font-family: var(--display); line-height: 1; }

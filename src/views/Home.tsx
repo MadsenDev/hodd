@@ -236,16 +236,14 @@ export function HomeNew({ ctx, art = "Covers" }) {
   const D = home.data;
   const F = D.featured;
   const collections = cols.data;
-  const wish = D.wishlist;
   const redis = D.rediscover;
   const ownedShelf = F.items.filter(i => i.owned).slice(0, 3);
   const missShelf = F.items.filter(i => !i.owned).slice(0, 3);
   const openRediscover = () => ctx.openItem(redis);
 
-  const stillToFind = [
-    ...F.items.filter(i => !i.owned).map(i => ({ it: { ...i, type: F.type }, coll: F })),
-    ...(wish.items || []).filter(i => !i.owned).map(i => ({ it: { ...i, type: "book" }, coll: { name: wish.name, items: wish.items, type: "book" } })),
-  ].slice(0, 7);
+  const stillToFind = (collections || [])
+    .flatMap(c => (c.items || []).filter(i => i.owned === false).map(i => ({ it: { ...i, type: i.type || c.type }, coll: c })))
+    .slice(0, 7);
 
   return (
     <div className="view-enter">
