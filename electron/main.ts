@@ -1,26 +1,60 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { promises as fs } from 'node:fs';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import * as db from './db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const stateFile = () => path.join(app.getPath('userData'), 'hodd-state.json');
 
-async function readState(): Promise<Record<string, unknown>> {
+function dataFilePath(name: string): string {
+  const devPath = path.join(__dirname, '../public/data', name);
+  if (existsSync(devPath)) return devPath;
+  return path.join(__dirname, '../dist/data', name);
+}
+
+async function readDataJson(name: string): Promise<unknown> {
+  return JSON.parse(await fs.readFile(dataFilePath(name), 'utf8'));
+}
+
+// ─── Ollama proxy ──────────────────────────────────────────────────────────
+
+const OLLAMA_BASE = 'http://127.0.0.1:11434';
+
+async function ollamaFetch(path: string, body?: unknown): Promise<unknown> {
+  const opts: RequestInit = body
+    ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+    : { method: 'GET' };
+  const res = await fetch(OLLAMA_BASE + path, opts);
+  if (!res.ok) throw new Error(`Ollama ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+async function ollamaStatus(): Promise<{ running: boolean; models: string[] }> {
   try {
-    return JSON.parse(await fs.readFile(stateFile(), 'utf8')) as Record<string, unknown>;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') console.error('Unable to read HODD state', error);
-    return {};
+    const data = await ollamaFetch('/api/tags') as { models?: { name: string }[] };
+    const models = (data.models ?? []).map(m => m.name);
+    return { running: true, models };
+  } catch (_) {
+    return { running: false, models: [] };
   }
 }
 
-async function writeState(state: Record<string, unknown>) {
-  const savedAt = new Date().toISOString();
-  await fs.mkdir(path.dirname(stateFile()), { recursive: true });
-  await fs.writeFile(stateFile(), JSON.stringify({ ...state, savedAt }, null, 2), 'utf8');
-  return { savedAt };
+async function ollamaChat(model: string, messages: { role: string; content: string }[]): Promise<string> {
+  const data = await ollamaFetch('/api/chat', { model, messages, stream: false }) as {
+    message?: { content: string };
+  };
+  return data.message?.content ?? '';
 }
+
+async function ollamaGenerate(model: string, prompt: string, system?: string): Promise<string> {
+  const data = await ollamaFetch('/api/generate', { model, prompt, system, stream: false }) as {
+    response?: string;
+  };
+  return data.response ?? '';
+}
+
+// ─── Window ────────────────────────────────────────────────────────────────
 
 function createWindow() {
   const window = new BrowserWindow({
@@ -55,9 +89,45 @@ function createWindow() {
   else void window.loadFile(path.join(__dirname, '../dist/index.html'));
 }
 
-app.whenReady().then(() => {
-  ipcMain.handle('hodd:state:get', readState);
-  ipcMain.handle('hodd:state:save', (_event, state: Record<string, unknown>) => writeState(state));
+// ─── IPC handlers ──────────────────────────────────────────────────────────
+
+function registerIpc(): void {
+  // Data reads
+  ipcMain.handle('hodd:catalog',            () => db.getCatalog());
+  ipcMain.handle('hodd:holdings',           () => db.getHoldings());
+  ipcMain.handle('hodd:catalog-overrides',  () => db.getCatalogOverrides());
+  ipcMain.handle('hodd:user-collections',   () => db.getUserCollections());
+  ipcMain.handle('hodd:user-items',         () => db.getUserItems());
+  ipcMain.handle('hodd:base-collections',   () => db.getBaseCollections());
+  ipcMain.handle('hodd:settings',           () => db.getSettings());
+  ipcMain.handle('hodd:story:get', (_e, id: string) => db.getStory(id));
+
+  // Static config files (home/stats served from JSON, still seeded once)
+  ipcMain.handle('hodd:home-config', async () => {
+    try {
+      return ((await readDataJson('home.json')) as { data: unknown }).data;
+    } catch (_) { return null; }
+  });
+  ipcMain.handle('hodd:stats-config', async () => {
+    try {
+      return ((await readDataJson('stats.json')) as { data: unknown }).data;
+    } catch (_) { return { growth: [] }; }
+  });
+  ipcMain.handle('hodd:user', () => {
+    const s = db.getSettings();
+    return { id: s['user.id'] ?? 'local', name: s['user.name'] ?? 'Collector', joined: s['user.joined'] ?? '2019' };
+  });
+
+  // Writes
+  ipcMain.handle('hodd:holding:save',    (_e, id: string, patch: Record<string, unknown>) => db.saveHolding(id, patch));
+  ipcMain.handle('hodd:holding:remove',  (_e, id: string)                                 => db.removeHolding(id));
+  ipcMain.handle('hodd:catalog:save',    (_e, id: string, patch: Record<string, unknown>) => db.saveCatalogOverride(id, patch));
+  ipcMain.handle('hodd:story:save',      (_e, id: string, paragraphs: string[])           => db.saveStory(id, paragraphs));
+  ipcMain.handle('hodd:collection:create', (_e, def: { name: string; type: string; accent: string; template: string[] }) => db.createCollection(def));
+  ipcMain.handle('hodd:item:add',        (_e, collId: string, draft: Record<string, unknown>) => db.addUserItem(collId, draft));
+  ipcMain.handle('hodd:setting:save',    (_e, key: string, value: string)                 => db.saveSetting(key, value));
+
+  // Archive export
   ipcMain.handle('hodd:archive:export', async (_event, payload: Record<string, unknown>) => {
     const result = await dialog.showSaveDialog({
       title: 'Export HODD archive',
@@ -69,7 +139,25 @@ app.whenReady().then(() => {
     return { canceled: false, path: result.filePath };
   });
 
+  // Ollama
+  ipcMain.handle('hodd:ollama:status', () => ollamaStatus());
+  ipcMain.handle('hodd:ollama:chat',   (_e, model: string, messages: { role: string; content: string }[]) => ollamaChat(model, messages));
+  ipcMain.handle('hodd:ollama:generate', (_e, model: string, prompt: string, system?: string) => ollamaGenerate(model, prompt, system));
+}
+
+// ─── Boot ──────────────────────────────────────────────────────────────────
+
+app.whenReady().then(async () => {
+  try {
+    await db.initDb();
+    console.log('[HODD] Database ready');
+  } catch (e) {
+    console.error('[HODD] Database init failed:', e);
+  }
+
+  registerIpc();
   createWindow();
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
