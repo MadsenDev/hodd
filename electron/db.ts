@@ -559,6 +559,22 @@ export function setUserItemOwned(id: string, owned: boolean): void {
   scheduleWrite();
 }
 
+export function updateUserItemFields(id: string, fields: Record<string, unknown>): void {
+  const allowed: Record<string, 'text' | 'int'> = {
+    title: 'text', sub: 'text', year: 'int', type: 'text',
+    series: 'text', region: 'text', color: 'text',
+  };
+  const cols = Object.keys(fields).filter(k => k in allowed);
+  if (!cols.length) return;
+  const vals = cols.map(c => {
+    const v = fields[c];
+    if (v == null || v === '') return null;
+    return allowed[c] === 'int' ? Number(v) : String(v);
+  });
+  db.run(`UPDATE user_items SET ${cols.map(c => `${c} = ?`).join(', ')} WHERE id = ?`, [...vals, id]);
+  scheduleWrite();
+}
+
 export function deleteUserItem(id: string): void {
   db.run('DELETE FROM user_items WHERE id = ?', [id]);
   db.run('DELETE FROM holdings WHERE item_id = ?', [id]);

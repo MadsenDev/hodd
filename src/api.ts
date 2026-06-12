@@ -70,9 +70,19 @@ export function setItemOwned(id, owned) {
   const a = ipc(); if (a) a.setItemOwned(id, owned);
 }
 export function saveCatalog(id, patch) {
-  if (!_catOv) _catOv = {};
-  _catOv[id] = Object.assign({}, _catOv[id] || {}, patch);
-  const a = ipc(); if (a) a.saveCatalog(id, patch);
+  if (String(id).startsWith("i-")) {
+    // User item — update user_items directly, not catalog_overrides
+    if (_userItems) {
+      for (const collId of Object.keys(_userItems)) {
+        _userItems[collId] = (_userItems[collId] || []).map(i => i.id === id ? { ...i, ...patch } : i);
+      }
+    }
+    const a = ipc(); if (a) a.updateUserItem(id, patch);
+  } else {
+    if (!_catOv) _catOv = {};
+    _catOv[id] = Object.assign({}, _catOv[id] || {}, patch);
+    const a = ipc(); if (a) a.saveCatalog(id, patch);
+  }
 }
 export function saveStory(id, paragraphs) {
   const a = ipc(); if (a) a.saveStory(id, paragraphs);

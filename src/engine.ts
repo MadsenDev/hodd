@@ -129,7 +129,7 @@ export function parseOne(line) {
 }
 
 export function parseHoardLines(text) {
-  return text.split(/\n|·|•/).map(s => s.replace(/^\s*[-*]\s*/, "").trim()).filter(Boolean).slice(0, 8).map(parseOne);
+  return text.split(/\n|·|•/).map(s => s.replace(/^\s*[-*]\s*/, "").trim()).filter(Boolean).slice(0, 20).map(parseOne);
 }
 
 // ── Search engine ─────────────────────────────────────────────────────────────
@@ -167,8 +167,12 @@ export function searchHoard(query, idx) {
 
   if (!typeHit && !decade && !intent && q.trim()) {
     const words = q.split(/\s+/).filter(w => w.length > 2);
-    const m = res.filter(i => words.some(w => (i.title || "").toLowerCase().includes(w)));
-    if (m.length) { res = m; tokens.push(["Match", "Title"]); }
+    const m = res.filter(i => words.some(w =>
+      (i.title || "").toLowerCase().includes(w) ||
+      (i.series || "").toLowerCase().includes(w) ||
+      (i.sub || "").toLowerCase().includes(w)
+    ));
+    if (m.length) { res = m; tokens.push(["Match", "Title / series"]); }
   }
 
   const summary = writeAnswer(query, res, { typeHit, intent });

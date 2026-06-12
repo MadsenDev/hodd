@@ -126,7 +126,8 @@ function registerIpc(): void {
   ipcMain.handle('hodd:collection:create', (_e, def: { name: string; type: string; accent: string; template: string[] }) => db.createCollection(def));
   ipcMain.handle('hodd:item:add',        (_e, collId: string, draft: Record<string, unknown>) => db.addUserItem(collId, draft));
   ipcMain.handle('hodd:item:delete',     (_e, id: string)                                      => db.deleteUserItem(id));
-  ipcMain.handle('hodd:item:set-owned', (_e, id: string, owned: boolean)                       => db.setUserItemOwned(id, owned));
+  ipcMain.handle('hodd:item:set-owned',    (_e, id: string, owned: boolean)                       => db.setUserItemOwned(id, owned));
+  ipcMain.handle('hodd:item:update-fields',(_e, id: string, fields: Record<string, unknown>)      => db.updateUserItemFields(id, fields));
   ipcMain.handle('hodd:setting:save',    (_e, key: string, value: string)                 => db.saveSetting(key, value));
   ipcMain.handle('hodd:favorites',                                                          () => db.getFavorites());
   ipcMain.handle('hodd:favorite:add',    (_e, id: string)                                  => db.addFavorite(id));
