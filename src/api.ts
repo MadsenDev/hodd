@@ -187,7 +187,14 @@ export async function getCollections() {
 
 export async function getStats() {
   const a = ipc();
-  return a ? a.getStatsConfig() : { growth: [] };
+  if (!a) return { growth: [] };
+  const [conf, growth] = await Promise.all([
+    a.getStatsConfig(),
+    a.getGrowth().catch(() => null),
+  ]);
+  const base = conf || { growth: [] };
+  if (growth?.length) base.growth = growth;
+  return base;
 }
 
 export async function getCollection(id) {
@@ -242,6 +249,14 @@ export async function getHome() {
   home.recent = dynamic?.recent?.length
     ? dynamic.recent
     : await getItems(home.recentIds);
+
+  if (dynamic?.addedThisMonth !== undefined && home.headlineStats) {
+    const stats = [...home.headlineStats];
+    const idx = stats.findIndex((s: any) => s.id === 'added');
+    if (idx >= 0) stats[idx] = { ...stats[idx], value: dynamic.addedThisMonth };
+    else stats.unshift({ id: 'added', icon: 'plus', value: dynamic.addedThisMonth, label: 'added\nthis month' });
+    home.headlineStats = stats;
+  }
 
   home.wishlist = Object.assign({}, home.wishlist, { items: await getItems(home.wishlist.itemIds) });
 

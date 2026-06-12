@@ -33,6 +33,7 @@ contextBridge.exposeInMainWorld('hoddDesktop', {
     lookup: (type: string, query: string) => ipcRenderer.invoke('hodd:lookup', type, query),
     getHomeDynamic: () => ipcRenderer.invoke('hodd:home-dynamic'),
     getTimeline:    () => ipcRenderer.invoke('hodd:timeline'),
+    getGrowth:      () => ipcRenderer.invoke('hodd:growth'),
   },
 
   // Ollama local AI

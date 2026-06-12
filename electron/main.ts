@@ -169,6 +169,9 @@ function registerIpc(): void {
 
       const all = db.getAllUserItemsWithTimestamps();
       const owned = all.filter(i => i.owned !== false);
+
+      const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString();
+      const addedThisMonth = all.filter(i => (i.created_at as string) > monthAgo).length;
       let rediscover: Record<string, unknown> | null = null;
       if (owned.length) {
         const pick = owned[Math.floor(Math.random() * owned.length)];
@@ -181,11 +184,34 @@ function registerIpc(): void {
         };
       }
 
-      return { recent: enriched, rediscover, totalOwned: owned.length, totalMissing: all.filter(i => i.owned === false).length };
+      return { recent: enriched, rediscover, totalOwned: owned.length, totalMissing: all.filter(i => i.owned === false).length, addedThisMonth };
     } catch (e) {
       console.warn('[HODD home-dynamic]', (e as Error).message);
       return null;
     }
+  });
+
+  // Growth stats — monthly acquisition counts for the Statistics view
+  ipcMain.handle('hodd:growth', () => {
+    try {
+      const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      const items = db.getAllUserItemsWithTimestamps();
+      const now = new Date();
+      const result = [];
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const y = d.getFullYear(), mo = d.getMonth();
+        const count = items.filter(it => {
+          if (!it.created_at) return false;
+          try {
+            const dt = new Date(it.created_at as string);
+            return dt.getFullYear() === y && dt.getMonth() === mo;
+          } catch (_) { return false; }
+        }).length;
+        result.push({ m: MONTHS[mo], n: count });
+      }
+      return result;
+    } catch (_) { return []; }
   });
 
   // Timeline — all user items with timestamps for the Timeline view
