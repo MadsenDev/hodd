@@ -229,6 +229,11 @@ export async function initDb(): Promise<void> {
 
   db.run(SCHEMA);
 
+  // Migrations — safe to run on every boot (ALTER TABLE fails silently if column exists)
+  ['series TEXT', 'region TEXT'].forEach(col => {
+    try { db.run(`ALTER TABLE catalog_overrides ADD COLUMN ${col}`); } catch (_) {}
+  });
+
   // Check if seeded
   const seeded = db.exec("SELECT value FROM meta WHERE key = 'seeded'");
   if (!seeded.length || !seeded[0].values.length) {
@@ -371,7 +376,7 @@ export function getHoldings(): Record<string, Record<string, unknown>> {
 }
 
 export function getCatalogOverrides(): Record<string, Record<string, unknown>> {
-  const res = db.exec('SELECT item_id, title, sub, year, type FROM catalog_overrides');
+  const res = db.exec('SELECT item_id, title, sub, year, type, series, region FROM catalog_overrides');
   if (!res.length) return {};
   const [{ columns, values }] = res;
   const map: Record<string, Record<string, unknown>> = {};
@@ -494,12 +499,14 @@ export function saveCatalogOverride(itemId: string, patch: Record<string, unknow
     const cur: Record<string, unknown> = {};
     cols.forEach((c, i) => { cur[c] = vals[i]; });
     const merged = { ...cur, ...patch };
-    db.run('UPDATE catalog_overrides SET title=?, sub=?, year=?, type=? WHERE item_id=?', [
-      sv(merged.title), sv(merged.sub), sv(merged.year), sv(merged.type), itemId,
+    db.run('UPDATE catalog_overrides SET title=?, sub=?, year=?, type=?, series=?, region=? WHERE item_id=?', [
+      sv(merged.title), sv(merged.sub), sv(merged.year), sv(merged.type),
+      sv(merged.series), sv(merged.region), itemId,
     ]);
   } else {
-    db.run('INSERT INTO catalog_overrides (item_id, title, sub, year, type) VALUES (?, ?, ?, ?, ?)', [
+    db.run('INSERT INTO catalog_overrides (item_id, title, sub, year, type, series, region) VALUES (?, ?, ?, ?, ?, ?, ?)', [
       itemId, sv(patch.title), sv(patch.sub), sv(patch.year), sv(patch.type),
+      sv(patch.series), sv(patch.region),
     ]);
   }
   scheduleWrite();

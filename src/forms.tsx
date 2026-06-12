@@ -90,6 +90,8 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
     sub: item.sub || "",
     year: item.year != null ? String(item.year) : "",
     type: item.type || type || "other",
+    series: item.series || "",
+    region: item.region || "",
   });
   const [custom, setCustom] = React.useState(
     Array.isArray(item.custom) && item.custom.length
@@ -113,6 +115,8 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
       sub: c.sub.trim() || null,
       year: Number.isFinite(yearNum) ? yearNum : (c.year.trim() ? item.year : null),
       type: etype,
+      series: c.series.trim() || null,
+      region: c.region.trim() || null,
     };
     const customClean = custom
       .map(r => ({ label: r.label.trim(), value: r.value.trim() }))
@@ -146,6 +150,8 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
         <EFSelect label="Type" value={etype} pairs={TYPE_OPTIONS} placeholder={false} onChange={v => setCan("type", v)} />
         <EFText label={eSub} value={c.sub} placeholder={eSub} onChange={v => setCan("sub", v)} />
         <EFText label="Year" value={c.year} placeholder="e.g. 1996" onChange={v => setCan("year", v)} />
+        <EFText label="Series" value={c.series} placeholder="e.g. Dune, Pokémon" onChange={v => setCan("series", v)} />
+        {etype === "game" && <EFText label="Region" value={c.region} placeholder="e.g. NTSC, PAL, JPN" onChange={v => setCan("region", v)} />}
       </div>
 
       {owned ? (
