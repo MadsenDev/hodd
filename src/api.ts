@@ -230,15 +230,33 @@ export async function getCollectionsExpanded() {
 
 export async function getHome() {
   const a = ipc();
-  const homeConf = a ? (await a.getHomeConfig()) : null;
+  if (!a) return null;
+  const [homeConf, dynamic] = await Promise.all([
+    a.getHomeConfig(),
+    a.getHomeDynamic().catch(() => null),
+  ]);
   if (!homeConf) return null;
-  const home     = Object.assign({}, homeConf);
-  home.featured  = await getCollection(home.featuredCollectionId);
-  home.recent    = await getItems(home.recentIds);
-  home.wishlist  = Object.assign({}, home.wishlist, { items: await getItems(home.wishlist.itemIds) });
-  const redItem  = await getItem(home.rediscover.itemId);
-  home.rediscover = Object.assign({}, redItem, home.rediscover);
+  const home = Object.assign({}, homeConf);
+  home.featured = await getCollection(home.featuredCollectionId);
+
+  home.recent = dynamic?.recent?.length
+    ? dynamic.recent
+    : await getItems(home.recentIds);
+
+  home.wishlist = Object.assign({}, home.wishlist, { items: await getItems(home.wishlist.itemIds) });
+
+  if (dynamic?.rediscover) {
+    home.rediscover = dynamic.rediscover;
+  } else {
+    const redItem = await getItem(home.rediscover.itemId);
+    home.rediscover = Object.assign({}, redItem, home.rediscover);
+  }
   return home;
+}
+
+export async function getTimeline() {
+  const a = ipc();
+  return a ? a.getTimeline() : [];
 }
 
 export async function getStory(id) {

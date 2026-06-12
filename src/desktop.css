@@ -50,3 +50,74 @@ body { margin: 0; }
   margin-left: 8px;
   vertical-align: middle;
 }
+
+/* ── Timeline view ─────────────────────────────────────────────────────────── */
+.tl-month-group {
+  margin-bottom: 40px;
+}
+.tl-month-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--rule);
+}
+.tl-month-count {
+  font-size: 12px;
+  color: var(--mute);
+}
+
+/* ── Discover view ─────────────────────────────────────────────────────────── */
+.discover-hero {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  background: var(--panel);
+  border-radius: var(--radius);
+  padding: 28px 32px;
+  margin-bottom: 8px;
+}
+.discover-big-ring { flex-shrink: 0; }
+.discover-hero-stats {
+  display: flex;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+.d-stat { text-align: center; }
+.d-big { font-size: 32px; font-weight: 800; font-family: var(--display); line-height: 1; }
+.d-lbl { font-size: 12px; color: var(--mute); margin-top: 4px; }
+.discover-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--panel);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.discover-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 20px;
+  cursor: pointer;
+  transition: background .12s;
+}
+.discover-row:hover { background: var(--hover); }
+.dr-info { flex: 1; min-width: 0; }
+.dr-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+  display: flex;
+  align-items: center;
+}
+.dr-sub { font-size: 12px; color: var(--mute); margin-top: 2px; }
+.dr-gap-count {
+  font-size: 28px;
+  font-weight: 800;
+  font-family: var(--display);
+  width: 52px;
+  text-align: center;
+  flex-shrink: 0;
+}

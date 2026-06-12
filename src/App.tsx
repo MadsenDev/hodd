@@ -17,6 +17,8 @@ import { Statistics } from './views/Statistics';
 import { ComingSoon } from './views/ComingSoon';
 import { Settings } from './views/Settings';
 import { Wishlist } from './views/Wishlist';
+import { Timeline } from './views/Timeline';
+import { Discover } from './views/Discover';
 
 const ACCENTS = {
   "#4f46e5": ["#4f46e5", "#6366f1", "#4338ca"],
@@ -406,6 +408,8 @@ export default function App() {
   else if (view === "search") body = <SearchView initial={searchInit} ctx={ctx} ollamaModel={t.ollamaModel} />;
   else if (view === "statistics") body = <Statistics ctx={ctx} />;
   else if (view === "wishlist")   body = <Wishlist ctx={ctx} />;
+  else if (view === "timeline")   body = <Timeline ctx={ctx} />;
+  else if (view === "discover")   body = <Discover ctx={ctx} />;
   else if (view === "settings")   body = <Settings />;
   else body = <ComingSoon name={bar.title || "Coming soon"} />;
 

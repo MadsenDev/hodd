@@ -545,3 +545,38 @@ export function saveSetting(key: string, value: string): void {
   db.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [key, value]);
   scheduleWrite();
 }
+
+export function getRecentUserItems(limit = 6): Record<string, unknown>[] {
+  const res = db.exec(
+    'SELECT id, collection_id, title, sub, year, type, color, owned, created_at FROM user_items ORDER BY created_at DESC LIMIT ?',
+    [limit]
+  );
+  if (!res.length) return [];
+  const [{ columns, values }] = res;
+  return values.map(row => {
+    const obj: Record<string, unknown> = {};
+    columns.forEach((col, i) => {
+      const key = col === 'collection_id' ? 'collectionId' : col;
+      obj[key] = row[i];
+    });
+    obj.owned = obj.owned === 1;
+    return obj;
+  });
+}
+
+export function getAllUserItemsWithTimestamps(): Record<string, unknown>[] {
+  const res = db.exec(
+    'SELECT id, collection_id, title, sub, year, type, color, owned, format, acquired, created_at FROM user_items ORDER BY created_at DESC'
+  );
+  if (!res.length) return [];
+  const [{ columns, values }] = res;
+  return values.map(row => {
+    const obj: Record<string, unknown> = {};
+    columns.forEach((col, i) => {
+      const key = col === 'collection_id' ? 'collectionId' : col;
+      obj[key] = row[i];
+    });
+    obj.owned = obj.owned === 1;
+    return obj;
+  });
+}

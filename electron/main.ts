@@ -139,6 +139,72 @@ function registerIpc(): void {
     return { canceled: false, path: result.filePath };
   });
 
+  // Dynamic home data — real user items for recent/rediscover
+  ipcMain.handle('hodd:home-dynamic', () => {
+    try {
+      const recent = db.getRecentUserItems(6);
+      const baseCols = db.getBaseCollections() as Record<string, unknown>[];
+      const userCols = db.getUserCollections() as Record<string, unknown>[];
+      const allCols = [...baseCols, ...userCols];
+
+      function collInfo(collectionId: unknown) {
+        return allCols.find(c => c.id === collectionId) as Record<string, unknown> | undefined;
+      }
+      function timeSince(dateStr: string): string {
+        try {
+          const days = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
+          if (days < 1) return 'today';
+          if (days < 7) return `${days} day${days === 1 ? '' : 's'} ago`;
+          if (days < 31) { const w = Math.floor(days / 7); return `${w} week${w === 1 ? '' : 's'} ago`; }
+          const m = Math.floor(days / 30);
+          if (m < 12) return `${m} month${m === 1 ? '' : 's'} ago`;
+          const y = Math.floor(m / 12); return `${y} year${y === 1 ? '' : 's'} ago`;
+        } catch (_) { return 'recently'; }
+      }
+
+      const enriched = recent.map(item => {
+        const c = collInfo(item.collectionId);
+        return { ...item, collName: c?.name ?? 'Collection', collAccent: c?.accent ?? '#6366f1', collType: c?.type };
+      });
+
+      const all = db.getAllUserItemsWithTimestamps();
+      const owned = all.filter(i => i.owned !== false);
+      let rediscover: Record<string, unknown> | null = null;
+      if (owned.length) {
+        const pick = owned[Math.floor(Math.random() * owned.length)];
+        const c = collInfo(pick.collectionId);
+        rediscover = {
+          ...pick,
+          collName: c?.name ?? 'Collection',
+          acquired: pick.acquired as string || timeSince(pick.created_at as string),
+          note: 'Take a moment to revisit this one.',
+        };
+      }
+
+      return { recent: enriched, rediscover, totalOwned: owned.length, totalMissing: all.filter(i => i.owned === false).length };
+    } catch (e) {
+      console.warn('[HODD home-dynamic]', (e as Error).message);
+      return null;
+    }
+  });
+
+  // Timeline — all user items with timestamps for the Timeline view
+  ipcMain.handle('hodd:timeline', () => {
+    try {
+      const items = db.getAllUserItemsWithTimestamps();
+      const baseCols = db.getBaseCollections() as Record<string, unknown>[];
+      const userCols = db.getUserCollections() as Record<string, unknown>[];
+      const allCols = [...baseCols, ...userCols];
+      return items.map(item => {
+        const c = allCols.find(col => col.id === item.collectionId) as Record<string, unknown> | undefined;
+        return { ...item, collName: c?.name ?? 'Collection', collAccent: c?.accent ?? '#6366f1' };
+      });
+    } catch (e) {
+      console.warn('[HODD timeline]', (e as Error).message);
+      return [];
+    }
+  });
+
   // Ollama
   ipcMain.handle('hodd:ollama:status', () => ollamaStatus());
   ipcMain.handle('hodd:ollama:chat',   (_e, model: string, messages: { role: string; content: string }[]) => ollamaChat(model, messages));
