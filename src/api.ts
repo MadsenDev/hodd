@@ -426,6 +426,8 @@ export async function getSearchIndex() {
     item.coll = bcMap[c.collectionId] || COLL_NAME[c.collectionId] || "Hoard";
     if (c.type === "game")  item.platform = c.sub;
     if (c.type === "book")  item.author   = c.sub;
+    if (c.type === "vinyl") item.artist   = c.sub;
+    if (c.type === "movie") item.director = c.sub;
     return item;
   });
   const ui = _userItems || {}, uc = _userColls || [], bc = _baseCols || [], userIdx = [];
@@ -434,6 +436,10 @@ export async function getSearchIndex() {
     (ui[collId] || []).forEach(it => {
       const item = applyEdits(it);
       item.coll = coll ? (coll.name as string) : "My Collection";
+      if (item.type === "game")  item.platform = item.sub;
+      if (item.type === "book")  item.author   = item.sub;
+      if (item.type === "vinyl") item.artist   = item.sub;
+      if (item.type === "movie") item.director = item.sub;
       userIdx.push(item);
     });
   });

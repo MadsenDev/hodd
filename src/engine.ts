@@ -162,9 +162,9 @@ export function searchHoard(query, idx) {
   let intent = null;
   if (/missing|don'?t have|haven'?t got|need|to collect|still need/.test(q)) { intent = "missing"; tokens.push(["Status", "Missing"]); res = res.filter(i => i.owned === false); }
   else if (/\bown\b|owned|i have|in my/.test(q)) { intent = "owned"; tokens.push(["Status", "Owned"]); res = res.filter(i => i.owned !== false); }
-  if (/haven'?t watched|unwatched|not watched|still to watch/.test(q)) { intent = "unwatched"; tokens.push(["Watched", "No"]); res = res.filter(i => i.type === "movie" && i.owned !== false && i.watched === false); }
+  if (/haven'?t watched|unwatched|not watched|still to watch/.test(q)) { intent = "unwatched"; tokens.push(["Watched", "No"]); res = res.filter(i => i.type === "movie" && i.owned !== false && !i.watched); }
   if (/haven'?t (completed|finished)|incomplete|unfinished|not (completed|finished)/.test(q)) { intent = "incomplete"; tokens.push(["Progress", "Not completed"]); res = res.filter(i => i.type === "game" && i.owned !== false && !i.completed); }
-  if (/haven'?t read|unread|not read|still to read/.test(q)) { intent = "unread"; tokens.push(["Read", "No"]); res = res.filter(i => i.type === "book" && i.owned !== false && i.watched === false); }
+  if (/haven'?t read|unread|not read|still to read/.test(q)) { intent = "unread"; tokens.push(["Read", "No"]); res = res.filter(i => i.type === "book" && i.owned !== false && !i.watched); }
 
   // Always try to narrow results with meaningful title/series keywords.
   // Strip common function words and words already handled by other filters.
