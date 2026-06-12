@@ -362,9 +362,10 @@ export async function exportData() {
 export async function getSearchIndex() {
   await ensureCache();
   const cat = _catalog || [], h = _holdings || {};
+  const bcMap = Object.fromEntries((_baseCols || []).map(c => [c.id as string, c.name as string]));
   const catIdx = cat.map(c => {
     const item = joinHolding(c, h[c.id]);
-    item.coll = COLL_NAME[c.collectionId] || "Hoard";
+    item.coll = bcMap[c.collectionId] || COLL_NAME[c.collectionId] || "Hoard";
     if (c.type === "game")  item.platform = c.sub;
     if (c.type === "book")  item.author   = c.sub;
     if (c.collectionId === "pokemon") item.completed = item.owned && c.year < 1999;

@@ -60,6 +60,7 @@ const ENRICH_FIELD_MAP = {
   year: "Year", platform: "Platform", author: "Author", artist: "Artist",
   mint: "Mint", director: "Director", publisher: "Publisher",
   edition: "Edition", completeness: "Completeness", grade: "Grade", pressing: "Pressing",
+  series: "Series", region: "Region",
 };
 
 function applyEnrichment(item, enrich) {
@@ -97,6 +98,8 @@ function buildDraft(item) {
   const completeness = byKey["Completeness"];
   const grade = byKey["Grade"];
   const pressing = byKey["Pressing"];
+  const series = byKey["Series"];
+  const region = byKey["Region"];
   return {
     title: item.title, type: item.type, color: item.color,
     year: Number.isFinite(year) ? year : null,
@@ -105,6 +108,8 @@ function buildDraft(item) {
     ...(completeness && !/^Confirm/i.test(String(completeness)) ? { completeness: String(completeness) } : {}),
     ...(grade && !/^Confirm|^Add/i.test(String(grade)) ? { grade: String(grade) } : {}),
     ...(pressing && !/^Confirm/i.test(String(pressing)) ? { pressing: String(pressing) } : {}),
+    ...(series && !/^Confirm/i.test(String(series)) ? { series: String(series) } : {}),
+    ...(region && !/^Confirm/i.test(String(region)) ? { region: String(region) } : {}),
   };
 }
 
