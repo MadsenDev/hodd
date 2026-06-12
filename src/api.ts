@@ -115,6 +115,12 @@ export function toggleFavorite(id: string, currentlyFav: boolean): void {
   }
 }
 
+export function deleteCollection(id) {
+  if (_userColls) _userColls = _userColls.filter(c => c.id !== id);
+  if (_userItems) delete _userItems[id];
+  const a = ipc(); if (a) a.deleteCollection(id);
+}
+
 export function createCollection(def) {
   const colls = readUserColls();
   const base = (def.name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "coll";

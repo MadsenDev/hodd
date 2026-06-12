@@ -533,6 +533,21 @@ export function createCollection(def: { name: string; type: string; accent: stri
   return { id, name, type: def.type || 'other', accent: def.accent || '#6366f1', template: JSON.parse(template), user: true };
 }
 
+export function deleteUserCollection(collectionId: string): void {
+  // Cascade: gather all item IDs first
+  const rows = db.exec('SELECT id FROM user_items WHERE collection_id = ?', [collectionId]);
+  const ids: string[] = rows.length ? rows[0].values.map(r => r[0] as string) : [];
+  for (const id of ids) {
+    db.run('DELETE FROM holdings WHERE item_id = ?', [id]);
+    db.run('DELETE FROM stories WHERE item_id = ?', [id]);
+    db.run('DELETE FROM favorites WHERE item_id = ?', [id]);
+    db.run('DELETE FROM catalog_overrides WHERE item_id = ?', [id]);
+  }
+  db.run('DELETE FROM user_items WHERE collection_id = ?', [collectionId]);
+  db.run('DELETE FROM user_collections WHERE id = ?', [collectionId]);
+  scheduleWrite();
+}
+
 export function addUserItem(collectionId: string, draft: Record<string, unknown>): Record<string, unknown> {
   const id = 'i-' + Math.random().toString(36).slice(2, 9);
   const w = draft.watched;

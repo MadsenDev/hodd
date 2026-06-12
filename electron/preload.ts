@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld('hoddDesktop', {
     saveStory:    (id: string, paragraphs: string[])           => ipcRenderer.invoke('hodd:story:save', id, paragraphs),
     createCollection: (def: { name: string; type: string; accent: string; template: string[] }) =>
       ipcRenderer.invoke('hodd:collection:create', def),
+    deleteCollection: (id: string) => ipcRenderer.invoke('hodd:collection:delete', id),
     addItem: (collectionId: string, draft: Record<string, unknown>) =>
       ipcRenderer.invoke('hodd:item:add', collectionId, draft),
     deleteItem:        (id: string)                                   => ipcRenderer.invoke('hodd:item:delete', id),

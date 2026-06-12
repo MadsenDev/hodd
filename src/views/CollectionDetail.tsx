@@ -3,11 +3,13 @@ import React from 'react';
 import { I } from '../icons';
 import { Cover, CompletionRing, Loading, ErrorState, EmptyState } from '../components';
 import { useCollection } from '../hooks';
+import { deleteCollection } from '../api';
 
 export function CollectionDetail({ collId, ctx }) {
   const { data, loading, error, refetch } = useCollection(collId);
   const [filter, setFilter] = React.useState("all");
   const [sort, setSort] = React.useState("default");
+  const [confirmDelete, setConfirmDelete] = React.useState(false);
 
   if (loading) return <Loading />;
   if (error) return <ErrorState error={error} onRetry={refetch} />;
@@ -33,6 +35,20 @@ export function CollectionDetail({ collId, ctx }) {
         </div>
         <div style={{ flex: 1 }} />
         <button className="btn solid add-item-btn" onClick={() => ctx.addToCollection(data)}><I.plus size={16} stroke={2} /> Add item</button>
+        {data.user && !confirmDelete && (
+          <button className="btn" style={{ color: "var(--danger, #cf6b5a)" }} onClick={() => setConfirmDelete(true)}>
+            <I.trash size={15} /> Delete
+          </button>
+        )}
+        {data.user && confirmDelete && (
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <span style={{ fontSize: 13, color: "var(--mute)" }}>Delete this collection?</span>
+            <button className="btn" style={{ color: "var(--danger, #cf6b5a)" }} onClick={() => { deleteCollection(collId); ctx.back(); }}>
+              Yes, delete
+            </button>
+            <button className="btn" onClick={() => setConfirmDelete(false)}>Cancel</button>
+          </div>
+        )}
         <div className="seg">
           {["all", "owned", "missing"].map(f => (
             <button key={f} className={filter === f ? "on" : ""} onClick={() => setFilter(f)}>{f[0].toUpperCase() + f.slice(1)}</button>
