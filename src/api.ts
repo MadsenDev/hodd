@@ -316,11 +316,34 @@ export async function getHome() {
     ? dynamic.recent
     : await getItems(home.recentIds || []);
 
-  if (dynamic?.addedThisMonth !== undefined && home.headlineStats) {
+  if (home.headlineStats) {
     const stats = [...home.headlineStats];
-    const idx = stats.findIndex((s: any) => s.id === 'added');
-    if (idx >= 0) stats[idx] = { ...stats[idx], value: dynamic.addedThisMonth };
-    else stats.unshift({ id: 'added', icon: 'plus', value: dynamic.addedThisMonth, label: 'added\nthis month' });
+
+    // Patch the "added this month" stat with live data
+    if (dynamic?.addedThisMonth !== undefined) {
+      const idx = stats.findIndex((s: any) => s.id === 'added');
+      if (idx >= 0) stats[idx] = { ...stats[idx], value: dynamic.addedThisMonth };
+      else stats.unshift({ id: 'added', icon: 'plus', value: dynamic.addedThisMonth, label: 'added\nthis month' });
+    }
+
+    // Patch collection-completion stats with live data (ensureCache already ran)
+    if (_catalog && _holdings && _baseCols) {
+      const h = _holdings;
+      const liveColls = (_baseCols as any[]).map(bc => {
+        const catItems = (_catalog as any[]).filter(c => c.collectionId === bc.id);
+        const ownedN = catItems.filter(c => !!h[c.id]).length;
+        const totalN = catItems.length;
+        const pct = totalN ? Math.round(ownedN / totalN * 100) : 0;
+        return { id: bc.id, type: bc.type as string, owned: ownedN, total: totalN, pct };
+      });
+      stats.forEach((s: any, i: number) => {
+        const typeMatch = liveColls.find(c => s.id === c.id || (s.id && s.id === c.type + 's') || (s.id && c.id === s.id));
+        if (typeMatch && (s.ring != null || s.unit === '%')) {
+          stats[i] = { ...s, value: String(typeMatch.pct), ring: typeMatch.pct };
+        }
+      });
+    }
+
     home.headlineStats = stats;
   }
 
