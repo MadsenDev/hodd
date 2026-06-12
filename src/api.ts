@@ -186,10 +186,11 @@ export async function getCollections() {
   });
 
   const made = (_userColls || []).map(rc => {
-    const its   = (ui[rc.id] || []).map(applyEdits);
-    const owned = its.filter(i => i.owned !== false).length;
+    const its     = (ui[rc.id] || []).map(applyEdits);
+    const owned   = its.filter(i => i.owned !== false).length;
+    const missing = its.filter(i => i.owned === false).length;
     return { id: rc.id, name: rc.name, type: rc.type, accent: rc.accent,
-      owned, missing: 0, pct: its.length ? Math.round(owned / its.length * 100) : 0,
+      owned, missing, pct: its.length ? Math.round(owned / its.length * 100) : 0,
       user: true, template: rc.template };
   });
 

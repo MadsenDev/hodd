@@ -16,7 +16,7 @@ export function CollectionDetail({ collId, ctx }) {
   const shown = items.filter(i => filter === "all" ? true : filter === "owned" ? i.owned : !i.owned);
   return (
     <div className="view-enter">
-      <div className="back" onClick={() => ctx.go("home")}><I.arrowLeft size={16} /> Back</div>
+      <div className="back" onClick={ctx.back}><I.arrowLeft size={16} /> Back</div>
       <div className="detail-head">
         <CompletionRing pct={pct} size={92} stroke={7} color={accent} fontSize={20} />
         <div className="titles">
