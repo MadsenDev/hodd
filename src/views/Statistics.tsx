@@ -2,18 +2,25 @@
 import React from 'react';
 import { I, typeIcon } from '../icons';
 import { CompletionRing, Loading, ErrorState, EmptyState } from '../components';
-import { useCollections, useStats } from '../hooks';
+import { useCollections, useStats, useSearchIndex } from '../hooks';
 
 export function Statistics({ ctx }) {
   const cols = useCollections();
   const stats = useStats();
+  const index = useSearchIndex();
 
-  if (cols.loading || stats.loading) return <Loading label="Crunching the numbers…" />;
+  if (cols.loading || stats.loading || index.loading) return <Loading label="Crunching the numbers…" />;
   if (cols.error || stats.error) {
     return <ErrorState error={cols.error || stats.error} onRetry={() => { cols.refetch(); stats.refetch(); }} />;
   }
 
   const GROWTH = (stats.data && stats.data.growth) || [];
+  const idx = index.data || [];
+  const consumption = [
+    { label: "Games completed", icon: "check", color: "#9B7BD4", done: idx.filter(i => i.type === "game" && i.owned !== false && i.completed === true).length,  total: idx.filter(i => i.type === "game" && i.owned !== false).length },
+    { label: "Movies watched",  icon: "check", color: "#5C8AD6", done: idx.filter(i => i.type === "movie" && i.owned !== false && i.watched === true).length, total: idx.filter(i => i.type === "movie" && i.owned !== false).length },
+    { label: "Books read",      icon: "check", color: "#5BA47A", done: idx.filter(i => i.type === "book" && i.owned !== false && i.watched === true).length,  total: idx.filter(i => i.type === "book" && i.owned !== false).length },
+  ].filter(c => c.total > 0);
   const cols_ = cols.data || [];
   if (!cols_.length) return <EmptyState title="No collections yet" sub="Add your first collection to start tracking your hoard." />;
   const totalOwned = cols_.reduce((s, c) => s + c.owned, 0);
@@ -104,6 +111,26 @@ export function Statistics({ ctx }) {
           ))}
         </div>
       </div>
+
+      {consumption.length > 0 && (
+        <div className="panel stat-panel" style={{ marginTop: 22 }}>
+          <div className="section-head" style={{ margin: "0 0 16px" }}><div className="eyebrow">Progress tracking</div></div>
+          <div className="bar-rows">
+            {consumption.map(c => {
+              const pct = c.total ? Math.round(c.done / c.total * 100) : 0;
+              return (
+                <div className="bar-row" key={c.label} style={{ cursor: "default" }}>
+                  <div className="bar-row-ic" style={{ color: c.color }}><I.check size={18} stroke={2} /></div>
+                  <div className="bar-row-name">{c.label}</div>
+                  <div className="bar-row-track"><i style={{ width: pct + "%", background: c.color }} /></div>
+                  <div className="bar-row-pct">{pct}%</div>
+                  <div className="bar-row-count">{c.done} of {c.total}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

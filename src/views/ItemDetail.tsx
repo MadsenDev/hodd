@@ -68,6 +68,7 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
     owned && type === "book" && ["Edition", item.edition],
     owned && type === "vinyl" && ["Pressing", item.pressing],
     owned && type === "movie" && typeof item.watched === "boolean" && ["Watched", item.watched ? "Yes" : "Not yet"],
+    owned && type === "book"  && typeof item.watched === "boolean" && ["Read",    item.watched ? "Yes" : "Not yet"],
     owned && ["Condition", item.condition],
     ...(owned && Array.isArray(item.custom) ? item.custom.map(x => [x.label, x.value]) : []),
     owned && ["Acquired", item.acquired],

@@ -164,6 +164,7 @@ export function searchHoard(query, idx) {
   else if (/\bown\b|owned|i have|in my/.test(q)) { intent = "owned"; tokens.push(["Status", "Owned"]); res = res.filter(i => i.owned !== false); }
   if (/haven'?t watched|unwatched|not watched|still to watch/.test(q)) { intent = "unwatched"; tokens.push(["Watched", "No"]); res = res.filter(i => i.type === "movie" && i.owned !== false && i.watched === false); }
   if (/haven'?t (completed|finished)|incomplete|unfinished|not (completed|finished)/.test(q)) { intent = "incomplete"; tokens.push(["Progress", "Not completed"]); res = res.filter(i => i.type === "game" && i.owned !== false && !i.completed); }
+  if (/haven'?t read|unread|not read|still to read/.test(q)) { intent = "unread"; tokens.push(["Read", "No"]); res = res.filter(i => i.type === "book" && i.owned !== false && i.watched === false); }
 
   // Always try to narrow results with meaningful title/series keywords.
   // Strip common function words and words already handled by other filters.
@@ -171,7 +172,7 @@ export function searchHoard(query, idx) {
     "the", "and", "for", "with", "that", "this", "they", "them", "from", "into",
     "have", "been", "are", "was", "what", "which", "where", "when", "but", "all",
     "you", "your", "own", "owned", "having", "missing", "not", "still", "some",
-    "completed", "finished", "watched", "unwatched", "unfinished", "incomplete",
+    "completed", "finished", "watched", "unwatched", "unfinished", "incomplete", "read", "unread",
     "book", "books", "game", "games", "movie", "movies", "coin", "coins",
     "vinyl", "comic", "comics", "record", "records", "film", "films", "lp",
   ]);
@@ -202,6 +203,7 @@ function writeAnswer(query, res, ctx) {
   }
   if (ctx.intent === "unwatched") return `${n} owned movie${n > 1 ? "s are" : " is"} still unwatched: ${list(res)}. The disc waits.`;
   if (ctx.intent === "incomplete") return `${n} game${n > 1 ? "s" : ""} you own but haven't finished: ${list(res)}.`;
+  if (ctx.intent === "unread") return `${n} book${n > 1 ? "s" : ""} you own but haven't read yet: ${list(res)}.`;
   if (ctx.intent === "owned") return `You own ${n} matching item${n > 1 ? "s" : ""}: ${list(res)}.`;
   return `Found ${n} item${n > 1 ? "s" : ""} across your hoard: ${list(res)}.`;
 }

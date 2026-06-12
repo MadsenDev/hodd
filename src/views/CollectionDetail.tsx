@@ -31,6 +31,8 @@ export function CollectionDetail({ collId, ctx }) {
   if (!data) return <EmptyState title="Collection not found" />;
 
   const { name, sub, accent, owned, missing, pct, type, items } = data;
+  const ownedCount = items.filter(i => i.owned !== false).length;
+  const missingCount = items.filter(i => i.owned === false).length;
   const sq = search.trim().toLowerCase();
   const filtered = items.filter(i => {
     if (filter !== "all" && (filter === "owned" ? !i.owned : i.owned)) return false;
@@ -70,8 +72,10 @@ export function CollectionDetail({ collId, ctx }) {
           </div>
         )}
         <div className="seg">
-          {["all", "owned", "missing"].map(f => (
-            <button key={f} className={filter === f ? "on" : ""} onClick={() => setFilter(f)}>{f[0].toUpperCase() + f.slice(1)}</button>
+          {[["all", "All", items.length], ["owned", "Owned", ownedCount], ["missing", "Missing", missingCount]].map(([v, l, n]) => (
+            <button key={v} className={filter === v ? "on" : ""} onClick={() => setFilter(v)}>
+              {l} <span style={{ opacity: 0.55, fontSize: 11, fontWeight: 500 }}>{n}</span>
+            </button>
           ))}
         </div>
         <div className="seg">

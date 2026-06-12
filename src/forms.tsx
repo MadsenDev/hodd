@@ -133,7 +133,7 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
     if (etype === "game")  { holding.completeness = f.completeness || null; holding.completed = f.completed; }
     if (etype === "coin")  holding.grade = f.grade || null;
     if (etype === "vinyl") holding.pressing = f.pressing || null;
-    if (etype === "book")  holding.edition = f.edition || null;
+    if (etype === "book")  { holding.edition = f.edition || null; holding.watched = f.watched; }
     if (etype === "movie") holding.watched = f.watched;
     onSave({ owned: true, holding, canonical, story: paragraphs });
   }
@@ -167,6 +167,7 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
             <EFSelect label="Condition" value={f.condition} options={CONDITION_OPTIONS} placeholder="Condition" onChange={v => set("condition", v)} />
             <EFText label="Acquired" value={f.acquired} placeholder="e.g. May 2024" onChange={v => set("acquired", v)} />
             {etype === "movie" && <EFToggle label="Watched" value={f.watched} onChange={v => set("watched", v)} hint={["Yes", "Not yet"]} />}
+            {etype === "book"  && <EFToggle label="Read" value={f.watched} onChange={v => set("watched", v)} hint={["Yes", "Not yet"]} />}
             {etype === "game"  && <EFToggle label="Completed" value={f.completed} onChange={v => set("completed", v)} hint={["Yes", "Not yet"]} />}
           </div>
 
@@ -325,7 +326,7 @@ export function AddItemModal({ collection, onClose, onAdded }) {
       if (type === "game")  { draft.completeness = f.completeness || null; draft.completed = f.completed; }
       if (type === "coin")  draft.grade = f.grade || null;
       if (type === "vinyl") draft.pressing = f.pressing || null;
-      if (type === "book")  draft.edition = f.edition || null;
+      if (type === "book")  { draft.edition = f.edition || null; draft.watched = f.watched; }
       if (type === "movie") draft.watched = f.watched;
       if (customClean.length) draft.custom = customClean;
     }
@@ -372,6 +373,7 @@ export function AddItemModal({ collection, onClose, onAdded }) {
                 <EFSelect label="Condition" value={f.condition} options={CONDITION_OPTIONS} placeholder="Condition" onChange={v => set("condition", v)} />
                 <EFText label="Acquired" value={f.acquired} placeholder="e.g. May 2024" onChange={v => set("acquired", v)} />
                 {type === "movie" && <EFToggle label="Watched" value={f.watched} onChange={v => set("watched", v)} hint={["Yes", "Not yet"]} />}
+                {type === "book"  && <EFToggle label="Read" value={f.watched} onChange={v => set("watched", v)} hint={["Yes", "Not yet"]} />}
                 {type === "game"  && <EFToggle label="Completed" value={f.completed} onChange={v => set("completed", v)} hint={["Yes", "Not yet"]} />}
               </div>
 
