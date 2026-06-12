@@ -1,0 +1,34 @@
+{
+  "data": {
+    "featuredCollectionId": "pokemon",
+    "headlineStats": [
+      { "id": "added",  "icon": "plus",    "value": "3",  "label": "Items added\nthis month" },
+      { "id": "movies", "ring": 82,        "value": "82", "unit": "%",      "label": "Movie collection\ncomplete" },
+      { "id": "unread", "icon": "book",    "iconColor": "#b89adf", "value": "17", "label": "Unread\nbooks" },
+      { "id": "viewed", "icon": "gamepad", "iconColor": "#8fc4a0", "value": "6",  "unit": "months", "label": "Since you viewed\nGame Boy collection" }
+    ],
+    "recentIds": ["bladerunner", "dune-book", "zelda-la", "morgan-1884"],
+    "timeline": [
+      { "when": "Today",     "label": "Added",     "item": "Blade Runner 2049", "to": "Movies", "type": "movie", "color": "#C77A2E" },
+      { "when": "Yesterday", "label": "Added",     "item": "2 coins",           "to": "Coins",  "type": "coin",  "color": "#A9A8A2" },
+      { "when": "May 8",     "label": "Added",     "item": "Dune",              "to": "Books",  "type": "book",  "color": "#C9923B" },
+      { "when": "May 5",     "label": "Added",     "item": "Link's Awakening",  "to": "Games",  "type": "game",  "color": "#3E8E5A" },
+      { "when": "Apr 28",    "label": "Completed", "item": "Half-Life series",  "to": "Games",  "type": "game",  "color": "#9B7BD4" }
+    ],
+    "wishlist": {
+      "name": "The Lord of the Rings",
+      "collectionId": "books",
+      "collected": 3,
+      "total": 6,
+      "itemIds": ["lotr-hobbit", "lotr-fellow", "lotr-towers", "lotr-return", "lotr-silm", "lotr-unfin"]
+    },
+    "rediscover": {
+      "itemId": "lotr-hobbit",
+      "note": "A timeless adventure that started it all."
+    }
+  },
+  "meta": {
+    "endpoint": "GET /api/home",
+    "note": "recentIds / wishlist.itemIds / rediscover.itemId are catalog references; the API joins them with holdings before returning. timeline is an activity log (text), not item records."
+  }
+}

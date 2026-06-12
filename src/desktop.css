@@ -1,0 +1,18 @@
+/* Electron window affordances layered onto the supplied HODD design system. */
+html, body, #root { height: 100%; }
+body { margin: 0; }
+.sidebar, .mobile-top { -webkit-app-region: drag; }
+.sidebar button, .sidebar a, .mobile-top button, .logo, input, textarea, select { -webkit-app-region: no-drag; }
+@media (min-width: 761px) {
+  .sidebar { padding-top: 34px; }
+  .canvas { padding-top: 34px; }
+}
+.avatar-initials {
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-family: var(--display);
+  font-size: 13px;
+  font-weight: 800;
+  background: linear-gradient(145deg, #766ef2, #4237bb);
+}

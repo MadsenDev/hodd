@@ -1,0 +1,32 @@
+{
+  "data": {
+    "pk-red": [
+      "The cartridge that started a lifelong hunt. Pokémon Red shipped in 1996 and rewired what a handheld could be — 151 creatures, a link cable, and the maddening knowledge that you could never catch them all alone.",
+      "This copy is complete in box: outer sleeve, manual, and the red cartridge with its label barely sun-faded. It anchors the Kanto shelf."
+    ],
+    "lotr-hobbit": [
+      "A timeless adventure that started it all. Before the Ring, there was a hobbit, a map, and a door round and green like a porthole.",
+      "Acquired four years ago at an estate sale, this hardcover is a cornerstone of the Tolkien shelf — and the reason the rest of the collection exists."
+    ],
+    "dune-book": [
+      "Frank Herbert's desert epic, in a clothbound hardcover edition. Spice, sandworms, and the slow machinery of empire.",
+      "Added this month. It completes the original six-book arc on the shelf — though the question of which translation of the Appendices counts remains gloriously unresolved."
+    ],
+    "zelda-la": [
+      "Link washes ashore on Koholint Island in this 1993 Game Boy classic, later reborn in clay-bright HD. A dream you don't want to end.",
+      "The cartridge joined the collection in May, slotting neatly beside the rest of the portable Zelda line."
+    ],
+    "bladerunner": [
+      "Denis Villeneuve's 2017 continuation, owned on 4K Blu-ray. Rain, neon, and the ache of synthetic memory.",
+      "Logged this month — and, per your own honesty, still unwatched. The disc waits."
+    ],
+    "morgan-1884": [
+      "An 1884 Morgan Dollar struck at the New Orleans mint, graded MS-63. Ninety percent silver, a hundred and forty years of pockets and vaults behind it.",
+      "The newest resident of the coin tray, and one of the cleaner strikes in the set."
+    ]
+  },
+  "meta": {
+    "endpoint": "GET /api/items/:id/story",
+    "note": "Authored narrative copy, keyed by item id. Items without an entry fall back to generated provenance text in the client."
+  }
+}

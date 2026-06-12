@@ -1,0 +1,17 @@
+{
+  "data": {
+    "id": "pokemon",
+    "name": "Pokémon Collection",
+    "type": "game",
+    "sub": "Game Boy · Pokémon Series",
+    "accent": "#D4A02A",
+    "owned": 27,
+    "missing": 14,
+    "pct": 66,
+    "blurb": "The main-line journey from Kanto to Hoenn — boxed, cartridge, and complete."
+  },
+  "meta": {
+    "endpoint": "GET /api/collections/pokemon",
+    "note": "Summary only — the item list is joined from catalog + holdings by the API (collectionId = 'pokemon')."
+  }
+}

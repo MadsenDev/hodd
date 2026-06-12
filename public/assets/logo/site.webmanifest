@@ -1,0 +1,10 @@
+{
+  "name": "Hodd — Your hoard. Your story.",
+  "short_name": "Hodd",
+  "icons": [
+    { "src": "hodd-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "theme_color": "#4f46e5",
+  "background_color": "#0e0e11",
+  "display": "standalone"
+}

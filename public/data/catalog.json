@@ -1,0 +1,42 @@
+{
+  "data": [
+    { "id": "pk-red",      "collectionId": "pokemon", "title": "Pokémon Red",               "type": "game",  "sub": "Game Boy",         "year": 1996, "color": "#C0392B", "region": "PAL" },
+    { "id": "pk-blue",     "collectionId": "pokemon", "title": "Pokémon Blue",              "type": "game",  "sub": "Game Boy",         "year": 1996, "color": "#2C6FB0", "region": "PAL" },
+    { "id": "pk-yellow",   "collectionId": "pokemon", "title": "Pokémon Yellow",            "type": "game",  "sub": "Game Boy",         "year": 1998, "color": "#D4A02A", "region": "PAL" },
+    { "id": "pk-gold",     "collectionId": "pokemon", "title": "Pokémon Gold",              "type": "game",  "sub": "Game Boy Color",   "year": 1999, "color": "#B8902F" },
+    { "id": "pk-silver",   "collectionId": "pokemon", "title": "Pokémon Silver",            "type": "game",  "sub": "Game Boy Color",   "year": 1999, "color": "#9AA3AD" },
+    { "id": "pk-crystal",  "collectionId": "pokemon", "title": "Pokémon Crystal",           "type": "game",  "sub": "Game Boy Color",   "year": 2000, "color": "#5FA8C4" },
+    { "id": "pk-ruby",     "collectionId": "pokemon", "title": "Pokémon Ruby",              "type": "game",  "sub": "Game Boy Advance", "year": 2002, "color": "#B23A36" },
+    { "id": "pk-sapphire", "collectionId": "pokemon", "title": "Pokémon Sapphire",          "type": "game",  "sub": "Game Boy Advance", "year": 2002, "color": "#2E6CA6" },
+    { "id": "pk-emerald",  "collectionId": "pokemon", "title": "Pokémon Emerald",           "type": "game",  "sub": "Game Boy Advance", "year": 2004, "color": "#3B9C6D" },
+    { "id": "pk-fire",     "collectionId": "pokemon", "title": "Pokémon FireRed",           "type": "game",  "sub": "Game Boy Advance", "year": 2004, "color": "#D2603A" },
+    { "id": "pk-leaf",     "collectionId": "pokemon", "title": "Pokémon LeafGreen",         "type": "game",  "sub": "Game Boy Advance", "year": 2004, "color": "#6FAE48" },
+
+    { "id": "lotr-hobbit", "collectionId": "books",   "title": "The Hobbit",                 "type": "book",  "sub": "J.R.R. Tolkien", "year": 1937, "color": "#3C4A2E" },
+    { "id": "lotr-fellow", "collectionId": "books",   "title": "The Fellowship of the Ring", "type": "book",  "sub": "J.R.R. Tolkien", "year": 1954, "color": "#5A3E22" },
+    { "id": "lotr-towers", "collectionId": "books",   "title": "The Two Towers",             "type": "book",  "sub": "J.R.R. Tolkien", "year": 1954, "color": "#7A2E2A" },
+    { "id": "lotr-return", "collectionId": "books",   "title": "The Return of the King",     "type": "book",  "sub": "J.R.R. Tolkien", "year": 1955, "color": "#2E4258" },
+    { "id": "lotr-silm",   "collectionId": "books",   "title": "The Silmarillion",           "type": "book",  "sub": "J.R.R. Tolkien", "year": 1977, "color": "#4A3A5A" },
+    { "id": "lotr-unfin",  "collectionId": "books",   "title": "Unfinished Tales",           "type": "book",  "sub": "J.R.R. Tolkien", "year": 1980, "color": "#3A3A2E" },
+    { "id": "dune-book",   "collectionId": "books",   "title": "Dune",                       "type": "book",  "sub": "Frank Herbert",  "year": 1965, "color": "#C9923B" },
+    { "id": "bk-foundation","collectionId": "books",  "title": "Foundation",                 "type": "book",  "sub": "Isaac Asimov",   "year": 1951, "color": "#4A3A5A" },
+
+    { "id": "bladerunner", "collectionId": "movies",  "title": "Blade Runner 2049",          "type": "movie", "sub": "Denis Villeneuve", "year": 2017, "color": "#C77A2E" },
+    { "id": "mv-arrival",  "collectionId": "movies",  "title": "Arrival",                    "type": "movie", "sub": "Denis Villeneuve", "year": 2016, "color": "#3A5A66" },
+    { "id": "mv-sicario",  "collectionId": "movies",  "title": "Sicario",                    "type": "movie", "sub": "Denis Villeneuve", "year": 2015, "color": "#7A5A3A" },
+    { "id": "mv-prisoners","collectionId": "movies",  "title": "Prisoners",                  "type": "movie", "sub": "Denis Villeneuve", "year": 2013, "color": "#2E3440" },
+
+    { "id": "zelda-la",    "collectionId": "games",   "title": "Link's Awakening",           "type": "game",  "sub": "Game Boy", "year": 1993, "color": "#3E8E5A", "series": "The Legend of Zelda" },
+
+    { "id": "morgan-1884", "collectionId": "coins",   "title": "Morgan Dollar 1884-O",       "type": "coin",  "sub": "New Orleans Mint", "year": 1884, "color": "#A9A8A2" },
+    { "id": "cn-peace",    "collectionId": "coins",   "title": "Peace Dollar 1922",          "type": "coin",  "sub": "Philadelphia Mint", "year": 1922, "color": "#B0AFA8" },
+    { "id": "cn-walking",  "collectionId": "coins",   "title": "Walking Liberty 1943",       "type": "coin",  "sub": "Philadelphia Mint", "year": 1943, "color": "#A9A8A2" },
+
+    { "id": "vn-kob",      "collectionId": "vinyl",   "title": "Kind of Blue",               "type": "vinyl", "sub": "Miles Davis", "year": 1959, "color": "#3A6EA5" },
+    { "id": "vn-blue",     "collectionId": "vinyl",   "title": "Blue Train",                 "type": "vinyl", "sub": "John Coltrane", "year": 1957, "color": "#2E4258" }
+  ],
+  "meta": {
+    "endpoint": "GET /api/catalog",
+    "note": "Canonical item records — the shared 'what exists in the world' table. Contains NO personal data (no ownership, condition, or acquisition). A holding (data/holdings.json) references one of these by id."
+  }
+}

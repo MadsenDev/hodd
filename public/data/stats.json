@@ -1,0 +1,16 @@
+{
+  "data": {
+    "growth": [
+      { "m": "Jan", "n": 14 },
+      { "m": "Feb", "n": 9 },
+      { "m": "Mar", "n": 22 },
+      { "m": "Apr", "n": 17 },
+      { "m": "May", "n": 12 },
+      { "m": "Jun", "n": 6 }
+    ]
+  },
+  "meta": {
+    "endpoint": "GET /api/stats",
+    "note": "Headline totals + completeness are derived from /api/collections on the client; growth is the one series the backend supplies directly."
+  }
+}

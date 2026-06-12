@@ -1,0 +1,32 @@
+{
+  "data": {
+    "pk-red":      { "format": "Cartridge",    "completeness": "Complete in box", "acquired": "2019", "condition": "Near Mint" },
+    "pk-blue":     { "format": "Cartridge",    "completeness": "Complete in box", "acquired": "2019" },
+    "pk-yellow":   { "format": "Cartridge",    "completeness": "Complete in box", "acquired": "2020" },
+    "pk-gold":     { "format": "Cartridge",    "completeness": "Loose",           "acquired": "2020" },
+    "pk-silver":   { "format": "Cartridge",    "completeness": "Complete in box", "acquired": "2021" },
+    "pk-ruby":     { "format": "Cartridge",    "completeness": "Complete in box", "acquired": "2022" },
+    "pk-sapphire": { "format": "Cartridge",    "completeness": "Loose",           "acquired": "2022" },
+
+    "lotr-hobbit": { "format": "Hardcover",    "acquired": "4 years ago", "condition": "Good", "edition": "First Edition" },
+    "lotr-fellow": { "format": "Hardcover",    "acquired": "2021" },
+    "lotr-towers": { "format": "Hardcover",    "acquired": "2021" },
+    "dune-book":   { "format": "Hardcover",    "acquired": "May 8, 2024" },
+    "bk-foundation": { "format": "Paperback",  "acquired": "2018" },
+
+    "bladerunner": { "format": "4K Blu-ray",   "acquired": "May 12, 2024", "watched": false },
+    "mv-arrival":  { "format": "Blu-ray",      "acquired": "2022",         "watched": true },
+    "mv-sicario":  { "format": "4K Blu-ray",   "acquired": "2023",         "watched": false },
+
+    "zelda-la":    { "format": "Cartridge",    "completeness": "Loose",           "acquired": "May 5, 2024" },
+
+    "morgan-1884": { "format": "Silver dollar", "grade": "MS-63", "acquired": "May 3, 2024" },
+    "cn-peace":    { "format": "Silver dollar", "grade": "MS-64", "acquired": "2023" },
+
+    "vn-kob":      { "format": "Vinyl LP",     "pressing": "180g", "acquired": "2021" }
+  },
+  "meta": {
+    "endpoint": "GET /api/holdings",
+    "note": "Per-user holdings — the personal 'what you own' table, keyed by catalog id. A row means you own that catalog item; its absence means missing. Holds only personal facts: format (the physical medium — Cartridge, Hardcover, Blu-ray, Vinyl LP…), plus medium-specific specs: completeness (games: Complete in box / Loose / Sealed), grade (coins), edition (books), pressing (vinyl), condition, acquisition date, and watched/played state."
+  }
+}
