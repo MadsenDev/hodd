@@ -67,7 +67,7 @@ export function Timeline({ ctx }) {
                   <Cover item={it} h={200} ghost={it.owned === false} />
                   <div className="nm">{it.title}</div>
                   <div className="yr">
-                    {it.collName || ''}
+                    {it.sub || it.collName || ''}
                     {it.year ? ` · ${it.year}` : ''}
                   </div>
                 </div>

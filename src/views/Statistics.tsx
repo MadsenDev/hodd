@@ -115,16 +115,20 @@ export function Statistics({ ctx }) {
       {consumption.length > 0 && (
         <div className="panel stat-panel" style={{ marginTop: 22 }}>
           <div className="section-head" style={{ margin: "0 0 16px" }}><div className="eyebrow">Progress tracking</div></div>
-          <div className="bar-rows">
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
             {consumption.map(c => {
               const pct = c.total ? Math.round(c.done / c.total * 100) : 0;
               return (
-                <div className="bar-row" key={c.label} style={{ cursor: "default" }}>
-                  <div className="bar-row-ic" style={{ color: c.color }}><I.check size={18} stroke={2} /></div>
-                  <div className="bar-row-name">{c.label}</div>
-                  <div className="bar-row-track"><i style={{ width: pct + "%", background: c.color }} /></div>
-                  <div className="bar-row-pct">{pct}%</div>
-                  <div className="bar-row-count">{c.done} of {c.total}</div>
+                <div key={c.label} style={{ flex: "1 1 140px", background: "var(--panel-2)", borderRadius: 12, padding: "16px 20px" }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--mute)", marginBottom: 10 }}>{c.label}</div>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 5 }}>
+                    <span style={{ fontFamily: "var(--display)", fontSize: 30, fontWeight: 700, color: c.color, lineHeight: 1 }}>{pct}</span>
+                    <span style={{ fontSize: 16, color: "var(--dim)" }}>%</span>
+                  </div>
+                  <div style={{ fontSize: 12.5, color: "var(--mute)", marginTop: 4 }}>{c.done} of {c.total}</div>
+                  <div style={{ height: 6, background: "var(--panel-3)", borderRadius: 4, marginTop: 12, overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: pct + "%", background: c.color, borderRadius: 4, transition: "width 1s var(--ease)" }} />
+                  </div>
                 </div>
               );
             })}
