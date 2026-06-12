@@ -3,7 +3,8 @@ import React from 'react';
 import { I } from '../icons';
 import { Cover, FluidCover, useNarrow } from '../components';
 import { useCollection, useStory } from '../hooks';
-import { saveCatalog, saveStory, saveHolding, removeHolding, removeItem, setItemOwned, OllamaClient } from '../api';
+import { saveCatalog, saveStory, saveHolding, removeHolding, removeItem, setItemOwned, toggleFavorite, OllamaClient } from '../api';
+import { useFavorite } from '../hooks';
 import { ItemEditForm, SUBLABELS } from '../forms';
 
 function fallbackStory(item) {
@@ -20,7 +21,11 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
   const [storyOv, setStoryOv] = React.useState(null);
   const [generatingStory, setGeneratingStory] = React.useState(false);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
-  React.useEffect(() => { setItem(initialItem); setEditing(false); setStoryOv(null); setConfirmDelete(false); }, [initialItem]);
+  const favState = useFavorite(item.id);
+  const isFav = !!favState.data;
+  const [favOptimistic, setFavOptimistic] = React.useState(null);
+  const fav = favOptimistic !== null ? favOptimistic : isFav;
+  React.useEffect(() => { setItem(initialItem); setEditing(false); setStoryOv(null); setConfirmDelete(false); setFavOptimistic(null); }, [initialItem]);
   const isUserItem = item.id && String(item.id).startsWith("i-");
   const fallback = useCollection(collection ? null : isUserItem ? null : (item.collectionId || "featured"));
   const storyState = useStory(item.id);
@@ -68,7 +73,13 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
               <button className="btn" onClick={() => setEditing(true)}><I.edit size={16} /> Edit details</button>
               {item.owned === false
                 ? <button className="btn solid" onClick={() => setEditing(true)}><I.plus size={16} /> Add to collection</button>
-                : <button className="btn"><I.heart size={16} /> Mark favorite</button>}
+                : <button
+                    className={"btn" + (fav ? " active-fav" : "")}
+                    style={fav ? { color: "#cf6b5a" } : undefined}
+                    onClick={() => { toggleFavorite(item.id, fav); setFavOptimistic(!fav); }}>
+                    {fav ? <I.heartFill size={16} /> : <I.heart size={16} />}
+                    {fav ? "Favorited" : "Mark favorite"}
+                  </button>}
               {isUserItem && !confirmDelete && (
                 <button className="btn" style={{ marginLeft: "auto", color: "var(--danger, #cf6b5a)" }} onClick={() => setConfirmDelete(true)}>
                   <I.trash size={15} /> Remove

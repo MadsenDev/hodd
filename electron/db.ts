@@ -135,6 +135,10 @@ const SCHEMA = `
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS favorites (
+    item_id TEXT PRIMARY KEY
+  );
 `;
 
 // Items beyond catalog.json — replaces the old FALLBACK mock data
@@ -556,6 +560,22 @@ export function deleteUserItem(id: string): void {
 
 export function saveSetting(key: string, value: string): void {
   db.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [key, value]);
+  scheduleWrite();
+}
+
+export function getFavorites(): string[] {
+  const res = db.exec('SELECT item_id FROM favorites');
+  if (!res.length) return [];
+  return res[0].values.map(row => row[0] as string);
+}
+
+export function addFavorite(itemId: string): void {
+  db.run('INSERT OR IGNORE INTO favorites (item_id) VALUES (?)', [itemId]);
+  scheduleWrite();
+}
+
+export function removeFavorite(itemId: string): void {
+  db.run('DELETE FROM favorites WHERE item_id = ?', [itemId]);
   scheduleWrite();
 }
 

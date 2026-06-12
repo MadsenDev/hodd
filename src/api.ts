@@ -78,6 +78,31 @@ export function saveStory(id, paragraphs) {
   const a = ipc(); if (a) a.saveStory(id, paragraphs);
 }
 
+let _favorites: string[] | null = null;
+
+export async function getFavorites(): Promise<string[]> {
+  if (_favorites) return _favorites;
+  const a = ipc();
+  _favorites = a ? await a.getFavorites() : [];
+  return _favorites;
+}
+
+export async function isFavorite(id: string): Promise<boolean> {
+  const favs = await getFavorites();
+  return favs.includes(id);
+}
+
+export function toggleFavorite(id: string, currentlyFav: boolean): void {
+  if (!_favorites) _favorites = [];
+  if (currentlyFav) {
+    _favorites = _favorites.filter(f => f !== id);
+    const a = ipc(); if (a) a.removeFavorite(id);
+  } else {
+    if (!_favorites.includes(id)) _favorites.push(id);
+    const a = ipc(); if (a) a.addFavorite(id);
+  }
+}
+
 export function createCollection(def) {
   const colls = readUserColls();
   const base = (def.name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "coll";

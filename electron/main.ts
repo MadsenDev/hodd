@@ -128,6 +128,9 @@ function registerIpc(): void {
   ipcMain.handle('hodd:item:delete',     (_e, id: string)                                      => db.deleteUserItem(id));
   ipcMain.handle('hodd:item:set-owned', (_e, id: string, owned: boolean)                       => db.setUserItemOwned(id, owned));
   ipcMain.handle('hodd:setting:save',    (_e, key: string, value: string)                 => db.saveSetting(key, value));
+  ipcMain.handle('hodd:favorites',                                                          () => db.getFavorites());
+  ipcMain.handle('hodd:favorite:add',    (_e, id: string)                                  => db.addFavorite(id));
+  ipcMain.handle('hodd:favorite:remove', (_e, id: string)                                  => db.removeFavorite(id));
 
   // Archive export
   ipcMain.handle('hodd:archive:export', async (_event, payload: Record<string, unknown>) => {
