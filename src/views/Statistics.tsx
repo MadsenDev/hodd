@@ -18,7 +18,8 @@ export function Statistics({ ctx }) {
   if (!cols_.length) return <EmptyState title="No collections yet" sub="Add your first collection to start tracking your hoard." />;
   const totalOwned = cols_.reduce((s, c) => s + c.owned, 0);
   const totalMissing = cols_.reduce((s, c) => s + c.missing, 0);
-  const avgPct = Math.round(cols_.reduce((s, c) => s + c.pct, 0) / cols_.length);
+  const totalItems = totalOwned + totalMissing;
+  const avgPct = totalItems ? Math.round(totalOwned / totalItems * 100) : 0;
   const sorted = [...cols_].sort((a, b) => b.pct - a.pct);
   const closest = sorted[0];
   const needs = sorted[sorted.length - 1];
