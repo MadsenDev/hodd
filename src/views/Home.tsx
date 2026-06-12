@@ -287,7 +287,7 @@ export function HomeNew({ ctx, art = "Covers" }) {
             <Cover item={it} h={phone ? 150 : 196} onClick={() => ctx.openItem(it)} />
             <div className="title">{it.title}</div>
             <div className="sub">{it.sub}</div>
-            <div className="date">{it.acquired}</div>
+            <div className="date">{it.acquired || (it.created_at ? new Date(it.created_at).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "")}</div>
           </div>
         ))}
       </div>

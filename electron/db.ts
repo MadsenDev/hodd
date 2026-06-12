@@ -548,7 +548,7 @@ export function saveSetting(key: string, value: string): void {
 
 export function getRecentUserItems(limit = 6): Record<string, unknown>[] {
   const res = db.exec(
-    'SELECT id, collection_id, title, sub, year, type, color, owned, created_at FROM user_items ORDER BY created_at DESC LIMIT ?',
+    'SELECT id, collection_id, title, sub, year, type, color, owned, acquired, created_at FROM user_items ORDER BY created_at DESC LIMIT ?',
     [limit]
   );
   if (!res.length) return [];

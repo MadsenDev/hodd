@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { I } from '../icons';
 import { Loading } from '../components';
-import { getSettings, saveSetting } from '../api';
+import { getSettings, saveSetting, exportData } from '../api';
 
 export function Settings() {
   const [loading, setLoading] = useState(true);
@@ -14,6 +14,8 @@ export function Settings() {
 
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportDone, setExportDone] = useState(false);
 
   useEffect(() => {
     getSettings().then(s => {
@@ -35,6 +37,19 @@ export function Settings() {
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     }, 300);
+  }
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const result = await exportData();
+      if (result && !result.canceled) {
+        setExportDone(true);
+        setTimeout(() => setExportDone(false), 3000);
+      }
+    } finally {
+      setExporting(false);
+    }
   }
 
   if (loading) return <Loading label="Loading settings…" />;
@@ -95,6 +110,25 @@ export function Settings() {
               : saving ? "Saving…"
               : <><I.check size={16} /> Save settings</>}
           </button>
+        </div>
+
+        <div className="panel settings-panel">
+          <div className="section-head" style={{ margin: "0 0 8px" }}>
+            <div className="eyebrow">Data &amp; backup</div>
+          </div>
+          <p className="settings-hint">
+            Export your entire hoard as a JSON file — collections, items, holdings, and
+            catalog overrides. Keep this somewhere safe as a backup or to migrate to
+            a new machine.
+          </p>
+          <div style={{ marginTop: 16 }}>
+            <button className="btn" onClick={handleExport} disabled={exporting}>
+              {exportDone
+                ? <><I.check size={16} stroke={2} /> Exported</>
+                : exporting ? "Preparing…"
+                : <><I.download size={16} /> Export hoard</>}
+            </button>
+          </div>
         </div>
 
       </div>

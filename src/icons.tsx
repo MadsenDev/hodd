@@ -57,6 +57,8 @@ export const I = {
   diamond:    (p) => <Icon {...p}><path d="M12 3 19 12 12 21 5 12Z" /></Icon>,
   alert:      (p) => <Icon {...p}><path d="M12 3.5 22 20H2L12 3.5Z" /><path d="M12 10v4.5" /><path d="M12 17.5h.01" /></Icon>,
   refresh:    (p) => <Icon {...p}><path d="M20 12a8 8 0 1 1-2.3-5.6" /><path d="M20 4v4h-4" /></Icon>,
+  download:   (p) => <Icon {...p}><path d="M12 3v13M7 11l5 5 5-5" /><path d="M3 20h18" /></Icon>,
+  upload:     (p) => <Icon {...p}><path d="M12 21V8M7 13l5-5 5 5" /><path d="M3 4h18" /></Icon>,
 };
 
 export function typeIcon(type, props) {

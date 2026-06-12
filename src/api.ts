@@ -291,6 +291,23 @@ export async function lookupMetadata(type, query) {
   const a = ipc(); return a ? a.lookup(type, query) : null;
 }
 
+export async function exportData() {
+  await ensureCache();
+  const fn = (window as any).hoddDesktop?.exportArchive;
+  if (!fn) return null;
+  const user = await getUser();
+  const payload = {
+    version: 1,
+    exported: new Date().toISOString(),
+    user,
+    userCollections: _userColls || [],
+    userItems: _userItems || {},
+    holdings: _holdings || {},
+    catalogOverrides: _catOv || {},
+  };
+  return fn(payload);
+}
+
 export async function getSearchIndex() {
   await ensureCache();
   const cat = _catalog || [], h = _holdings || {};
