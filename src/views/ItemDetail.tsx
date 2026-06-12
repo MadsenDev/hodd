@@ -26,6 +26,15 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
   const [favOptimistic, setFavOptimistic] = React.useState(null);
   const fav = favOptimistic !== null ? favOptimistic : isFav;
   React.useEffect(() => { setItem(initialItem); setEditing(false); setStoryOv(null); setConfirmDelete(false); setFavOptimistic(null); }, [initialItem]);
+  React.useEffect(() => {
+    function onKey(e) {
+      if (editing || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.key === 'ArrowLeft'  && prevItem) ctx.openItem({ ...prevItem, type: relType }, collection);
+      if (e.key === 'ArrowRight' && nextItem) ctx.openItem({ ...nextItem, type: relType }, collection);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
   const isUserItem = item.id && String(item.id).startsWith("i-");
   const fallback = useCollection(collection ? null : isUserItem ? null : (item.collectionId || "featured"));
   const storyState = useStory(item.id);
@@ -34,6 +43,9 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
   const pool = (collection && collection.items) ? collection.items : (fallback.data ? fallback.data.items : []);
   const related = pool.filter(i => i.id !== item.id).slice(0, 5);
   const relType = collection ? collection.type : type;
+  const poolIdx = pool.findIndex(i => i.id === item.id);
+  const prevItem = poolIdx > 0 ? pool[poolIdx - 1] : null;
+  const nextItem = poolIdx >= 0 && poolIdx < pool.length - 1 ? pool[poolIdx + 1] : null;
   const owned = item.owned !== false;
   const medium = (item.format && item.format !== "—" && item.format !== "Owned") ? item.format : null;
   const subLabel = SUBLABELS[type] || "Detail";
@@ -57,7 +69,38 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
 
   return (
     <div className="view-enter">
-      <div className="back" onClick={ctx.back}><I.arrowLeft size={16} /> Back</div>
+      <div className="back" style={{ display: "flex", alignItems: "center", gap: 0 }}>
+        <span onClick={ctx.back} style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+          <I.arrowLeft size={16} /> Back
+        </span>
+        {(prevItem || nextItem) && (
+          <span style={{ display: "inline-flex", gap: 2, marginLeft: 16 }}>
+            <button
+              onClick={() => prevItem && ctx.openItem({ ...prevItem, type: relType }, collection)}
+              disabled={!prevItem}
+              style={{ background: "none", border: "none", cursor: prevItem ? "pointer" : "default",
+                color: prevItem ? "var(--text-2)" : "var(--mute)", padding: "2px 6px", borderRadius: 6,
+                display: "flex", alignItems: "center" }}
+              title="Previous item (←)">
+              <I.arrowLeft size={15} />
+            </button>
+            <button
+              onClick={() => nextItem && ctx.openItem({ ...nextItem, type: relType }, collection)}
+              disabled={!nextItem}
+              style={{ background: "none", border: "none", cursor: nextItem ? "pointer" : "default",
+                color: nextItem ? "var(--text-2)" : "var(--mute)", padding: "2px 6px", borderRadius: 6,
+                display: "flex", alignItems: "center" }}
+              title="Next item (→)">
+              <I.arrowRight size={15} />
+            </button>
+            {pool.length > 0 && (
+              <span style={{ fontSize: 12, color: "var(--mute)", marginLeft: 4, alignSelf: "center" }}>
+                {poolIdx + 1} / {pool.length}
+              </span>
+            )}
+          </span>
+        )}
+      </div>
       <div className="item-detail">
         <div className="big-cover">
           <FluidCover item={item} ghost={item.owned === false} maxWidth={narrow ? 300 : 360} />
