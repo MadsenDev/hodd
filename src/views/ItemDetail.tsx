@@ -31,6 +31,7 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
       if (editing || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
       if (e.key === 'ArrowLeft'  && prevItem) ctx.openItem({ ...prevItem, type: relType }, collection);
       if (e.key === 'ArrowRight' && nextItem) ctx.openItem({ ...nextItem, type: relType }, collection);
+      if (e.key === 'f' && item.owned !== false) { toggleFavorite(item.id, fav); setFavOptimistic(!fav); }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

@@ -221,7 +221,10 @@ function registerIpc(): void {
       const addedThisMonth = all.filter(i => (i.created_at as string) > monthAgo).length;
       let rediscover: Record<string, unknown> | null = null;
       if (owned.length) {
-        const pick = owned[Math.floor(Math.random() * owned.length)];
+        const ninetyDaysAgo = new Date(Date.now() - 90 * 86400000).toISOString();
+        const candidates = owned.filter(i => !i.created_at || (i.created_at as string) < ninetyDaysAgo);
+        const pool = candidates.length ? candidates : owned;
+        const pick = pool[Math.floor(Math.random() * pool.length)];
         const c = collInfo(pick.collectionId);
         rediscover = {
           ...pick,

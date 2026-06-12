@@ -52,7 +52,9 @@ export function Favorites({ ctx }) {
       {Object.entries(groups).map(([groupName, groupItems]) => (
         <div key={groupName} style={{ marginBottom: 36 }}>
           {sort === "collection" && (
-            <div className="eyebrow" style={{ marginBottom: 12, color: "var(--mute)" }}>{groupName}</div>
+            <div className="eyebrow" style={{ marginBottom: 12, color: "var(--mute)" }}>
+              {groupName} <span style={{ opacity: 0.55, fontSize: 10 }}>· {groupItems.length}</span>
+            </div>
           )}
           <div className="items-grid">
             {groupItems.map(it => (
