@@ -41,7 +41,13 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
   const type = item.type || "game";
   const story = storyOv || storyState.data || fallbackStory(item);
   const pool = (collection && collection.items) ? collection.items : (fallback.data ? fallback.data.items : []);
-  const related = pool.filter(i => i.id !== item.id).slice(0, 5);
+  const others = pool.filter(i => i.id !== item.id);
+  const series = item.series;
+  const sub = item.sub;
+  const bySeries = series ? others.filter(i => i.series === series) : [];
+  const bySub = sub ? others.filter(i => i.sub === sub && i.series !== series) : [];
+  const byAdjacent = others.filter(i => !bySeries.includes(i) && !bySub.includes(i));
+  const related = [...bySeries, ...bySub, ...byAdjacent].slice(0, 5);
   const relType = collection ? collection.type : type;
   const poolIdx = pool.findIndex(i => i.id === item.id);
   const prevItem = poolIdx > 0 ? pool[poolIdx - 1] : null;
