@@ -39,10 +39,16 @@ export function CollectionDetail({ collId, ctx }) {
     if (sq && !(i.title || "").toLowerCase().includes(sq) && !(i.sub || "").toLowerCase().includes(sq)) return false;
     return true;
   });
+  const progressLabel = type === "game" ? "Played" : type === "book" ? "Read" : type === "movie" ? "Watched" : null;
   const shown = [...filtered].sort((a, b) => {
     if (sort === "title") return (a.title || "").localeCompare(b.title || "");
     if (sort === "year")  return (a.year || 9999) - (b.year || 9999);
     if (sort === "status") return (b.owned ? 1 : 0) - (a.owned ? 1 : 0);
+    if (sort === "progress") {
+      const aP = type === "game" ? (a.completed ? 1 : 0) : (a.watched ? 1 : 0);
+      const bP = type === "game" ? (b.completed ? 1 : 0) : (b.watched ? 1 : 0);
+      return bP - aP;
+    }
     return 0;
   });
   return (
@@ -79,7 +85,7 @@ export function CollectionDetail({ collId, ctx }) {
           ))}
         </div>
         <div className="seg">
-          {[["default", "Default"], ["title", "A–Z"], ["year", "Year"], ["status", "Status"]].map(([v, l]) => (
+          {[["default", "Default"], ["title", "A–Z"], ["year", "Year"], ["status", "Status"], ...(progressLabel ? [["progress", progressLabel]] : [])].map(([v, l]) => (
             <button key={v} className={sort === v ? "on" : ""} onClick={() => setSort(v)}>{l}</button>
           ))}
         </div>
@@ -102,7 +108,12 @@ export function CollectionDetail({ collId, ctx }) {
                 <div className="nm">{it.title}</div>
                 <div className="yr">{it.sub || ""}{it.year ? ` · ${it.year}` : ""}</div>
                 {it.owned
-                  ? <div className="badge badge-owned"><I.check size={12} stroke={2.2} /> Owned{it.format && it.format !== "—" ? ` · ${it.format}` : ""}</div>
+                  ? <div className="badge badge-owned"><I.check size={12} stroke={2.2} /> {
+                      (type === "game" && it.completed) ? "Played" :
+                      (type === "movie" && it.watched) ? "Watched" :
+                      (type === "book" && it.watched) ? "Read" :
+                      "Owned" + (it.format && it.format !== "—" ? ` · ${it.format}` : "")
+                    }</div>
                   : <div className="badge badge-missing"><I.plus size={12} stroke={2} /> Missing</div>}
               </div>
             ))}
