@@ -75,7 +75,6 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
                 ? <button className="btn solid" onClick={() => setEditing(true)}><I.plus size={16} /> Add to collection</button>
                 : <button
                     className={"btn" + (fav ? " active-fav" : "")}
-                    style={fav ? { color: "#cf6b5a" } : undefined}
                     onClick={() => { toggleFavorite(item.id, fav); setFavOptimistic(!fav); }}>
                     {fav ? <I.heartFill size={16} /> : <I.heart size={16} />}
                     {fav ? "Favorited" : "Mark favorite"}
