@@ -31,7 +31,7 @@ async function ensureCache() {
   _catalog = cat; _holdings = h; _catOv = co; _userColls = uc; _userItems = ui; _baseCols = bc;
 }
 
-export function invalidateCache() { _holdings = null; _catOv = null; _userColls = null; _userItems = null; }
+export function invalidateCache() { _holdings = null; _catOv = null; _userColls = null; _userItems = null; _favorites = null; }
 
 function readOverrides()  { return _holdings  || {}; }
 function readCatalogOv()  { return _catOv     || {}; }
@@ -352,6 +352,17 @@ export function saveSetting(key, value) {
 
 export async function lookupMetadata(type, query) {
   const a = ipc(); return a ? a.lookup(type, query) : null;
+}
+
+export async function importData() {
+  const fn = (window as any).hoddDesktop?.importArchive;
+  if (!fn) return null;
+  const result = await fn();
+  if (result && !result.canceled) {
+    _catalog = null;
+    invalidateCache();
+  }
+  return result;
 }
 
 export async function exportData() {

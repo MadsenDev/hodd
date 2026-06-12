@@ -288,11 +288,11 @@ export function MobileTopBar({ onAdd }) {
 
 export function MobileTabs({ active, onNav }) {
   const tabs = [
-    ["home", "Home", I.home],
-    ["collections", "Library", I.grid],
-    ["search", "Search", I.search],
-    ["timeline", "Timeline", I.clock],
-    ["wishlist", "Wishlist", I.heart],
+    ["home",        "Home",      I.home],
+    ["collections", "Library",   I.grid],
+    ["search",      "Search",    I.search],
+    ["wishlist",    "Wishlist",  I.heart],
+    ["favorites",   "Favorites", I.heartFill],
   ];
   return (
     <nav className="mobile-tabs">

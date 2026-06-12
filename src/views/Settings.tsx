@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { I } from '../icons';
 import { Loading } from '../components';
-import { getSettings, saveSetting, exportData, OllamaClient } from '../api';
+import { getSettings, saveSetting, exportData, importData, OllamaClient } from '../api';
 
 export function Settings({ onSaved = undefined }) {
   const [loading, setLoading] = useState(true);
@@ -17,6 +17,8 @@ export function Settings({ onSaved = undefined }) {
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportDone, setExportDone] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importDone, setImportDone] = useState(false);
 
   const [ollamaRunning, setOllamaRunning] = useState(false);
   const [ollamaModels, setOllamaModels] = useState([]);
@@ -52,6 +54,20 @@ export function Settings({ onSaved = undefined }) {
       if (onSaved) onSaved();
       setTimeout(() => setSaved(false), 2500);
     }, 300);
+  }
+
+  async function handleImport() {
+    setImporting(true);
+    try {
+      const result = await importData();
+      if (result && !result.canceled) {
+        setImportDone(true);
+        if (onSaved) onSaved();
+        setTimeout(() => setImportDone(false), 3000);
+      }
+    } finally {
+      setImporting(false);
+    }
   }
 
   async function handleExport() {
@@ -174,12 +190,18 @@ export function Settings({ onSaved = undefined }) {
             catalog overrides. Keep this somewhere safe as a backup or to migrate to
             a new machine.
           </p>
-          <div style={{ marginTop: 16 }}>
+          <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
             <button className="btn" onClick={handleExport} disabled={exporting}>
               {exportDone
                 ? <><I.check size={16} stroke={2} /> Exported</>
                 : exporting ? "Preparing…"
                 : <><I.download size={16} /> Export hoard</>}
+            </button>
+            <button className="btn" onClick={handleImport} disabled={importing}>
+              {importDone
+                ? <><I.check size={16} stroke={2} /> Imported</>
+                : importing ? "Importing…"
+                : <><I.upload size={16} /> Import archive</>}
             </button>
           </div>
         </div>

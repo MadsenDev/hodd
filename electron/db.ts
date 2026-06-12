@@ -607,6 +607,84 @@ export function removeFavorite(itemId: string): void {
   scheduleWrite();
 }
 
+export function importArchive(payload: Record<string, unknown>): { imported: number } {
+  // Replace all user-generated data with the archive contents
+  db.run('DELETE FROM user_items');
+  db.run('DELETE FROM user_collections');
+  db.run('DELETE FROM holdings');
+  db.run('DELETE FROM catalog_overrides');
+
+  let count = 0;
+
+  // User collections
+  const cols = (payload.userCollections as Record<string, unknown>[]) || [];
+  for (const c of cols) {
+    const tmpl = Array.isArray(c.template) ? JSON.stringify(c.template) : (typeof c.template === 'string' ? c.template : '[]');
+    db.run(
+      'INSERT OR REPLACE INTO user_collections (id, name, type, accent, template, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [sv(c.id), sv(c.name) ?? 'Collection', sv(c.type) ?? 'other', sv(c.accent) ?? '#6366f1', tmpl, sv(c.created_at) ?? new Date().toISOString()]
+    );
+  }
+
+  // User items (created_at omitted — SQLite DEFAULT applies)
+  const items = (payload.userItems as Record<string, Record<string, unknown>[]>) || {};
+  for (const [collId, collItems] of Object.entries(items)) {
+    for (const it of (collItems || [])) {
+      const w = it.watched;
+      db.run(`INSERT OR REPLACE INTO user_items
+        (id, collection_id, title, sub, year, type, color, owned,
+         format, completeness, grade, pressing, edition, condition_val,
+         acquired, watched, custom, series, region)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+        sv(it.id), collId,
+        sv(it.title) ?? '', sv(it.sub), sv(it.year), sv(it.type), sv(it.color),
+        it.owned !== false ? 1 : 0,
+        sv(it.format), sv(it.completeness), sv(it.grade),
+        sv(it.pressing), sv(it.edition), sv(it.condition),
+        sv(it.acquired),
+        w == null ? null : (w ? 1 : 0),
+        it.custom ? JSON.stringify(it.custom) : null,
+        sv(it.series), sv(it.region),
+      ]);
+      count++;
+    }
+  }
+
+  // Holdings (catalog items + any user items that had separate holding edits)
+  const holdings = (payload.holdings as Record<string, Record<string, unknown>>) || {};
+  for (const [id, h] of Object.entries(holdings)) {
+    const w = h.watched;
+    db.run(`INSERT OR REPLACE INTO holdings
+      (item_id, format, completeness, grade, pressing, edition,
+       condition_val, acquired, watched, custom)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+      id,
+      sv(h.format), sv(h.completeness), sv(h.grade),
+      sv(h.pressing), sv(h.edition), sv(h.condition),
+      sv(h.acquired),
+      w == null ? null : (w ? 1 : 0),
+      h.custom ? JSON.stringify(h.custom) : null,
+    ]);
+  }
+
+  // Catalog overrides
+  const overrides = (payload.catalogOverrides as Record<string, Record<string, unknown>>) || {};
+  for (const [id, patch] of Object.entries(overrides)) {
+    db.run('INSERT OR REPLACE INTO catalog_overrides (item_id, title, sub, year, type, series, region) VALUES (?, ?, ?, ?, ?, ?, ?)', [
+      id, sv(patch.title), sv(patch.sub), sv(patch.year), sv(patch.type),
+      sv(patch.series), sv(patch.region),
+    ]);
+  }
+
+  // User profile settings
+  const user = payload.user as Record<string, unknown> | undefined;
+  if (user?.name)   db.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ['user.name',   sv(user.name)]);
+  if (user?.joined) db.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ['user.joined', sv(user.joined)]);
+
+  scheduleWrite();
+  return { imported: count };
+}
+
 export function getRecentUserItems(limit = 6): Record<string, unknown>[] {
   const res = db.exec(
     'SELECT id, collection_id, title, sub, year, type, color, owned, acquired, series, region, created_at FROM user_items ORDER BY created_at DESC LIMIT ?',

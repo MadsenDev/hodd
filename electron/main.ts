@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electron';
 import { promises as fs } from 'node:fs';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
@@ -56,19 +56,26 @@ async function ollamaGenerate(model: string, prompt: string, system?: string): P
 
 // ─── Window ────────────────────────────────────────────────────────────────
 
+let mainWindow: BrowserWindow | null = null;
+
+function titleBarOverlay(dark: boolean) {
+  return {
+    color:       dark ? '#121216' : '#f6f5f1',
+    symbolColor: dark ? '#8b8893' : '#5d5a6f',
+    height: 32,
+  };
+}
+
 function createWindow() {
+  const dark = nativeTheme.shouldUseDarkColors;
   const window = new BrowserWindow({
     width: 1480,
     height: 960,
     minWidth: 980,
     minHeight: 680,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
-    titleBarOverlay: process.platform === 'darwin' ? undefined : {
-      color: '#f6f5f1',
-      symbolColor: '#5d5a6f',
-      height: 32,
-    },
-    backgroundColor: '#f6f5f1',
+    titleBarOverlay: process.platform === 'darwin' ? undefined : titleBarOverlay(dark),
+    backgroundColor: dark ? '#0e0e11' : '#f6f5f1',
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -78,6 +85,7 @@ function createWindow() {
     },
   });
 
+  mainWindow = window;
   window.once('ready-to-show', () => window.show());
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/.test(url)) void shell.openExternal(url);
@@ -133,6 +141,12 @@ function registerIpc(): void {
   ipcMain.handle('hodd:favorite:add',    (_e, id: string)                                  => db.addFavorite(id));
   ipcMain.handle('hodd:favorite:remove', (_e, id: string)                                  => db.removeFavorite(id));
 
+  // Title bar theme (Windows only — keeps overlay in sync with in-app dark mode)
+  ipcMain.handle('hodd:titlebar:set-theme', (_e, theme: 'light' | 'dark') => {
+    if (process.platform === 'darwin' || !mainWindow) return;
+    mainWindow.setTitleBarOverlay(titleBarOverlay(theme === 'dark'));
+  });
+
   // Archive export
   ipcMain.handle('hodd:archive:export', async (_event, payload: Record<string, unknown>) => {
     const result = await dialog.showSaveDialog({
@@ -143,6 +157,31 @@ function registerIpc(): void {
     if (result.canceled || !result.filePath) return { canceled: true };
     await fs.writeFile(result.filePath, JSON.stringify(payload, null, 2), 'utf8');
     return { canceled: false, path: result.filePath };
+  });
+
+  // Archive import
+  ipcMain.handle('hodd:archive:import', async (_event) => {
+    const open = await dialog.showOpenDialog({
+      title: 'Import HODD archive',
+      filters: [{ name: 'HODD archive', extensions: ['json'] }],
+      properties: ['openFile'],
+    });
+    if (open.canceled || !open.filePaths[0]) return { canceled: true };
+
+    const confirm = await dialog.showMessageBox({
+      type: 'warning',
+      buttons: ['Import', 'Cancel'],
+      defaultId: 1,
+      title: 'Replace all data?',
+      message: 'Importing will replace all your current items, collections, holdings, and settings with those from the archive.',
+      detail: 'This cannot be undone.',
+    });
+    if (confirm.response !== 0) return { canceled: true };
+
+    const content = await fs.readFile(open.filePaths[0], 'utf8');
+    const payload = JSON.parse(content) as Record<string, unknown>;
+    const outcome = db.importArchive(payload);
+    return { canceled: false, imported: outcome.imported };
   });
 
   // Dynamic home data — real user items for recent/rediscover

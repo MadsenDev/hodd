@@ -3,9 +3,15 @@ import { contextBridge, ipcRenderer } from 'electron';
 contextBridge.exposeInMainWorld('hoddDesktop', {
   platform: process.platform,
 
-  // Export archive
+  // Archive export / import
   exportArchive: (payload: Record<string, unknown>) =>
     ipcRenderer.invoke('hodd:archive:export', payload),
+  importArchive: () =>
+    ipcRenderer.invoke('hodd:archive:import'),
+
+  // Title bar theme sync (Windows)
+  setTitleBarTheme: (theme: 'light' | 'dark') =>
+    ipcRenderer.invoke('hodd:titlebar:set-theme', theme),
 
   // All data + mutation API
   api: {

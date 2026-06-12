@@ -356,6 +356,7 @@ export default function App() {
     root.style.setProperty("--accent-deep", deep);
     root.style.setProperty("--accent-wash", hexA(a, t.theme === "dark" ? 0.20 : 0.10));
     root.style.setProperty("--display", HEADLINE_FONTS[t.headline] || HEADLINE_FONTS.Bricolage);
+    (window as any).hoddDesktop?.setTitleBarTheme?.(t.theme === "dark" ? "dark" : "light");
   }, [t.theme, t.accent, t.headline]);
 
   const [view, setView] = useState("home");
