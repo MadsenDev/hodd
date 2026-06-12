@@ -541,6 +541,11 @@ export function addUserItem(collectionId: string, draft: Record<string, unknown>
   return { ...draft, id, collectionId, owned: draft.owned !== false };
 }
 
+export function setUserItemOwned(id: string, owned: boolean): void {
+  db.run('UPDATE user_items SET owned = ? WHERE id = ?', [owned ? 1 : 0, id]);
+  scheduleWrite();
+}
+
 export function deleteUserItem(id: string): void {
   db.run('DELETE FROM user_items WHERE id = ?', [id]);
   db.run('DELETE FROM holdings WHERE item_id = ?', [id]);

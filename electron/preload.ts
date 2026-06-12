@@ -29,7 +29,8 @@ contextBridge.exposeInMainWorld('hoddDesktop', {
       ipcRenderer.invoke('hodd:collection:create', def),
     addItem: (collectionId: string, draft: Record<string, unknown>) =>
       ipcRenderer.invoke('hodd:item:add', collectionId, draft),
-    deleteItem: (id: string) => ipcRenderer.invoke('hodd:item:delete', id),
+    deleteItem:   (id: string)                  => ipcRenderer.invoke('hodd:item:delete', id),
+    setItemOwned: (id: string, owned: boolean)  => ipcRenderer.invoke('hodd:item:set-owned', id, owned),
     saveSetting: (key: string, value: string) => ipcRenderer.invoke('hodd:setting:save', key, value),
     lookup: (type: string, query: string) => ipcRenderer.invoke('hodd:lookup', type, query),
     getHomeDynamic: () => ipcRenderer.invoke('hodd:home-dynamic'),

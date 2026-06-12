@@ -60,6 +60,15 @@ export function removeItem(id) {
   if (_catOv) delete _catOv[id];
   const a = ipc(); if (a) a.deleteItem(id);
 }
+
+export function setItemOwned(id, owned) {
+  if (_userItems) {
+    for (const collId of Object.keys(_userItems)) {
+      _userItems[collId] = (_userItems[collId] || []).map(i => i.id === id ? { ...i, owned } : i);
+    }
+  }
+  const a = ipc(); if (a) a.setItemOwned(id, owned);
+}
 export function saveCatalog(id, patch) {
   if (!_catOv) _catOv = {};
   _catOv[id] = Object.assign({}, _catOv[id] || {}, patch);

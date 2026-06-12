@@ -3,7 +3,7 @@ import React from 'react';
 import { I } from '../icons';
 import { Cover, FluidCover, useNarrow } from '../components';
 import { useCollection, useStory } from '../hooks';
-import { saveCatalog, saveStory, saveHolding, removeHolding, removeItem, OllamaClient } from '../api';
+import { saveCatalog, saveStory, saveHolding, removeHolding, removeItem, setItemOwned, OllamaClient } from '../api';
 import { ItemEditForm, SUBLABELS } from '../forms';
 
 function fallbackStory(item) {
@@ -94,9 +94,11 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
                   if (paras) { saveStory(item.id, paras); setStoryOv(paras); }
                   if (isOwned === false) {
                     removeHolding(item.id);
+                    if (isUserItem) setItemOwned(item.id, false);
                     setItem({ ...item, ...(canonical || {}), owned: false, format: null, completeness: null, grade: null, pressing: null, edition: null, condition: null, acquired: null, watched: undefined });
                   } else {
                     saveHolding(item.id, holding);
+                    if (isUserItem && item.owned === false) setItemOwned(item.id, true);
                     setItem({ ...item, ...(canonical || {}), owned: true, ...holding });
                   }
                   setEditing(false);
