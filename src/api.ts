@@ -77,6 +77,7 @@ export function saveCatalog(id, patch) {
         _userItems[collId] = (_userItems[collId] || []).map(i => i.id === id ? { ...i, ...patch } : i);
       }
     }
+    if (_catOv) delete _catOv[id];
     const a = ipc(); if (a) a.updateUserItem(id, patch);
   } else {
     if (!_catOv) _catOv = {};

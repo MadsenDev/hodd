@@ -572,6 +572,8 @@ export function updateUserItemFields(id: string, fields: Record<string, unknown>
     return allowed[c] === 'int' ? Number(v) : String(v);
   });
   db.run(`UPDATE user_items SET ${cols.map(c => `${c} = ?`).join(', ')} WHERE id = ?`, [...vals, id]);
+  // Remove any legacy catalog_override for this user item so it can't override direct fields
+  db.run('DELETE FROM catalog_overrides WHERE item_id = ?', [id]);
   scheduleWrite();
 }
 
