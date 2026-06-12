@@ -22,7 +22,7 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
   const [confirmDelete, setConfirmDelete] = React.useState(false);
   React.useEffect(() => { setItem(initialItem); setEditing(false); setStoryOv(null); setConfirmDelete(false); }, [initialItem]);
   const isUserItem = item.id && String(item.id).startsWith("i-");
-  const fallback = useCollection((collection || isUserItem) ? null : "featured");
+  const fallback = useCollection(collection ? null : isUserItem ? null : (item.collectionId || "featured"));
   const storyState = useStory(item.id);
   const type = item.type || "game";
   const story = storyOv || storyState.data || fallbackStory(item);
