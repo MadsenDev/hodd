@@ -3,9 +3,14 @@ import { promises as fs } from 'node:fs';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawn, ChildProcess } from 'node:child_process';
 import * as db from './db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+let activeInstallProc: ChildProcess | null = null;
+let activeServeProc: ChildProcess | null = null;
+let appManagedServe = false;
 
 function dataFilePath(name: string): string {
   const devPath = path.join(__dirname, '../public/data', name);
@@ -81,7 +86,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true,
+      sandbox: false,
     },
   });
 
@@ -286,6 +291,135 @@ function registerIpc(): void {
   ipcMain.handle('hodd:ollama:chat',   (_e, model: string, messages: { role: string; content: string }[]) => ollamaChat(model, messages));
   ipcMain.handle('hodd:ollama:generate', (_e, model: string, prompt: string, system?: string) => ollamaGenerate(model, prompt, system));
 
+  ipcMain.handle('hodd:ollama:check-installed', () => {
+    return new Promise<{ installed: boolean }>(resolve => {
+      const proc = spawn('ollama', ['--version'], { shell: false });
+      proc.on('close', code => resolve({ installed: code === 0 }));
+      proc.on('error', () => resolve({ installed: false }));
+    });
+  });
+
+  ipcMain.handle('hodd:ollama:install', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const send = (type: string, data: string) =>
+      win?.webContents.send('hodd:ollama:stream', { type, data });
+
+    let cmd: string;
+    let args: string[];
+    if (process.platform === 'linux') {
+      cmd = 'sh';
+      args = ['-c', 'curl -fsSL https://ollama.com/install.sh | sh'];
+    } else if (process.platform === 'darwin') {
+      // Try brew first; fall back to a message
+      cmd = 'sh';
+      args = ['-c', 'which brew >/dev/null 2>&1 && brew install ollama || echo "__NO_BREW__"'];
+    } else {
+      send('error', 'Automatic install is not supported on Windows. Please download Ollama from ollama.com/download');
+      return;
+    }
+
+    const proc = spawn(cmd, args, { shell: false });
+    activeInstallProc = proc;
+
+    proc.stdout.on('data', (d: Buffer) => send('stdout', d.toString()));
+    proc.stderr.on('data', (d: Buffer) => {
+      const s = d.toString();
+      // Filter progress noise from curl
+      if (!s.startsWith('\r') && s.trim()) send('stderr', s);
+    });
+    proc.on('close', code => {
+      activeInstallProc = null;
+      if (code === 0) send('done', '');
+      else send('error', `Process exited with code ${code}`);
+    });
+    proc.on('error', e => {
+      activeInstallProc = null;
+      send('error', e.message);
+    });
+  });
+
+  ipcMain.handle('hodd:ollama:cancel-install', () => {
+    if (activeInstallProc) {
+      activeInstallProc.kill('SIGTERM');
+      activeInstallProc = null;
+    }
+  });
+
+  ipcMain.handle('hodd:ollama:start', async () => {
+    // Don't double-start
+    if (activeServeProc) return { ok: true };
+
+    const proc = spawn('ollama', ['serve'], { shell: false });
+    activeServeProc = proc;
+    appManagedServe = true;
+
+    proc.on('error', () => { activeServeProc = null; });
+    proc.on('close', () => { activeServeProc = null; });
+
+    // Poll until /api/tags responds
+    const deadline = Date.now() + 15_000;
+    while (Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 600));
+      try {
+        const res = await fetch('http://127.0.0.1:11434/api/tags');
+        if (res.ok) return { ok: true };
+      } catch {}
+    }
+    proc.kill();
+    activeServeProc = null;
+    appManagedServe = false;
+    return { ok: false, error: 'Timed out waiting for Ollama to start (15 s)' };
+  });
+
+  ipcMain.handle('hodd:ollama:pull', (event, model: string) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+
+    return new Promise<{ ok: boolean; error?: string }>(resolve => {
+      const proc = spawn('ollama', ['pull', model], { shell: false });
+
+      let buf = '';
+      proc.stdout.on('data', (d: Buffer) => {
+        buf += d.toString();
+        const lines = buf.split('\n');
+        buf = lines.pop() ?? '';
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const obj = JSON.parse(line) as {
+              status?: string;
+              total?: number;
+              completed?: number;
+            };
+            const pct = (obj.total && obj.completed)
+              ? Math.round((obj.completed / obj.total) * 100)
+              : null;
+            win?.webContents.send('hodd:ollama:pull-progress', {
+              status: obj.status ?? '',
+              pct,
+            });
+          } catch {
+            win?.webContents.send('hodd:ollama:pull-progress', { status: line, pct: null });
+          }
+        }
+      });
+
+      proc.stderr.on('data', (d: Buffer) => {
+        win?.webContents.send('hodd:ollama:pull-progress', { status: d.toString().trim(), pct: null });
+      });
+
+      proc.on('close', code => resolve(code === 0 ? { ok: true } : { ok: false, error: `ollama pull exited with code ${code}` }));
+      proc.on('error', e => resolve({ ok: false, error: e.message }));
+    });
+  });
+
+  ipcMain.handle('hodd:ollama:stop', () => {
+    if (appManagedServe && activeServeProc) {
+      activeServeProc.kill('SIGTERM');
+      activeServeProc = null;
+      appManagedServe = false;
+    }
+  });
+
   // Online metadata lookup — free APIs (books/vinyl) + optional key-gated APIs (games/movies)
   ipcMain.handle('hodd:lookup', async (_e, type: string, query: string) => {
     const settings = db.getSettings();
@@ -357,4 +491,10 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('before-quit', () => {
+  if (appManagedServe && activeServeProc) {
+    activeServeProc.kill('SIGTERM');
+  }
 });

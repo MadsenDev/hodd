@@ -2,11 +2,14 @@
 html, body, #root { height: 100%; }
 body { margin: 0; }
 .sidebar, .mobile-top { -webkit-app-region: drag; }
-.sidebar button, .sidebar a, .mobile-top button, .logo, input, textarea, select { -webkit-app-region: no-drag; }
+.sidebar button, .sidebar a, .sidebar .nav-item, .sidebar .brand, .sidebar .user,
+.mobile-top button, .logo, input, textarea, select { -webkit-app-region: no-drag; }
 @media (min-width: 761px) {
   .sidebar { padding-top: 34px; }
   .canvas { padding-top: 34px; }
 }
+.spin { animation: spin 0.8s linear infinite; }
+
 .avatar-initials {
   display: grid;
   place-items: center;

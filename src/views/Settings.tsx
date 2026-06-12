@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { I } from '../icons';
 import { Loading } from '../components';
-import { getSettings, saveSetting, exportData, importData, OllamaClient } from '../api';
+import { getSettings, saveSetting, exportData, importData } from '../api';
+import { OllamaSetupCard } from './OllamaSetupCard';
 
 export function Settings({ onSaved = undefined }) {
   const [loading, setLoading] = useState(true);
@@ -20,10 +21,6 @@ export function Settings({ onSaved = undefined }) {
   const [importing, setImporting] = useState(false);
   const [importDone, setImportDone] = useState(false);
 
-  const [ollamaRunning, setOllamaRunning] = useState(false);
-  const [ollamaModels, setOllamaModels] = useState([]);
-  const [ollamaChecked, setOllamaChecked] = useState(false);
-
   useEffect(() => {
     getSettings().then(s => {
       setName(s["user.name"] || "");
@@ -34,12 +31,6 @@ export function Settings({ onSaved = undefined }) {
       setOmdbKey(s["api.omdb"] || "");
       setLoading(false);
     }).catch(() => setLoading(false));
-
-    OllamaClient.isRunning().then(running => {
-      setOllamaRunning(running);
-      if (running) OllamaClient.getModels().then(setOllamaModels).catch(() => {});
-      setOllamaChecked(true);
-    }).catch(() => setOllamaChecked(true));
   }, []);
 
   function save() {
@@ -106,40 +97,7 @@ export function Settings({ onSaved = undefined }) {
           <div className="ef-hint" style={{ marginTop: 8 }}>Everything is stored locally on this device.</div>
         </div>
 
-        <div className="panel settings-panel">
-          <div className="section-head" style={{ margin: "0 0 8px" }}>
-            <div className="eyebrow">Local AI — Ollama</div>
-          </div>
-          {!ollamaChecked ? (
-            <p className="settings-hint">Checking for Ollama…</p>
-          ) : ollamaRunning ? (
-            <>
-              <p className="settings-hint" style={{ color: "var(--success, #5ba47a)" }}>
-                <I.check size={14} stroke={2.2} /> Ollama is connected.
-              </p>
-              {ollamaModels.length > 0 && (
-                <div style={{ marginTop: 12 }}>
-                  <div className="ef-hint" style={{ marginBottom: 8 }}>Available models — select one in the Tweaks panel <span style={{ opacity: 0.6 }}>(⚙ top-right)</span></div>
-                  <div className="model-list">
-                    {ollamaModels.map(m => <span key={m} className="model-tag">{m}</span>)}
-                  </div>
-                </div>
-              )}
-              {ollamaModels.length === 0 && (
-                <p className="settings-hint" style={{ marginTop: 8 }}>
-                  No models pulled yet. Run <code>ollama pull llama3.2</code> or similar to get started.
-                </p>
-              )}
-            </>
-          ) : (
-            <p className="settings-hint">
-              Ollama is not running. Install and start{" "}
-              <b>Ollama</b> locally to enable AI-powered item enrichment,
-              story generation, and natural-language search.
-              Models run entirely on your machine — nothing is sent to the cloud.
-            </p>
-          )}
-        </div>
+        <OllamaSetupCard />
 
         <div className="panel settings-panel">
           <div className="section-head" style={{ margin: "0 0 8px" }}>

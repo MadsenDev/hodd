@@ -27,19 +27,3 @@ export function restoreHoddState(
   }
 }
 
-export async function initializeDesktopPersistence() {
-  if (!window.hoddDesktop) return;
-
-  restoreHoddState(await window.hoddDesktop.getState(), window.localStorage);
-  let timer: number | undefined;
-  const originalSetItem = window.localStorage.setItem.bind(window.localStorage);
-
-  window.localStorage.setItem = (key: string, value: string) => {
-    originalSetItem(key, value);
-    if (!key.startsWith(HODD_PREFIX)) return;
-    window.clearTimeout(timer);
-    timer = window.setTimeout(() => {
-      void window.hoddDesktop?.saveState(collectHoddState(window.localStorage));
-    }, 180);
-  };
-}

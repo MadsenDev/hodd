@@ -55,5 +55,17 @@ contextBridge.exposeInMainWorld('hoddDesktop', {
     status:   ()                                                              => ipcRenderer.invoke('hodd:ollama:status'),
     chat:     (model: string, messages: { role: string; content: string }[]) => ipcRenderer.invoke('hodd:ollama:chat', model, messages),
     generate: (model: string, prompt: string, system?: string)               => ipcRenderer.invoke('hodd:ollama:generate', model, prompt, system),
+    checkInstalled: () => ipcRenderer.invoke('hodd:ollama:check-installed'),
+    install:        () => ipcRenderer.invoke('hodd:ollama:install'),
+    cancelInstall:  () => ipcRenderer.invoke('hodd:ollama:cancel-install'),
+    start:          () => ipcRenderer.invoke('hodd:ollama:start'),
+    pullModel:      (name: string) => ipcRenderer.invoke('hodd:ollama:pull', name),
+    stop:           () => ipcRenderer.invoke('hodd:ollama:stop'),
+    onStream:       (cb: (data: { type: string; data: string }) => void) =>
+      ipcRenderer.on('hodd:ollama:stream', (_e, d) => cb(d)),
+    offStream:      () => ipcRenderer.removeAllListeners('hodd:ollama:stream'),
+    onPullProgress: (cb: (data: { status: string; pct: number | null }) => void) =>
+      ipcRenderer.on('hodd:ollama:pull-progress', (_e, d) => cb(d)),
+    offPullProgress: () => ipcRenderer.removeAllListeners('hodd:ollama:pull-progress'),
   },
 });
