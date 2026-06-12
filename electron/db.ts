@@ -230,9 +230,10 @@ export async function initDb(): Promise<void> {
   db.run(SCHEMA);
 
   // Migrations — safe to run on every boot (ALTER TABLE fails silently if column exists)
-  ['series TEXT', 'region TEXT'].forEach(col => {
+  for (const col of ['series TEXT', 'region TEXT']) {
     try { db.run(`ALTER TABLE catalog_overrides ADD COLUMN ${col}`); } catch (_) {}
-  });
+    try { db.run(`ALTER TABLE user_items ADD COLUMN ${col}`); } catch (_) {}
+  }
 
   // Check if seeded
   const seeded = db.exec("SELECT value FROM meta WHERE key = 'seeded'");
@@ -410,7 +411,7 @@ export function getUserCollections(): Record<string, unknown>[] {
 }
 
 export function getUserItems(): Record<string, Record<string, unknown>[]> {
-  const res = db.exec('SELECT * FROM user_items ORDER BY collection_id, created_at');
+  const res = db.exec('SELECT id, collection_id, title, sub, year, type, color, owned, format, completeness, grade, pressing, edition, condition_val, acquired, watched, custom, series, region FROM user_items ORDER BY collection_id, created_at');
   if (!res.length) return {};
   const [{ columns, values }] = res;
   const map: Record<string, Record<string, unknown>[]> = {};
@@ -536,8 +537,8 @@ export function addUserItem(collectionId: string, draft: Record<string, unknown>
   const id = 'i-' + Math.random().toString(36).slice(2, 9);
   const w = draft.watched;
   db.run(`INSERT INTO user_items (id, collection_id, title, sub, year, type, color, owned,
-    format, completeness, grade, pressing, edition, condition_val, acquired, watched, custom)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+    format, completeness, grade, pressing, edition, condition_val, acquired, watched, custom, series, region)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
     id, collectionId,
     sv(draft.title) ?? '', sv(draft.sub), sv(draft.year),
     sv(draft.type), sv(draft.color),
@@ -547,6 +548,7 @@ export function addUserItem(collectionId: string, draft: Record<string, unknown>
     sv(draft.acquired),
     w == null ? null : (w ? 1 : 0),
     draft.custom ? JSON.stringify(draft.custom) : null,
+    sv(draft.series), sv(draft.region),
   ]);
   scheduleWrite();
   return { ...draft, id, collectionId, owned: draft.owned !== false };
@@ -588,7 +590,7 @@ export function removeFavorite(itemId: string): void {
 
 export function getRecentUserItems(limit = 6): Record<string, unknown>[] {
   const res = db.exec(
-    'SELECT id, collection_id, title, sub, year, type, color, owned, acquired, created_at FROM user_items ORDER BY created_at DESC LIMIT ?',
+    'SELECT id, collection_id, title, sub, year, type, color, owned, acquired, series, region, created_at FROM user_items ORDER BY created_at DESC LIMIT ?',
     [limit]
   );
   if (!res.length) return [];
@@ -606,7 +608,7 @@ export function getRecentUserItems(limit = 6): Record<string, unknown>[] {
 
 export function getAllUserItemsWithTimestamps(): Record<string, unknown>[] {
   const res = db.exec(
-    'SELECT id, collection_id, title, sub, year, type, color, owned, format, acquired, created_at FROM user_items ORDER BY created_at DESC'
+    'SELECT id, collection_id, title, sub, year, type, color, owned, format, acquired, series, region, created_at FROM user_items ORDER BY created_at DESC'
   );
   if (!res.length) return [];
   const [{ columns, values }] = res;

@@ -297,7 +297,7 @@ export function AddItemModal({ collection, onClose, onAdded }) {
   const type = collection.type || "other";
   const subLabel = SUBLABELS[type] || "Detail";
   const [owned, setOwned] = React.useState(true);
-  const [c, setC] = React.useState({ title: "", sub: "", year: "" });
+  const [c, setC] = React.useState({ title: "", sub: "", year: "", series: "", region: "" });
   const [f, setF] = React.useState({ format: "", completeness: "", grade: "", pressing: "", edition: "", condition: "", acquired: "", watched: false });
   const [custom, setCustom] = React.useState((collection.template || []).map(l => ({ label: l, value: "" })));
   const setCan = (k, v) => setC(p => ({ ...p, [k]: v }));
@@ -313,6 +313,8 @@ export function AddItemModal({ collection, onClose, onAdded }) {
     const draft = {
       title: c.title.trim(), sub: c.sub.trim() || null, type,
       year: Number.isFinite(yearNum) ? yearNum : null, owned,
+      ...(c.series.trim() ? { series: c.series.trim() } : {}),
+      ...(c.region.trim() ? { region: c.region.trim() } : {}),
     };
     if (owned) {
       draft.format = f.format || null;
@@ -352,6 +354,8 @@ export function AddItemModal({ collection, onClose, onAdded }) {
             <EFText label="Title" value={c.title} placeholder="Item title" onChange={v => setCan("title", v)} wide />
             <EFText label={subLabel} value={c.sub} placeholder={subLabel} onChange={v => setCan("sub", v)} />
             <EFText label="Year" value={c.year} placeholder="e.g. 1996" onChange={v => setCan("year", v)} />
+            <EFText label="Series" value={c.series} placeholder="e.g. Dune, Pokémon" onChange={v => setCan("series", v)} />
+            {type === "game" && <EFText label="Region" value={c.region} placeholder="e.g. NTSC, PAL, JPN" onChange={v => setCan("region", v)} />}
           </div>
 
           {owned && (
