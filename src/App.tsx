@@ -21,11 +21,14 @@ import { Favorites } from './views/Favorites';
 import { Timeline } from './views/Timeline';
 import { Discover } from './views/Discover';
 
-const ACCENTS = {
-  "#4f46e5": ["#4f46e5", "#6366f1", "#4338ca"],
-  "#0d9488": ["#0d9488", "#14b8a6", "#0f766e"],
-  "#e2503b": ["#e2503b", "#f06a57", "#c43f2c"],
-  "#2563eb": ["#2563eb", "#3b82f6", "#1d4ed8"],
+// Each entry: [light accent, light soft, light deep]  /  [dark accent, dark soft, dark deep]
+const ACCENTS: Record<string, [string[], string[]]> = {
+  "#4f46e5": [["#4f46e5", "#6366f1", "#4338ca"], ["#7c7bff", "#9a99ff", "#6361f0"]],
+  "#0d9488": [["#0d9488", "#14b8a6", "#0f766e"], ["#2dd4bf", "#5eead4", "#0f766e"]],
+  "#e2503b": [["#e2503b", "#f06a57", "#c43f2c"], ["#f87171", "#fca5a5", "#e2503b"]],
+  "#2563eb": [["#2563eb", "#3b82f6", "#1d4ed8"], ["#60a5fa", "#93c5fd", "#3b82f6"]],
+  "#7c3aed": [["#7c3aed", "#8b5cf6", "#6d28d9"], ["#a78bfa", "#c4b5fd", "#8b5cf6"]],
+  "#d97706": [["#d97706", "#f59e0b", "#b45309"], ["#fbbf24", "#fde68a", "#f59e0b"]],
 };
 
 const HEADLINE_FONTS = {
@@ -350,11 +353,15 @@ export default function App() {
   useEffect(() => {
     const root = document.documentElement;
     root.setAttribute("data-theme", t.theme === "dark" ? "dark" : "light");
-    const [a, soft, deep] = ACCENTS[t.accent] || ACCENTS["#4f46e5"];
+    const isDark = t.theme === "dark";
+    const [lightVars, darkVars] = ACCENTS[t.accent] || ACCENTS["#4f46e5"];
+    const [a, soft, deep] = isDark ? darkVars : lightVars;
     root.style.setProperty("--accent", a);
     root.style.setProperty("--accent-soft", soft);
     root.style.setProperty("--accent-deep", deep);
-    root.style.setProperty("--accent-wash", hexA(a, t.theme === "dark" ? 0.20 : 0.10));
+    root.style.setProperty("--accent-wash", hexA(a, isDark ? 0.20 : 0.10));
+    root.style.setProperty("--gold-soft", soft);
+    root.style.setProperty("--gold-deep", deep);
     root.style.setProperty("--display", HEADLINE_FONTS[t.headline] || HEADLINE_FONTS.Bricolage);
     (window as any).hoddDesktop?.setTitleBarTheme?.(t.theme === "dark" ? "dark" : "light");
   }, [t.theme, t.accent, t.headline]);
@@ -494,7 +501,7 @@ export default function App() {
         <TweakRadio label="Mode" value={t.theme} options={["light", "dark"]}
           onChange={v => setTweak("theme", v)} />
         <TweakColor label="Accent" value={t.accent}
-          options={["#4f46e5", "#0d9488", "#e2503b", "#2563eb"]}
+          options={["#4f46e5", "#0d9488", "#e2503b", "#2563eb", "#7c3aed", "#d97706"]}
           onChange={v => setTweak("accent", v)} />
         <TweakSection label="Typography" />
         <TweakRadio label="Headline" value={t.headline} options={["Bricolage", "Space Grotesk"]}

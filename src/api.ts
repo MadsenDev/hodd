@@ -490,7 +490,7 @@ export const OllamaClient = {
       ].join(" ");
       const answer = await ollamaGenerate(model, answerPrompt,
         "You are a helpful assistant for a personal collection app. Be concise and warm.");
-      return { tokens: [], results: results.slice(0, 12), total: results.length, summary: (answer as string).trim(), q: query, aiPowered: true };
+      return { tokens: [], results: results.slice(0, 24), total: results.length, summary: (answer as string).trim(), q: query, aiPowered: true };
     } catch (e) {
       console.warn("[HODD Ollama] search failed, falling back to heuristic:", e.message);
       return null;
