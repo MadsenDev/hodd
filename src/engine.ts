@@ -189,7 +189,7 @@ export function searchHoard(query, idx) {
   }
 
   const summary = writeAnswer(query, res, { typeHit, intent });
-  return { tokens, results: res.slice(0, 12), total: res.length, summary };
+  return { tokens, results: res.slice(0, 24), total: res.length, summary };
 }
 
 function writeAnswer(query, res, ctx) {

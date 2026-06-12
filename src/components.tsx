@@ -264,7 +264,6 @@ export function Topbar({ title, subtitle, bare, onSearch, onAdd, searchValue, on
             onKeyDown={(e) => { if (e.key === "Enter" && onSearchSubmit) onSearchSubmit(e.target.value); }}
             onFocus={onSearch} />
         </div>
-        <button className="icon-btn" title="Notifications"><I.bell size={20} stroke={1.7} /></button>
         <button className="add-btn" onClick={onAdd} title="Add item"><I.plus size={22} stroke={2} /></button>
       </div>
     </div>
@@ -279,7 +278,6 @@ export function MobileTopBar({ onAdd }) {
         <span>HODD</span>
       </div>
       <div className="mt-actions">
-        <button className="icon-btn sm" title="Notifications"><I.bell size={18} stroke={1.7} /></button>
         <button className="add-btn sm" onClick={onAdd} title="Add item"><I.plus size={19} stroke={2} /></button>
       </div>
     </div>
