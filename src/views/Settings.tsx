@@ -43,9 +43,9 @@ export function Settings() {
   function save() {
     setSaving(true);
     saveSetting("user.name", name.trim() || "Collector");
-    if (joinedInput.trim()) saveSetting("user.joined", joinedInput.trim());
-    if (rawgKey.trim()) saveSetting("api.rawg", rawgKey.trim());
-    if (omdbKey.trim()) saveSetting("api.omdb", omdbKey.trim());
+    saveSetting("user.joined", joinedInput.trim());
+    saveSetting("api.rawg", rawgKey.trim());
+    saveSetting("api.omdb", omdbKey.trim());
     setTimeout(() => {
       setSaving(false);
       setSaved(true);

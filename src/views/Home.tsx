@@ -163,7 +163,7 @@ export function Home({ ctx }) {
           <div className="recent-grid">
             {(D.recent || []).map(it => (
               <div className="recent-card" key={it.id} onClick={() => ctx.openItem(it)}>
-                <Cover item={it} h={phone ? 150 : 196} onClick={() => ctx.openItem(it)} />
+                <Cover item={it} h={phone ? 150 : 196} />
                 <div className="title">{it.title}</div>
                 <div className="sub">{it.sub}</div>
                 <div className="date">{it.acquired || (it.created_at ? new Date(it.created_at).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "")}</div>
@@ -284,7 +284,7 @@ export function HomeNew({ ctx, art = "Covers" }) {
       <div className="recent-grid">
         {(D.recent || []).map(it => (
           <div className="recent-card" key={it.id} onClick={() => ctx.openItem(it)}>
-            <Cover item={it} h={phone ? 150 : 196} onClick={() => ctx.openItem(it)} />
+            <Cover item={it} h={phone ? 150 : 196} />
             <div className="title">{it.title}</div>
             <div className="sub">{it.sub}</div>
             <div className="date">{it.acquired || (it.created_at ? new Date(it.created_at).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "")}</div>
@@ -298,7 +298,7 @@ export function HomeNew({ ctx, art = "Covers" }) {
           <div className="find-rail">
             {stillToFind.map(({ it, coll }, i) => (
               <div className="find-item" key={it.id || i} onClick={() => ctx.openItem(it, coll)}>
-                <Cover item={it} h={150} ghost onClick={() => ctx.openItem(it, coll)} />
+                <Cover item={it} h={150} ghost />
                 <div className="fn">{it.title}</div>
                 <div className="fc">{coll.name}</div>
               </div>
