@@ -440,7 +440,7 @@ export default function App() {
   else if (view === "favorites")  body = <Favorites ctx={ctx} />;
   else if (view === "timeline")   body = <Timeline ctx={ctx} />;
   else if (view === "discover")   body = <Discover ctx={ctx} />;
-  else if (view === "settings")   body = <Settings />;
+  else if (view === "settings")   body = <Settings onSaved={user.refetch} />;
   else body = <ComingSoon name={bar.title || "Coming soon"} />;
 
   const activeNav = ["collection"].includes(view) ? "collections" : ["item"].includes(view) ? null : view;

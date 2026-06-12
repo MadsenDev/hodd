@@ -4,7 +4,7 @@ import { I } from '../icons';
 import { Loading } from '../components';
 import { getSettings, saveSetting, exportData, OllamaClient } from '../api';
 
-export function Settings() {
+export function Settings({ onSaved = undefined }) {
   const [loading, setLoading] = useState(true);
 
   const [name, setName] = useState("");
@@ -49,6 +49,7 @@ export function Settings() {
     setTimeout(() => {
       setSaving(false);
       setSaved(true);
+      if (onSaved) onSaved();
       setTimeout(() => setSaved(false), 2500);
     }, 300);
   }
