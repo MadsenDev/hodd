@@ -9,6 +9,7 @@ export function Settings() {
 
   const [name, setName] = useState("");
   const [joined, setJoined] = useState("");
+  const [joinedInput, setJoinedInput] = useState("");
   const [rawgKey, setRawgKey] = useState("");
   const [omdbKey, setOmdbKey] = useState("");
 
@@ -24,7 +25,9 @@ export function Settings() {
   useEffect(() => {
     getSettings().then(s => {
       setName(s["user.name"] || "");
-      setJoined(s["user.joined"] || "");
+      const j = s["user.joined"] || "";
+      setJoined(j);
+      setJoinedInput(j);
       setRawgKey(s["api.rawg"] || "");
       setOmdbKey(s["api.omdb"] || "");
       setLoading(false);
@@ -40,6 +43,7 @@ export function Settings() {
   function save() {
     setSaving(true);
     saveSetting("user.name", name.trim() || "Collector");
+    if (joinedInput.trim()) saveSetting("user.joined", joinedInput.trim());
     if (rawgKey.trim()) saveSetting("api.rawg", rawgKey.trim());
     if (omdbKey.trim()) saveSetting("api.omdb", omdbKey.trim());
     setTimeout(() => {
@@ -77,9 +81,12 @@ export function Settings() {
             <input className="ef-control" type="text" value={name}
               onChange={e => setName(e.target.value)} placeholder="Your name" />
           </label>
-          {joined && (
-            <div className="ef-hint" style={{ marginTop: 8 }}>Collecting since {joined}. Stored locally on this device.</div>
-          )}
+          <label className="ef-field" style={{ marginTop: 12 }}>
+            <span className="ef-k">Collecting since</span>
+            <input className="ef-control" type="text" value={joinedInput}
+              onChange={e => setJoinedInput(e.target.value)} placeholder={String(new Date().getFullYear())} style={{ maxWidth: 120 }} />
+          </label>
+          <div className="ef-hint" style={{ marginTop: 8 }}>Everything is stored locally on this device.</div>
         </div>
 
         <div className="panel settings-panel">

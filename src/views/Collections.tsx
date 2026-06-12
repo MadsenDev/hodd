@@ -16,7 +16,7 @@ export function Collections({ ctx }) {
         <div className="eyebrow">{data.length} collection{data.length !== 1 ? "s" : ""}</div>
         <button className="btn" onClick={() => ctx.newCollection()}><I.plus size={14} /> New collection</button>
       </div>
-      <div className="coll-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+      <div className="coll-grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))" }}>
         {data.map(c => <CollCard key={c.id} c={c} onClick={() => ctx.openCollection(c.id)} />)}
       </div>
     </div>
