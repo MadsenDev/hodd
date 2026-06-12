@@ -396,6 +396,23 @@ export default function App() {
 
   useEffect(() => { scrollTop(); }, [view]);
 
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        if (addOpen) { setAddOpen(false); return; }
+        if (createCollOpen) { setCreateCollOpen(false); return; }
+        if (addItemColl) { setAddItemColl(null); return; }
+        if (view === "item") { ctx.back(); return; }
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setAddOpen(v => !v);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [addOpen, createCollOpen, addItemColl, view]);
+
   const user = useUser();
   const greeting = greetingFor(new Date());
   const name = user.data ? user.data.name : "";
