@@ -102,10 +102,10 @@ export function Home({ ctx }) {
   const D = home.data;
   const F = D.featured;
   const collections = cols.data;
-  const redis = D.rediscover;
+  const redis = D.rediscover || null;
   const ownedShelf = F.items.filter(i => i.owned).slice(0, 3);
   const missShelf = F.items.filter(i => !i.owned).slice(0, 3);
-  const openRediscover = () => ctx.openItem(redis);
+  const openRediscover = () => redis && ctx.openItem(redis);
   const wishColl = (collections || [])
     .filter(c => c.pct < 100 && c.missing > 0)
     .sort((a, b) => b.pct - a.pct)[0] || null;
@@ -141,20 +141,22 @@ export function Home({ ctx }) {
       </div>
 
       <div className="home-mid">
-        <div className="panel" style={{ overflow: "hidden" }}>
-          <div style={{ padding: "20px 24px 0" }}><div className="eyebrow">Rediscover</div></div>
-          <div className="rediscover">
-            <Cover item={{ title: redis.title, sub: redis.sub, type: redis.type, color: redis.color }} h={188} onClick={openRediscover} />
-            <div className="copy">
-              <div className="ago">You acquired this {redis.acquired}</div>
-              <h3>{redis.title}</h3>
-              <div className="auth">{redis.sub}</div>
-              <div className="fmt">{redis.format}{redis.edition ? ` · ${redis.edition}` : ""}</div>
-              <div className="note">{redis.note}</div>
-              <button className="btn" style={{ marginTop: 18 }} onClick={openRediscover}>View item <I.arrowRight size={15} /></button>
+        {redis && (
+          <div className="panel" style={{ overflow: "hidden" }}>
+            <div style={{ padding: "20px 24px 0" }}><div className="eyebrow">Rediscover</div></div>
+            <div className="rediscover">
+              <Cover item={{ title: redis.title, sub: redis.sub, type: redis.type, color: redis.color }} h={188} onClick={openRediscover} />
+              <div className="copy">
+                <div className="ago">You acquired this {redis.acquired}</div>
+                <h3>{redis.title}</h3>
+                <div className="auth">{redis.sub}</div>
+                <div className="fmt">{redis.format}{redis.edition ? ` · ${redis.edition}` : ""}</div>
+                <div className="note">{redis.note}</div>
+                <button className="btn" style={{ marginTop: 18 }} onClick={openRediscover}>View item <I.arrowRight size={15} /></button>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         <div>
           <div className="section-head"><div className="eyebrow">Recently added</div><a className="link" onClick={() => ctx.go("timeline")}>View all</a></div>
@@ -164,7 +166,7 @@ export function Home({ ctx }) {
                 <Cover item={it} h={phone ? 150 : 196} onClick={() => ctx.openItem(it)} />
                 <div className="title">{it.title}</div>
                 <div className="sub">{it.sub}</div>
-                <div className="date">{it.acquired}</div>
+                <div className="date">{it.acquired || (it.created_at ? new Date(it.created_at).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "")}</div>
               </div>
             ))}
           </div>
@@ -236,10 +238,10 @@ export function HomeNew({ ctx, art = "Covers" }) {
   const D = home.data;
   const F = D.featured;
   const collections = cols.data;
-  const redis = D.rediscover;
+  const redis = D.rediscover || null;
   const ownedShelf = F.items.filter(i => i.owned).slice(0, 3);
   const missShelf = F.items.filter(i => !i.owned).slice(0, 3);
-  const openRediscover = () => ctx.openItem(redis);
+  const openRediscover = () => redis && ctx.openItem(redis);
 
   const stillToFind = (collections || [])
     .flatMap(c => (c.items || []).filter(i => i.owned === false).map(i => ({ it: { ...i, type: i.type || c.type }, coll: c })))
@@ -305,20 +307,24 @@ export function HomeNew({ ctx, art = "Covers" }) {
         </>
       )}
 
-      <div className="section-head" style={{ marginTop: 34 }}><div className="eyebrow">Rediscover</div></div>
-      <div className="panel" style={{ overflow: "hidden" }}>
-        <div className="rediscover">
-          <Cover item={{ title: redis.title, sub: redis.sub, type: redis.type, color: redis.color }} h={188} onClick={openRediscover} />
-          <div className="copy">
-            <div className="ago">You acquired this {redis.acquired}</div>
-            <h3>{redis.title}</h3>
-            <div className="auth">{redis.sub}</div>
-            <div className="fmt">{redis.format}{redis.edition ? ` · ${redis.edition}` : ""}</div>
-            <div className="note">{redis.note}</div>
-            <button className="btn" style={{ marginTop: 18 }} onClick={openRediscover}>View item <I.arrowRight size={15} /></button>
+      {redis && (
+        <>
+          <div className="section-head" style={{ marginTop: 34 }}><div className="eyebrow">Rediscover</div></div>
+          <div className="panel" style={{ overflow: "hidden" }}>
+            <div className="rediscover">
+              <Cover item={{ title: redis.title, sub: redis.sub, type: redis.type, color: redis.color }} h={188} onClick={openRediscover} />
+              <div className="copy">
+                <div className="ago">You acquired this {redis.acquired}</div>
+                <h3>{redis.title}</h3>
+                <div className="auth">{redis.sub}</div>
+                <div className="fmt">{redis.format}{redis.edition ? ` · ${redis.edition}` : ""}</div>
+                <div className="note">{redis.note}</div>
+                <button className="btn" style={{ marginTop: 18 }} onClick={openRediscover}>View item <I.arrowRight size={15} /></button>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 }

@@ -225,9 +225,10 @@ export async function getCollection(id) {
   const extra = userItemsFor(resolved);
 
   if (made) {
-    const ownedN = extra.filter(i => i.owned !== false).length;
+    const ownedN  = extra.filter(i => i.owned !== false).length;
+    const missingN = extra.length - ownedN;
     return { id: made.id, name: made.name, type: made.type, accent: made.accent,
-      user: true, template: made.template, owned: ownedN, missing: 0,
+      user: true, template: made.template, owned: ownedN, missing: missingN,
       pct: extra.length ? Math.round(ownedN / extra.length * 100) : 0,
       sub: ownedN + (ownedN === 1 ? " item" : " items"), items: extra };
   }
@@ -279,13 +280,17 @@ export async function getHome() {
     home.headlineStats = stats;
   }
 
-  home.wishlist = Object.assign({}, home.wishlist, { items: await getItems(home.wishlist.itemIds) });
+  if (home.wishlist?.itemIds) {
+    home.wishlist = Object.assign({}, home.wishlist, { items: await getItems(home.wishlist.itemIds) });
+  }
 
   if (dynamic?.rediscover) {
     home.rediscover = dynamic.rediscover;
-  } else {
+  } else if (home.rediscover?.itemId) {
     const redItem = await getItem(home.rediscover.itemId);
     home.rediscover = Object.assign({}, redItem, home.rediscover);
+  } else {
+    home.rediscover = null;
   }
   return home;
 }

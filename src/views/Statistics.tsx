@@ -59,32 +59,34 @@ export function Statistics({ ctx }) {
             <div className="eyebrow">Closest to complete</div>
             <div className="highlight-main">
               <CompletionRing pct={closest.pct} size={62} stroke={6} color={closest.accent} fontSize={15} />
-              <div><div className="highlight-name">{closest.name}</div><div className="highlight-sub">Only {closest.missing} left to find</div></div>
+              <div><div className="highlight-name">{closest.name}</div><div className="highlight-sub">{closest.missing === 0 ? "Complete!" : `Only ${closest.missing} left to find`}</div></div>
             </div>
             <button className="btn" onClick={() => ctx.openCollection(closest.id)} style={{ marginTop: 4 }}>View collection <I.arrowRight size={14} /></button>
           </div>
-          <div className="panel highlight-card">
-            <div className="eyebrow">Needs attention</div>
-            <div className="highlight-main">
-              <CompletionRing pct={needs.pct} size={62} stroke={6} color={needs.accent} fontSize={15} />
-              <div><div className="highlight-name">{needs.name}</div><div className="highlight-sub">{needs.missing} items still missing</div></div>
+          {needs.id !== closest.id && (
+            <div className="panel highlight-card">
+              <div className="eyebrow">Needs attention</div>
+              <div className="highlight-main">
+                <CompletionRing pct={needs.pct} size={62} stroke={6} color={needs.accent} fontSize={15} />
+                <div><div className="highlight-name">{needs.name}</div><div className="highlight-sub">{needs.missing} items still missing</div></div>
+              </div>
+              <button className="btn" onClick={() => ctx.openCollection(needs.id)} style={{ marginTop: 4 }}>View collection <I.arrowRight size={14} /></button>
             </div>
-            <button className="btn" onClick={() => ctx.openCollection(needs.id)} style={{ marginTop: 4 }}>View collection <I.arrowRight size={14} /></button>
-          </div>
+          )}
         </div>
       </div>
 
       <div className="panel stat-panel" style={{ marginTop: 22 }}>
         <div className="section-head" style={{ margin: "0 0 16px" }}><div className="eyebrow">Hoard by type</div><span style={{ fontSize: 12.5, color: "var(--mute)" }}>{totalOwned.toLocaleString()} items owned</span></div>
         <div className="dist-bar">
-          {sorted.map(c => <span key={c.id} title={`${c.name} · ${c.owned}`} style={{ width: (c.owned / totalOwned * 100) + "%", background: c.accent }} />)}
+          {sorted.map(c => <span key={c.id} title={`${c.name} · ${c.owned}`} style={{ width: (c.owned / Math.max(totalOwned, 1) * 100) + "%", background: c.accent }} />)}
         </div>
         <div className="legend">
           {sorted.map(c => (
             <div className="legend-item" key={c.id}>
               <span className="legend-dot" style={{ background: c.accent }} />
               <span className="legend-name">{c.name}</span>
-              <span className="legend-val">{Math.round(c.owned / totalOwned * 100)}%</span>
+              <span className="legend-val">{Math.round(c.owned / Math.max(totalOwned, 1) * 100)}%</span>
             </div>
           ))}
         </div>

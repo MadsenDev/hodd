@@ -47,8 +47,8 @@ export function Timeline({ ctx }) {
           </div>
           <div className="items-grid">
             {g.items.map(it => (
-              <div className="item-cell" key={it.id} onClick={() => ctx.openItem(it)}>
-                <Cover item={it} h={200} />
+              <div className={"item-cell" + (it.owned === false ? " missing" : "")} key={it.id} onClick={() => ctx.openItem(it)}>
+                <Cover item={it} h={200} ghost={it.owned === false} />
                 <div className="nm">{it.title}</div>
                 <div className="yr">
                   {it.collName || ''}
