@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React from 'react';
 import { I, typeIcon } from '../icons';
-import { CompletionRing, Loading, ErrorState } from '../components';
+import { CompletionRing, Loading, ErrorState, EmptyState } from '../components';
 import { useCollections, useStats } from '../hooks';
 
 export function Statistics({ ctx }) {
@@ -13,15 +13,16 @@ export function Statistics({ ctx }) {
     return <ErrorState error={cols.error || stats.error} onRetry={() => { cols.refetch(); stats.refetch(); }} />;
   }
 
-  const GROWTH = stats.data.growth;
-  const cols_ = cols.data;
+  const GROWTH = (stats.data && stats.data.growth) || [];
+  const cols_ = cols.data || [];
+  if (!cols_.length) return <EmptyState title="No collections yet" sub="Add your first collection to start tracking your hoard." />;
   const totalOwned = cols_.reduce((s, c) => s + c.owned, 0);
   const totalMissing = cols_.reduce((s, c) => s + c.missing, 0);
   const avgPct = Math.round(cols_.reduce((s, c) => s + c.pct, 0) / cols_.length);
   const sorted = [...cols_].sort((a, b) => b.pct - a.pct);
   const closest = sorted[0];
   const needs = sorted[sorted.length - 1];
-  const maxGrowth = Math.max(...GROWTH.map(g => g.n));
+  const maxGrowth = Math.max(...GROWTH.map(g => g.n), 1);
   const ytd = GROWTH.reduce((s, g) => s + g.n, 0);
 
   return (
