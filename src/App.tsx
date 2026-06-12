@@ -429,7 +429,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <Sidebar active={activeNav} onNav={navTo} />
+      <Sidebar active={activeNav} onNav={navTo} user={user.data} onSettings={() => navTo("settings")} />
       <MobileTopBar onAdd={() => setAddOpen(true)} />
       <div className="main" ref={scrollRef} style={{ height: "100vh", overflowY: "auto" }}>
         <div className="canvas">

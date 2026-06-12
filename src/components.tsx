@@ -203,7 +203,9 @@ export function FluidCover({ item, ghost = false, onClick = undefined, glyph = t
 
 // ── Navigation ────────────────────────────────────────────────────────────────
 
-export function Sidebar({ active, onNav }) {
+export function Sidebar({ active, onNav, user, onSettings }) {
+  const nm = (user && user.name) ? user.name : "Collector";
+  const initial = nm.trim()[0]?.toUpperCase() || "C";
   const items = [
     ["home", "Home", I.home],
     ["collections", "Collections", I.grid],
@@ -233,11 +235,11 @@ export function Sidebar({ active, onNav }) {
       <div className="nav-item" onClick={() => onNav("settings")}>
         <I.settings size={20} stroke={1.6} /><span>Settings</span>
       </div>
-      <div className="user">
-        <div className="avatar avatar-initials" aria-label="Chris">C</div>
+      <div className="user" style={{ cursor: "pointer" }} onClick={onSettings}>
+        <div className="avatar avatar-initials" aria-label={nm}>{initial}</div>
         <div className="meta">
-          <div className="nm">Chris</div>
-          <div className="sub">View profile</div>
+          <div className="nm">{nm}</div>
+          <div className="sub">Settings</div>
         </div>
       </div>
     </aside>
