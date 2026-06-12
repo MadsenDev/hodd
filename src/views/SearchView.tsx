@@ -10,6 +10,7 @@ const SEARCH_SAMPLES = [
   "Which Tolkien books am I missing?",
   "Game Boy games I haven't completed",
   "Movies I own but haven't watched",
+  "Books I haven't read yet",
   "Coins from the 1920s",
   "Vinyl I'm still missing",
 ];
@@ -40,7 +41,7 @@ export function SearchView({ initial, ctx, ollamaModel }) {
     }
 
     setOut({ ...searchHoard(query, index.data), q: query, aiPowered: false });
-    setTimeout(() => setPhase("done"), 850);
+    setTimeout(() => setPhase("done"), 220);
   }
 
   React.useEffect(() => { if (initial && index.data) run(initial); /* eslint-disable-next-line */ }, [index.data]);
@@ -106,8 +107,8 @@ export function SearchView({ initial, ctx, ollamaModel }) {
               </div>
               <div className="items-grid">
                 {out.results.map(it => (
-                  <div className={"item-cell" + (it.owned === false ? " missing" : "")} key={it.id}>
-                    <Cover item={it} h={200} ghost={it.owned === false} onClick={() => ctx.openItem(it)} />
+                  <div className={"item-cell" + (it.owned === false ? " missing" : "")} key={it.id} onClick={() => ctx.openItem(it)}>
+                    <Cover item={it} h={200} ghost={it.owned === false} />
                     <div className="nm">{it.title}</div>
                     <div className="yr">{it.platform || it.author || it.sub || it.coll}{it.year ? ` · ${it.year}` : ""}</div>
                     {it.owned === false

@@ -102,16 +102,18 @@ export function Home({ ctx }) {
   const D = home.data;
   const F = D.featured;
   const collections = cols.data;
-  const wish = D.wishlist;
-  const redis = D.rediscover;
+  const redis = D.rediscover || null;
   const ownedShelf = F.items.filter(i => i.owned).slice(0, 3);
   const missShelf = F.items.filter(i => !i.owned).slice(0, 3);
-  const openRediscover = () => ctx.openItem(redis);
+  const openRediscover = () => redis && ctx.openItem(redis);
+  const wishColl = (collections || [])
+    .filter(c => c.pct < 100 && c.missing > 0)
+    .sort((a, b) => b.pct - a.pct)[0] || null;
 
   return (
     <div className="view-enter">
       <div className="stats">
-        {D.headlineStats.map(s => <HeadlineStat key={s.id} s={s} />)}
+        {(D.headlineStats || []).map(s => <HeadlineStat key={s.id} s={s} />)}
       </div>
 
       <div className="section-head"><div className="eyebrow">Featured shelf</div><a className="link" onClick={() => ctx.openCollection("featured")}>View all <I.arrowRight size={14} /></a></div>
@@ -139,30 +141,32 @@ export function Home({ ctx }) {
       </div>
 
       <div className="home-mid">
-        <div className="panel" style={{ overflow: "hidden" }}>
-          <div style={{ padding: "20px 24px 0" }}><div className="eyebrow">Rediscover</div></div>
-          <div className="rediscover">
-            <Cover item={{ title: redis.title, sub: redis.sub, type: redis.type, color: redis.color }} h={188} onClick={openRediscover} />
-            <div className="copy">
-              <div className="ago">You acquired this {redis.acquired}</div>
-              <h3>{redis.title}</h3>
-              <div className="auth">{redis.sub}</div>
-              <div className="fmt">{redis.format}{redis.edition ? ` · ${redis.edition}` : ""}</div>
-              <div className="note">{redis.note}</div>
-              <button className="btn" style={{ marginTop: 18 }} onClick={openRediscover}>View item <I.arrowRight size={15} /></button>
+        {redis && (
+          <div className="panel" style={{ overflow: "hidden" }}>
+            <div style={{ padding: "20px 24px 0" }}><div className="eyebrow">Rediscover</div></div>
+            <div className="rediscover">
+              <Cover item={{ title: redis.title, sub: redis.sub, type: redis.type, color: redis.color }} h={188} onClick={openRediscover} />
+              <div className="copy">
+                <div className="ago">You acquired this {redis.acquired}</div>
+                <h3>{redis.title}</h3>
+                <div className="auth">{redis.sub}</div>
+                <div className="fmt">{redis.format}{redis.edition ? ` · ${redis.edition}` : ""}</div>
+                <div className="note">{redis.note}</div>
+                <button className="btn" style={{ marginTop: 18 }} onClick={openRediscover}>View item <I.arrowRight size={15} /></button>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         <div>
           <div className="section-head"><div className="eyebrow">Recently added</div><a className="link" onClick={() => ctx.go("timeline")}>View all</a></div>
           <div className="recent-grid">
-            {D.recent.map(it => (
+            {(D.recent || []).map(it => (
               <div className="recent-card" key={it.id} onClick={() => ctx.openItem(it)}>
-                <Cover item={it} h={phone ? 150 : 196} onClick={() => ctx.openItem(it)} />
+                <Cover item={it} h={phone ? 150 : 196} />
                 <div className="title">{it.title}</div>
                 <div className="sub">{it.sub}</div>
-                <div className="date">{it.acquired}</div>
+                <div className="date">{it.acquired || (it.created_at ? new Date(it.created_at).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "")}</div>
               </div>
             ))}
           </div>
@@ -178,9 +182,19 @@ export function Home({ ctx }) {
 
       <div className="home-bottom">
         <div className="panel aside-panel">
-          <div className="section-head" style={{ margin: "0 0 6px" }}><div className="eyebrow">Timeline</div><a className="link" onClick={() => ctx.go("timeline")}>View full timeline</a></div>
+          <div className="section-head" style={{ margin: "0 0 6px" }}><div className="eyebrow">Recently added</div><a className="link" onClick={() => ctx.go("timeline")}>View full timeline</a></div>
           <div className="tl-list">
-            {D.timeline.slice(0, 4).map((t, i) => (
+            {(D.recent && D.recent.length > 0 ? D.recent.slice(0, 4) : []).map((it, i) => (
+              <div className="tl-item" key={it.id || i} onClick={() => it.type && ctx.openItem(it)} style={{ cursor: it.type ? "pointer" : "default" }}>
+                <div className="tl-dot"><i style={{ background: it.collAccent || "var(--accent)" }} /></div>
+                <div className="tl-body">
+                  <div className="tl-when">{it.collName || ""}</div>
+                  <div className="tl-text"><b>{it.title}</b>{it.year ? ` (${it.year})` : ""}</div>
+                </div>
+                <div className="tl-thumb" style={{ background: `linear-gradient(150deg, ${shade(it.collAccent || "#6366f1", 20)}, ${shade(it.collAccent || "#6366f1", -40)})` }} />
+              </div>
+            ))}
+            {(!D.recent || !D.recent.length) && (D.timeline || []).slice(0, 4).map((t, i) => (
               <div className="tl-item" key={i}>
                 <div className="tl-dot"><i style={{ background: t.color }} /></div>
                 <div className="tl-body">
@@ -193,16 +207,21 @@ export function Home({ ctx }) {
           </div>
         </div>
 
-        <div className="panel aside-panel wish">
-          <div className="eyebrow" style={{ marginBottom: 4 }}>Wishlist highlight</div>
-          <div className="lead" style={{ marginTop: 12 }}>You're close!</div>
-          <div className="desc">{wish.total - wish.collected} more items to complete <b style={{ color: "var(--text-2)" }}>{wish.name}</b>.</div>
-          <div className="row">
-            {wish.items.map(it => <Cover key={it.id} item={{ ...it, type: "book" }} h={92} ghost={!it.owned} onClick={() => ctx.openItem({ ...it, type: "book" }, { name: wish.name, items: wish.items, type: "book" })} />)}
+        {wishColl && (
+          <div className="panel aside-panel wish">
+            <div className="eyebrow" style={{ marginBottom: 4 }}>Wishlist highlight</div>
+            <div className="lead" style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 7 }}>
+              <span style={{ color: wishColl.accent, display: "flex" }}>{typeIcon(wishColl.type, { size: 16, stroke: 1.8 })}</span>
+              {wishColl.name}
+            </div>
+            <div className="desc">{wishColl.missing} item{wishColl.missing !== 1 ? "s" : ""} left to complete this collection.</div>
+            <div className="bar" style={{ marginTop: 12 }}><i style={{ width: wishColl.pct + "%", background: wishColl.accent }} /></div>
+            <div className="progress-row">
+              <span className="frac">{wishColl.owned} / {wishColl.owned + wishColl.missing} collected</span>
+              <a className="link" onClick={() => ctx.openCollection(wishColl.id)}>Open</a>
+            </div>
           </div>
-          <div className="bar" style={{ marginTop: 6 }}><i style={{ width: (wish.collected / wish.total * 100) + "%" }} /></div>
-          <div className="progress-row"><span className="frac">{wish.collected} / {wish.total} collected</span><a className="link" onClick={() => ctx.go("wishlist")}>Open</a></div>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -219,16 +238,14 @@ export function HomeNew({ ctx, art = "Covers" }) {
   const D = home.data;
   const F = D.featured;
   const collections = cols.data;
-  const wish = D.wishlist;
-  const redis = D.rediscover;
+  const redis = D.rediscover || null;
   const ownedShelf = F.items.filter(i => i.owned).slice(0, 3);
   const missShelf = F.items.filter(i => !i.owned).slice(0, 3);
-  const openRediscover = () => ctx.openItem(redis);
+  const openRediscover = () => redis && ctx.openItem(redis);
 
-  const stillToFind = [
-    ...F.items.filter(i => !i.owned).map(i => ({ it: { ...i, type: F.type }, coll: F })),
-    ...(wish.items || []).filter(i => !i.owned).map(i => ({ it: { ...i, type: "book" }, coll: { name: wish.name, items: wish.items, type: "book" } })),
-  ].slice(0, 7);
+  const stillToFind = (collections || [])
+    .flatMap(c => (c.items || []).filter(i => i.owned === false).map(i => ({ it: { ...i, type: i.type || c.type }, coll: c })))
+    .slice(0, 7);
 
   return (
     <div className="view-enter">
@@ -265,12 +282,12 @@ export function HomeNew({ ctx, art = "Covers" }) {
 
       <div className="section-head" style={{ marginTop: 34 }}><div className="eyebrow">Recently added</div><a className="link" onClick={() => ctx.go("timeline")}>View all</a></div>
       <div className="recent-grid">
-        {D.recent.map(it => (
+        {(D.recent || []).map(it => (
           <div className="recent-card" key={it.id} onClick={() => ctx.openItem(it)}>
-            <Cover item={it} h={phone ? 150 : 196} onClick={() => ctx.openItem(it)} />
+            <Cover item={it} h={phone ? 150 : 196} />
             <div className="title">{it.title}</div>
             <div className="sub">{it.sub}</div>
-            <div className="date">{it.acquired}</div>
+            <div className="date">{it.acquired || (it.created_at ? new Date(it.created_at).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "")}</div>
           </div>
         ))}
       </div>
@@ -281,7 +298,7 @@ export function HomeNew({ ctx, art = "Covers" }) {
           <div className="find-rail">
             {stillToFind.map(({ it, coll }, i) => (
               <div className="find-item" key={it.id || i} onClick={() => ctx.openItem(it, coll)}>
-                <Cover item={it} h={150} ghost onClick={() => ctx.openItem(it, coll)} />
+                <Cover item={it} h={150} ghost />
                 <div className="fn">{it.title}</div>
                 <div className="fc">{coll.name}</div>
               </div>
@@ -290,20 +307,24 @@ export function HomeNew({ ctx, art = "Covers" }) {
         </>
       )}
 
-      <div className="section-head" style={{ marginTop: 34 }}><div className="eyebrow">Rediscover</div></div>
-      <div className="panel" style={{ overflow: "hidden" }}>
-        <div className="rediscover">
-          <Cover item={{ title: redis.title, sub: redis.sub, type: redis.type, color: redis.color }} h={188} onClick={openRediscover} />
-          <div className="copy">
-            <div className="ago">You acquired this {redis.acquired}</div>
-            <h3>{redis.title}</h3>
-            <div className="auth">{redis.sub}</div>
-            <div className="fmt">{redis.format}{redis.edition ? ` · ${redis.edition}` : ""}</div>
-            <div className="note">{redis.note}</div>
-            <button className="btn" style={{ marginTop: 18 }} onClick={openRediscover}>View item <I.arrowRight size={15} /></button>
+      {redis && (
+        <>
+          <div className="section-head" style={{ marginTop: 34 }}><div className="eyebrow">Rediscover</div></div>
+          <div className="panel" style={{ overflow: "hidden" }}>
+            <div className="rediscover">
+              <Cover item={{ title: redis.title, sub: redis.sub, type: redis.type, color: redis.color }} h={188} onClick={openRediscover} />
+              <div className="copy">
+                <div className="ago">You acquired this {redis.acquired}</div>
+                <h3>{redis.title}</h3>
+                <div className="auth">{redis.sub}</div>
+                <div className="fmt">{redis.format}{redis.edition ? ` · ${redis.edition}` : ""}</div>
+                <div className="note">{redis.note}</div>
+                <button className="btn" style={{ marginTop: 18 }} onClick={openRediscover}>View item <I.arrowRight size={15} /></button>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 }

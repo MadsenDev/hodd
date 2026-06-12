@@ -259,6 +259,7 @@ body {
 .btn.solid:hover { transform: translateY(-1px); background: var(--accent-deep); }
 .btn.ghost { color: var(--dim); border-color: var(--border-soft); }
 .btn.ghost:hover { color: var(--text); }
+.btn.active-fav { color: #cf6b5a; }
 
 /* Recently-added cards */
 .recent-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
@@ -313,7 +314,7 @@ body {
 .seg button.on { background: var(--panel-3); color: var(--champ); }
 
 .items-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 24px 20px; }
-.item-cell { display: flex; flex-direction: column; gap: 0; }
+.item-cell { display: flex; flex-direction: column; gap: 0; cursor: pointer; }
 .item-cell .nm { font-size: 13.5px; font-weight: 600; color: var(--text); margin-top: 12px; line-height: 1.25; }
 .item-cell.missing .nm { color: var(--mute); }
 .item-cell .yr { font-size: 11.5px; color: var(--dim); margin-top: 2px; }

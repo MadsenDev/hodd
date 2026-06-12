@@ -3,9 +3,15 @@ import { contextBridge, ipcRenderer } from 'electron';
 contextBridge.exposeInMainWorld('hoddDesktop', {
   platform: process.platform,
 
-  // Export archive
+  // Archive export / import
   exportArchive: (payload: Record<string, unknown>) =>
     ipcRenderer.invoke('hodd:archive:export', payload),
+  importArchive: () =>
+    ipcRenderer.invoke('hodd:archive:import'),
+
+  // Title bar theme sync (Windows)
+  setTitleBarTheme: (theme: 'light' | 'dark') =>
+    ipcRenderer.invoke('hodd:titlebar:set-theme', theme),
 
   // All data + mutation API
   api: {
@@ -20,6 +26,7 @@ contextBridge.exposeInMainWorld('hoddDesktop', {
     getHomeConfig:        () => ipcRenderer.invoke('hodd:home-config'),
     getStatsConfig:       () => ipcRenderer.invoke('hodd:stats-config'),
     getStory:             (id: string) => ipcRenderer.invoke('hodd:story:get', id),
+    getAllStories:        ()           => ipcRenderer.invoke('hodd:stories:all'),
 
     saveHolding:  (id: string, patch: Record<string, unknown>) => ipcRenderer.invoke('hodd:holding:save', id, patch),
     removeHolding:(id: string)                                  => ipcRenderer.invoke('hodd:holding:remove', id),
@@ -27,9 +34,20 @@ contextBridge.exposeInMainWorld('hoddDesktop', {
     saveStory:    (id: string, paragraphs: string[])           => ipcRenderer.invoke('hodd:story:save', id, paragraphs),
     createCollection: (def: { name: string; type: string; accent: string; template: string[] }) =>
       ipcRenderer.invoke('hodd:collection:create', def),
+    deleteCollection: (id: string) => ipcRenderer.invoke('hodd:collection:delete', id),
     addItem: (collectionId: string, draft: Record<string, unknown>) =>
       ipcRenderer.invoke('hodd:item:add', collectionId, draft),
+    deleteItem:        (id: string)                                   => ipcRenderer.invoke('hodd:item:delete', id),
+    setItemOwned:      (id: string, owned: boolean)                   => ipcRenderer.invoke('hodd:item:set-owned', id, owned),
+    updateUserItem:    (id: string, fields: Record<string, unknown>)  => ipcRenderer.invoke('hodd:item:update-fields', id, fields),
     saveSetting: (key: string, value: string) => ipcRenderer.invoke('hodd:setting:save', key, value),
+    lookup: (type: string, query: string) => ipcRenderer.invoke('hodd:lookup', type, query),
+    getFavorites:   ()           => ipcRenderer.invoke('hodd:favorites'),
+    addFavorite:    (id: string) => ipcRenderer.invoke('hodd:favorite:add', id),
+    removeFavorite: (id: string) => ipcRenderer.invoke('hodd:favorite:remove', id),
+    getHomeDynamic: () => ipcRenderer.invoke('hodd:home-dynamic'),
+    getTimeline:    () => ipcRenderer.invoke('hodd:timeline'),
+    getGrowth:      () => ipcRenderer.invoke('hodd:growth'),
   },
 
   // Ollama local AI

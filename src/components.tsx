@@ -203,11 +203,14 @@ export function FluidCover({ item, ghost = false, onClick = undefined, glyph = t
 
 // ── Navigation ────────────────────────────────────────────────────────────────
 
-export function Sidebar({ active, onNav }) {
+export function Sidebar({ active, onNav, user, onSettings }) {
+  const nm = (user && user.name) ? user.name : "Collector";
+  const initial = nm.trim()[0]?.toUpperCase() || "C";
   const items = [
     ["home", "Home", I.home],
     ["collections", "Collections", I.grid],
     ["wishlist", "Wishlist", I.heart],
+    ["favorites", "Favorites", I.heartFill],
     ["timeline", "Timeline", I.clock],
     ["discover", "Discover", I.compass],
     ["statistics", "Statistics", I.chart],
@@ -232,11 +235,11 @@ export function Sidebar({ active, onNav }) {
       <div className="nav-item" onClick={() => onNav("settings")}>
         <I.settings size={20} stroke={1.6} /><span>Settings</span>
       </div>
-      <div className="user">
-        <div className="avatar avatar-initials" aria-label="Chris">C</div>
+      <div className="user" style={{ cursor: "pointer" }} onClick={onSettings}>
+        <div className="avatar avatar-initials" aria-label={nm}>{initial}</div>
         <div className="meta">
-          <div className="nm">Chris</div>
-          <div className="sub">View profile</div>
+          <div className="nm">{nm}</div>
+          <div className="sub">Settings</div>
         </div>
       </div>
     </aside>
@@ -261,7 +264,6 @@ export function Topbar({ title, subtitle, bare, onSearch, onAdd, searchValue, on
             onKeyDown={(e) => { if (e.key === "Enter" && onSearchSubmit) onSearchSubmit(e.target.value); }}
             onFocus={onSearch} />
         </div>
-        <button className="icon-btn" title="Notifications"><I.bell size={20} stroke={1.7} /></button>
         <button className="add-btn" onClick={onAdd} title="Add item"><I.plus size={22} stroke={2} /></button>
       </div>
     </div>
@@ -276,7 +278,6 @@ export function MobileTopBar({ onAdd }) {
         <span>HODD</span>
       </div>
       <div className="mt-actions">
-        <button className="icon-btn sm" title="Notifications"><I.bell size={18} stroke={1.7} /></button>
         <button className="add-btn sm" onClick={onAdd} title="Add item"><I.plus size={19} stroke={2} /></button>
       </div>
     </div>
@@ -285,11 +286,11 @@ export function MobileTopBar({ onAdd }) {
 
 export function MobileTabs({ active, onNav }) {
   const tabs = [
-    ["home", "Home", I.home],
-    ["collections", "Library", I.grid],
-    ["search", "Search", I.search],
-    ["timeline", "Timeline", I.clock],
-    ["wishlist", "Wishlist", I.heart],
+    ["home",        "Home",      I.home],
+    ["collections", "Library",   I.grid],
+    ["search",      "Search",    I.search],
+    ["wishlist",    "Wishlist",  I.heart],
+    ["favorites",   "Favorites", I.heartFill],
   ];
   return (
     <nav className="mobile-tabs">

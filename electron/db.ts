@@ -72,6 +72,7 @@ const SCHEMA = `
     condition_val TEXT,
     acquired TEXT,
     watched INTEGER,
+    completed INTEGER,
     custom TEXT
   );
 
@@ -122,6 +123,7 @@ const SCHEMA = `
     condition_val TEXT,
     acquired TEXT,
     watched INTEGER,
+    completed INTEGER,
     custom TEXT,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
   );
@@ -134,6 +136,10 @@ const SCHEMA = `
   CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS favorites (
+    item_id TEXT PRIMARY KEY
   );
 `;
 
@@ -224,6 +230,14 @@ export async function initDb(): Promise<void> {
   }
 
   db.run(SCHEMA);
+
+  // Migrations — safe to run on every boot (ALTER TABLE fails silently if column exists)
+  for (const col of ['series TEXT', 'region TEXT']) {
+    try { db.run(`ALTER TABLE catalog_overrides ADD COLUMN ${col}`); } catch (_) {}
+    try { db.run(`ALTER TABLE user_items ADD COLUMN ${col}`); } catch (_) {}
+  }
+  try { db.run('ALTER TABLE holdings ADD COLUMN completed INTEGER'); } catch (_) {}
+  try { db.run('ALTER TABLE user_items ADD COLUMN completed INTEGER'); } catch (_) {}
 
   // Check if seeded
   const seeded = db.exec("SELECT value FROM meta WHERE key = 'seeded'");
@@ -347,7 +361,7 @@ export function getCatalog(): Record<string, unknown>[] {
 }
 
 export function getHoldings(): Record<string, Record<string, unknown>> {
-  const res = db.exec('SELECT item_id, format, completeness, grade, pressing, edition, condition_val, acquired, watched, custom FROM holdings');
+  const res = db.exec('SELECT item_id, format, completeness, grade, pressing, edition, condition_val, acquired, watched, completed, custom FROM holdings');
   if (!res.length) return {};
   const [{ columns, values }] = res;
   const map: Record<string, Record<string, unknown>> = {};
@@ -360,6 +374,7 @@ export function getHoldings(): Record<string, Record<string, unknown>> {
     const id = obj.item_id as string;
     delete obj.item_id;
     if (obj.watched !== null) obj.watched = obj.watched === 1;
+    if (obj.completed !== null) obj.completed = obj.completed === 1;
     if (obj.custom) { try { obj.custom = JSON.parse(obj.custom as string); } catch (_) {} }
     map[id] = obj;
   }
@@ -367,7 +382,7 @@ export function getHoldings(): Record<string, Record<string, unknown>> {
 }
 
 export function getCatalogOverrides(): Record<string, Record<string, unknown>> {
-  const res = db.exec('SELECT item_id, title, sub, year, type FROM catalog_overrides');
+  const res = db.exec('SELECT item_id, title, sub, year, type, series, region FROM catalog_overrides');
   if (!res.length) return {};
   const [{ columns, values }] = res;
   const map: Record<string, Record<string, unknown>> = {};
@@ -401,7 +416,7 @@ export function getUserCollections(): Record<string, unknown>[] {
 }
 
 export function getUserItems(): Record<string, Record<string, unknown>[]> {
-  const res = db.exec('SELECT * FROM user_items ORDER BY collection_id, created_at');
+  const res = db.exec('SELECT id, collection_id, title, sub, year, type, color, owned, format, completeness, grade, pressing, edition, condition_val, acquired, watched, completed, custom, series, region FROM user_items ORDER BY collection_id, created_at');
   if (!res.length) return {};
   const [{ columns, values }] = res;
   const map: Record<string, Record<string, unknown>[]> = {};
@@ -413,6 +428,7 @@ export function getUserItems(): Record<string, Record<string, unknown>[]> {
     });
     obj.owned = obj.owned === 1;
     if (obj.watched !== null) obj.watched = obj.watched === 1;
+    if (obj.completed !== null) obj.completed = obj.completed === 1;
     if (obj.custom) { try { obj.custom = JSON.parse(obj.custom as string); } catch (_) {} }
     delete obj.created_at;
     const collId = obj.collectionId as string;
@@ -455,22 +471,27 @@ export function saveHolding(itemId: string, patch: Record<string, unknown>): voi
     if (merged.watched !== null && merged.watched !== undefined) {
       merged.watched = merged.watched ? 1 : 0;
     }
+    if (merged.completed !== null && merged.completed !== undefined) {
+      merged.completed = merged.completed ? 1 : 0;
+    }
     if (merged.custom && typeof merged.custom !== 'string') merged.custom = JSON.stringify(merged.custom);
     db.run(`UPDATE holdings SET format=?, completeness=?, grade=?, pressing=?, edition=?,
-      condition_val=?, acquired=?, watched=?, custom=? WHERE item_id=?`, [
+      condition_val=?, acquired=?, watched=?, completed=?, custom=? WHERE item_id=?`, [
       sv(merged.format), sv(merged.completeness), sv(merged.grade),
       sv(merged.pressing), sv(merged.edition), sv(merged.condition_val),
-      sv(merged.acquired), sv(merged.watched), sv(merged.custom), itemId,
+      sv(merged.acquired), sv(merged.watched), sv(merged.completed), sv(merged.custom), itemId,
     ]);
   } else {
     const w = patch.watched;
+    const cp = patch.completed;
     db.run(`INSERT INTO holdings (item_id, format, completeness, grade, pressing, edition,
-      condition_val, acquired, watched, custom) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+      condition_val, acquired, watched, completed, custom) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
       itemId,
       sv(patch.format), sv(patch.completeness), sv(patch.grade),
       sv(patch.pressing), sv(patch.edition), sv(patch.condition),
       sv(patch.acquired),
       w == null ? null : (w ? 1 : 0),
+      cp == null ? null : (cp ? 1 : 0),
       patch.custom ? JSON.stringify(patch.custom) : null,
     ]);
   }
@@ -490,12 +511,14 @@ export function saveCatalogOverride(itemId: string, patch: Record<string, unknow
     const cur: Record<string, unknown> = {};
     cols.forEach((c, i) => { cur[c] = vals[i]; });
     const merged = { ...cur, ...patch };
-    db.run('UPDATE catalog_overrides SET title=?, sub=?, year=?, type=? WHERE item_id=?', [
-      sv(merged.title), sv(merged.sub), sv(merged.year), sv(merged.type), itemId,
+    db.run('UPDATE catalog_overrides SET title=?, sub=?, year=?, type=?, series=?, region=? WHERE item_id=?', [
+      sv(merged.title), sv(merged.sub), sv(merged.year), sv(merged.type),
+      sv(merged.series), sv(merged.region), itemId,
     ]);
   } else {
-    db.run('INSERT INTO catalog_overrides (item_id, title, sub, year, type) VALUES (?, ?, ?, ?, ?)', [
+    db.run('INSERT INTO catalog_overrides (item_id, title, sub, year, type, series, region) VALUES (?, ?, ?, ?, ?, ?, ?)', [
       itemId, sv(patch.title), sv(patch.sub), sv(patch.year), sv(patch.type),
+      sv(patch.series), sv(patch.region),
     ]);
   }
   scheduleWrite();
@@ -521,12 +544,28 @@ export function createCollection(def: { name: string; type: string; accent: stri
   return { id, name, type: def.type || 'other', accent: def.accent || '#6366f1', template: JSON.parse(template), user: true };
 }
 
+export function deleteUserCollection(collectionId: string): void {
+  // Cascade: gather all item IDs first
+  const rows = db.exec('SELECT id FROM user_items WHERE collection_id = ?', [collectionId]);
+  const ids: string[] = rows.length ? rows[0].values.map(r => r[0] as string) : [];
+  for (const id of ids) {
+    db.run('DELETE FROM holdings WHERE item_id = ?', [id]);
+    db.run('DELETE FROM stories WHERE item_id = ?', [id]);
+    db.run('DELETE FROM favorites WHERE item_id = ?', [id]);
+    db.run('DELETE FROM catalog_overrides WHERE item_id = ?', [id]);
+  }
+  db.run('DELETE FROM user_items WHERE collection_id = ?', [collectionId]);
+  db.run('DELETE FROM user_collections WHERE id = ?', [collectionId]);
+  scheduleWrite();
+}
+
 export function addUserItem(collectionId: string, draft: Record<string, unknown>): Record<string, unknown> {
   const id = 'i-' + Math.random().toString(36).slice(2, 9);
   const w = draft.watched;
+  const cp = draft.completed;
   db.run(`INSERT INTO user_items (id, collection_id, title, sub, year, type, color, owned,
-    format, completeness, grade, pressing, edition, condition_val, acquired, watched, custom)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+    format, completeness, grade, pressing, edition, condition_val, acquired, watched, completed, custom, series, region)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
     id, collectionId,
     sv(draft.title) ?? '', sv(draft.sub), sv(draft.year),
     sv(draft.type), sv(draft.color),
@@ -535,13 +574,201 @@ export function addUserItem(collectionId: string, draft: Record<string, unknown>
     sv(draft.pressing), sv(draft.edition), sv(draft.condition),
     sv(draft.acquired),
     w == null ? null : (w ? 1 : 0),
+    cp == null ? null : (cp ? 1 : 0),
     draft.custom ? JSON.stringify(draft.custom) : null,
+    sv(draft.series), sv(draft.region),
   ]);
   scheduleWrite();
   return { ...draft, id, collectionId, owned: draft.owned !== false };
 }
 
+export function setUserItemOwned(id: string, owned: boolean): void {
+  db.run('UPDATE user_items SET owned = ? WHERE id = ?', [owned ? 1 : 0, id]);
+  scheduleWrite();
+}
+
+export function updateUserItemFields(id: string, fields: Record<string, unknown>): void {
+  const allowed: Record<string, 'text' | 'int'> = {
+    title: 'text', sub: 'text', year: 'int', type: 'text',
+    series: 'text', region: 'text', color: 'text',
+  };
+  const cols = Object.keys(fields).filter(k => k in allowed);
+  if (!cols.length) return;
+  const vals = cols.map(c => {
+    const v = fields[c];
+    if (v == null || v === '') return null;
+    return allowed[c] === 'int' ? Number(v) : String(v);
+  });
+  db.run(`UPDATE user_items SET ${cols.map(c => `${c} = ?`).join(', ')} WHERE id = ?`, [...vals, id]);
+  // Remove any legacy catalog_override for this user item so it can't override direct fields
+  db.run('DELETE FROM catalog_overrides WHERE item_id = ?', [id]);
+  scheduleWrite();
+}
+
+export function deleteUserItem(id: string): void {
+  db.run('DELETE FROM user_items WHERE id = ?', [id]);
+  db.run('DELETE FROM holdings WHERE item_id = ?', [id]);
+  db.run('DELETE FROM catalog_overrides WHERE item_id = ?', [id]);
+  db.run('DELETE FROM stories WHERE item_id = ?', [id]);
+  db.run('DELETE FROM favorites WHERE item_id = ?', [id]);
+  scheduleWrite();
+}
+
 export function saveSetting(key: string, value: string): void {
   db.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [key, value]);
   scheduleWrite();
+}
+
+export function getFavorites(): string[] {
+  const res = db.exec('SELECT item_id FROM favorites');
+  if (!res.length) return [];
+  return res[0].values.map(row => row[0] as string);
+}
+
+export function addFavorite(itemId: string): void {
+  db.run('INSERT OR IGNORE INTO favorites (item_id) VALUES (?)', [itemId]);
+  scheduleWrite();
+}
+
+export function removeFavorite(itemId: string): void {
+  db.run('DELETE FROM favorites WHERE item_id = ?', [itemId]);
+  scheduleWrite();
+}
+
+export function importArchive(payload: Record<string, unknown>): { imported: number } {
+  // Replace all user-generated data with the archive contents
+  db.run('DELETE FROM user_items');
+  db.run('DELETE FROM user_collections');
+  db.run('DELETE FROM holdings');
+  db.run('DELETE FROM catalog_overrides');
+
+  let count = 0;
+
+  // User collections
+  const cols = (payload.userCollections as Record<string, unknown>[]) || [];
+  for (const c of cols) {
+    const tmpl = Array.isArray(c.template) ? JSON.stringify(c.template) : (typeof c.template === 'string' ? c.template : '[]');
+    db.run(
+      'INSERT OR REPLACE INTO user_collections (id, name, type, accent, template, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [sv(c.id), sv(c.name) ?? 'Collection', sv(c.type) ?? 'other', sv(c.accent) ?? '#6366f1', tmpl, sv(c.created_at) ?? new Date().toISOString()]
+    );
+  }
+
+  // User items (created_at omitted — SQLite DEFAULT applies)
+  const items = (payload.userItems as Record<string, Record<string, unknown>[]>) || {};
+  for (const [collId, collItems] of Object.entries(items)) {
+    for (const it of (collItems || [])) {
+      const w = it.watched;
+      const cp = it.completed;
+      db.run(`INSERT OR REPLACE INTO user_items
+        (id, collection_id, title, sub, year, type, color, owned,
+         format, completeness, grade, pressing, edition, condition_val,
+         acquired, watched, completed, custom, series, region)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+        sv(it.id), collId,
+        sv(it.title) ?? '', sv(it.sub), sv(it.year), sv(it.type), sv(it.color),
+        it.owned !== false ? 1 : 0,
+        sv(it.format), sv(it.completeness), sv(it.grade),
+        sv(it.pressing), sv(it.edition), sv(it.condition),
+        sv(it.acquired),
+        w == null ? null : (w ? 1 : 0),
+        cp == null ? null : (cp ? 1 : 0),
+        it.custom ? JSON.stringify(it.custom) : null,
+        sv(it.series), sv(it.region),
+      ]);
+      count++;
+    }
+  }
+
+  // Holdings (catalog items + any user items that had separate holding edits)
+  const holdings = (payload.holdings as Record<string, Record<string, unknown>>) || {};
+  for (const [id, h] of Object.entries(holdings)) {
+    const w = h.watched;
+    const cp = h.completed;
+    db.run(`INSERT OR REPLACE INTO holdings
+      (item_id, format, completeness, grade, pressing, edition,
+       condition_val, acquired, watched, completed, custom)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+      id,
+      sv(h.format), sv(h.completeness), sv(h.grade),
+      sv(h.pressing), sv(h.edition), sv(h.condition),
+      sv(h.acquired),
+      w == null ? null : (w ? 1 : 0),
+      cp == null ? null : (cp ? 1 : 0),
+      h.custom ? JSON.stringify(h.custom) : null,
+    ]);
+  }
+
+  // Catalog overrides
+  const overrides = (payload.catalogOverrides as Record<string, Record<string, unknown>>) || {};
+  for (const [id, patch] of Object.entries(overrides)) {
+    db.run('INSERT OR REPLACE INTO catalog_overrides (item_id, title, sub, year, type, series, region) VALUES (?, ?, ?, ?, ?, ?, ?)', [
+      id, sv(patch.title), sv(patch.sub), sv(patch.year), sv(patch.type),
+      sv(patch.series), sv(patch.region),
+    ]);
+  }
+
+  // Stories (only restore if the archive includes them, to protect against old-format imports)
+  const stories = payload.stories as Record<string, unknown> | undefined;
+  if (stories && Object.keys(stories).length > 0) {
+    db.run('DELETE FROM stories');
+    for (const [id, paragraphs] of Object.entries(stories)) {
+      if (Array.isArray(paragraphs)) {
+        db.run('INSERT OR REPLACE INTO stories (item_id, paragraphs) VALUES (?, ?)', [id, JSON.stringify(paragraphs)]);
+      }
+    }
+  }
+
+  // User profile settings
+  const user = payload.user as Record<string, unknown> | undefined;
+  if (user?.name)   db.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ['user.name',   sv(user.name)]);
+  if (user?.joined) db.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ['user.joined', sv(user.joined)]);
+
+  scheduleWrite();
+  return { imported: count };
+}
+
+export function getRecentUserItems(limit = 6): Record<string, unknown>[] {
+  const res = db.exec(
+    'SELECT id, collection_id, title, sub, year, type, color, owned, acquired, series, region, created_at FROM user_items ORDER BY created_at DESC LIMIT ?',
+    [limit]
+  );
+  if (!res.length) return [];
+  const [{ columns, values }] = res;
+  return values.map(row => {
+    const obj: Record<string, unknown> = {};
+    columns.forEach((col, i) => {
+      const key = col === 'collection_id' ? 'collectionId' : col;
+      obj[key] = row[i];
+    });
+    obj.owned = obj.owned === 1;
+    return obj;
+  });
+}
+
+export function getAllStories(): Record<string, string[]> {
+  const res = db.exec('SELECT item_id, paragraphs FROM stories');
+  if (!res.length) return {};
+  const map: Record<string, string[]> = {};
+  for (const row of res[0].values) {
+    try { map[row[0] as string] = JSON.parse(row[1] as string) as string[]; } catch (_) {}
+  }
+  return map;
+}
+
+export function getAllUserItemsWithTimestamps(): Record<string, unknown>[] {
+  const res = db.exec(
+    'SELECT id, collection_id, title, sub, year, type, color, owned, format, acquired, series, region, created_at FROM user_items ORDER BY created_at DESC'
+  );
+  if (!res.length) return [];
+  const [{ columns, values }] = res;
+  return values.map(row => {
+    const obj: Record<string, unknown> = {};
+    columns.forEach((col, i) => {
+      const key = col === 'collection_id' ? 'collectionId' : col;
+      obj[key] = row[i];
+    });
+    obj.owned = obj.owned === 1;
+    return obj;
+  });
 }

@@ -2,7 +2,7 @@
 import React from 'react';
 import {
   getUser, getCollections, getCollectionsExpanded, getCollection,
-  getHome, getStats, getStory, getSearchIndex,
+  getHome, getStats, getStory, getSearchIndex, getTimeline, isFavorite,
 } from './api';
 
 export function useAsync(fn, deps) {
@@ -37,6 +37,8 @@ export const useHome            = ()   => useAsync(() => getHome(), []);
 export const useStats           = ()   => useAsync(() => getStats(), []);
 export const useStory           = (id) => useAsync(() => getStory(id), [id]);
 export const useSearchIndex     = ()   => useAsync(() => getSearchIndex(), []);
+export const useTimeline        = ()   => useAsync(() => getTimeline(), []);
+export const useFavorite        = (id) => useAsync(() => isFavorite(id), [id]);
 
 export function combine(...states) {
   return {

@@ -31,7 +31,7 @@ async function ensureCache() {
   _catalog = cat; _holdings = h; _catOv = co; _userColls = uc; _userItems = ui; _baseCols = bc;
 }
 
-export function invalidateCache() { _holdings = null; _catOv = null; _userColls = null; _userItems = null; }
+export function invalidateCache() { _holdings = null; _catOv = null; _userColls = null; _userItems = null; _favorites = null; }
 
 function readOverrides()  { return _holdings  || {}; }
 function readCatalogOv()  { return _catOv     || {}; }
@@ -49,13 +49,76 @@ export function removeHolding(id) {
   if (_holdings) delete _holdings[id];
   const a = ipc(); if (a) a.removeHolding(id);
 }
+
+export function removeItem(id) {
+  if (_userItems) {
+    for (const collId of Object.keys(_userItems)) {
+      _userItems[collId] = (_userItems[collId] || []).filter(i => i.id !== id);
+    }
+  }
+  if (_holdings) delete _holdings[id];
+  if (_catOv) delete _catOv[id];
+  if (_favorites) _favorites = _favorites.filter(f => f !== id);
+  const a = ipc(); if (a) a.deleteItem(id);
+}
+
+export function setItemOwned(id, owned) {
+  if (_userItems) {
+    for (const collId of Object.keys(_userItems)) {
+      _userItems[collId] = (_userItems[collId] || []).map(i => i.id === id ? { ...i, owned } : i);
+    }
+  }
+  const a = ipc(); if (a) a.setItemOwned(id, owned);
+}
 export function saveCatalog(id, patch) {
-  if (!_catOv) _catOv = {};
-  _catOv[id] = Object.assign({}, _catOv[id] || {}, patch);
-  const a = ipc(); if (a) a.saveCatalog(id, patch);
+  if (String(id).startsWith("i-")) {
+    // User item — update user_items directly, not catalog_overrides
+    if (_userItems) {
+      for (const collId of Object.keys(_userItems)) {
+        _userItems[collId] = (_userItems[collId] || []).map(i => i.id === id ? { ...i, ...patch } : i);
+      }
+    }
+    if (_catOv) delete _catOv[id];
+    const a = ipc(); if (a) a.updateUserItem(id, patch);
+  } else {
+    if (!_catOv) _catOv = {};
+    _catOv[id] = Object.assign({}, _catOv[id] || {}, patch);
+    const a = ipc(); if (a) a.saveCatalog(id, patch);
+  }
 }
 export function saveStory(id, paragraphs) {
   const a = ipc(); if (a) a.saveStory(id, paragraphs);
+}
+
+let _favorites: string[] | null = null;
+
+export async function getFavorites(): Promise<string[]> {
+  if (_favorites) return _favorites;
+  const a = ipc();
+  _favorites = a ? await a.getFavorites() : [];
+  return _favorites;
+}
+
+export async function isFavorite(id: string): Promise<boolean> {
+  const favs = await getFavorites();
+  return favs.includes(id);
+}
+
+export function toggleFavorite(id: string, currentlyFav: boolean): void {
+  if (!_favorites) _favorites = [];
+  if (currentlyFav) {
+    _favorites = _favorites.filter(f => f !== id);
+    const a = ipc(); if (a) a.removeFavorite(id);
+  } else {
+    if (!_favorites.includes(id)) _favorites.push(id);
+    const a = ipc(); if (a) a.addFavorite(id);
+  }
+}
+
+export function deleteCollection(id) {
+  if (_userColls) _userColls = _userColls.filter(c => c.id !== id);
+  if (_userItems) delete _userItems[id];
+  const a = ipc(); if (a) a.deleteCollection(id);
 }
 
 export function createCollection(def) {
@@ -122,6 +185,7 @@ function joinHolding(cat, h) {
     condition:    (h && h.condition)    || null,
     acquired:     (h && h.acquired)     || null,
     watched:      h ? h.watched : undefined,
+    completed:    h ? h.completed : undefined,
     custom:       (h && h.custom)       || null,
   });
 }
@@ -175,10 +239,11 @@ export async function getCollections() {
   });
 
   const made = (_userColls || []).map(rc => {
-    const its   = (ui[rc.id] || []).map(applyEdits);
-    const owned = its.filter(i => i.owned !== false).length;
+    const its     = (ui[rc.id] || []).map(applyEdits);
+    const owned   = its.filter(i => i.owned !== false).length;
+    const missing = its.filter(i => i.owned === false).length;
     return { id: rc.id, name: rc.name, type: rc.type, accent: rc.accent,
-      owned, missing: 0, pct: its.length ? Math.round(owned / its.length * 100) : 0,
+      owned, missing, pct: its.length ? Math.round(owned / its.length * 100) : 0,
       user: true, template: rc.template };
   });
 
@@ -187,7 +252,14 @@ export async function getCollections() {
 
 export async function getStats() {
   const a = ipc();
-  return a ? a.getStatsConfig() : { growth: [] };
+  if (!a) return { growth: [] };
+  const [conf, growth] = await Promise.all([
+    a.getStatsConfig(),
+    a.getGrowth().catch(() => null),
+  ]);
+  const base = conf || { growth: [] };
+  if (growth?.length) base.growth = growth;
+  return base;
 }
 
 export async function getCollection(id) {
@@ -197,9 +269,10 @@ export async function getCollection(id) {
   const extra = userItemsFor(resolved);
 
   if (made) {
-    const ownedN = extra.filter(i => i.owned !== false).length;
+    const ownedN  = extra.filter(i => i.owned !== false).length;
+    const missingN = extra.length - ownedN;
     return { id: made.id, name: made.name, type: made.type, accent: made.accent,
-      user: true, template: made.template, owned: ownedN, missing: 0,
+      user: true, template: made.template, owned: ownedN, missing: missingN,
       pct: extra.length ? Math.round(ownedN / extra.length * 100) : 0,
       sub: ownedN + (ownedN === 1 ? " item" : " items"), items: extra };
   }
@@ -230,15 +303,77 @@ export async function getCollectionsExpanded() {
 
 export async function getHome() {
   const a = ipc();
-  const homeConf = a ? (await a.getHomeConfig()) : null;
+  if (!a) return null;
+  const [homeConf, dynamic] = await Promise.all([
+    a.getHomeConfig(),
+    a.getHomeDynamic().catch(() => null),
+  ]);
   if (!homeConf) return null;
-  const home     = Object.assign({}, homeConf);
-  home.featured  = await getCollection(home.featuredCollectionId);
-  home.recent    = await getItems(home.recentIds);
-  home.wishlist  = Object.assign({}, home.wishlist, { items: await getItems(home.wishlist.itemIds) });
-  const redItem  = await getItem(home.rediscover.itemId);
-  home.rediscover = Object.assign({}, redItem, home.rediscover);
+  const home = Object.assign({}, homeConf);
+  home.featured = await getCollection(home.featuredCollectionId);
+
+  home.recent = dynamic?.recent?.length
+    ? dynamic.recent
+    : await getItems(home.recentIds || []);
+
+  if (home.headlineStats) {
+    const stats = [...home.headlineStats];
+
+    // Patch the "added this month" stat with live data
+    if (dynamic?.addedThisMonth !== undefined) {
+      const idx = stats.findIndex((s: any) => s.id === 'added');
+      if (idx >= 0) stats[idx] = { ...stats[idx], value: dynamic.addedThisMonth };
+      else stats.unshift({ id: 'added', icon: 'plus', value: dynamic.addedThisMonth, label: 'added\nthis month' });
+    }
+
+    // Patch collection-completion stats with live data (ensureCache already ran)
+    if (_catalog && _holdings && _baseCols) {
+      const h = _holdings;
+      const liveColls = (_baseCols as any[]).map(bc => {
+        const catItems = (_catalog as any[]).filter(c => c.collectionId === bc.id);
+        const ownedN = catItems.filter(c => !!h[c.id]).length;
+        const totalN = catItems.length;
+        const pct = totalN ? Math.round(ownedN / totalN * 100) : 0;
+        return { id: bc.id, type: bc.type as string, owned: ownedN, total: totalN, pct };
+      });
+      stats.forEach((s: any, i: number) => {
+        const typeMatch = liveColls.find(c => s.id === c.id || (s.id && s.id === c.type + 's') || (s.id && c.id === s.id));
+        if (typeMatch && (s.ring != null || s.unit === '%')) {
+          stats[i] = { ...s, value: String(typeMatch.pct), ring: typeMatch.pct };
+        }
+      });
+
+      // Patch "unread books" stat from live holdings
+      const unreadIdx = stats.findIndex((s: any) => s.id === 'unread');
+      if (unreadIdx >= 0) {
+        const catUnread = (_catalog as any[]).filter(c => c.type === 'book' && (_holdings as any)[c.id] && !(_holdings as any)[c.id].watched).length;
+        const userUnread = Object.values(_userItems as Record<string, any[]> || {}).flat()
+          .filter((i: any) => i.type === 'book' && i.owned !== false && !i.watched).length;
+        stats[unreadIdx] = { ...stats[unreadIdx], value: String(catUnread + userUnread) };
+      }
+    }
+
+    home.headlineStats = stats;
+  }
+
+  if (home.wishlist?.itemIds) {
+    home.wishlist = Object.assign({}, home.wishlist, { items: await getItems(home.wishlist.itemIds) });
+  }
+
+  if (dynamic?.rediscover) {
+    home.rediscover = dynamic.rediscover;
+  } else if (home.rediscover?.itemId) {
+    const redItem = await getItem(home.rediscover.itemId);
+    home.rediscover = Object.assign({}, redItem, home.rediscover);
+  } else {
+    home.rediscover = null;
+  }
   return home;
+}
+
+export async function getTimeline() {
+  const a = ipc();
+  return a ? a.getTimeline() : [];
 }
 
 export async function getStory(id) {
@@ -246,23 +381,74 @@ export async function getStory(id) {
   const a = ipc(); return a ? a.getStory(id) : null;
 }
 
+export async function getSettings() {
+  const a = ipc(); return a ? a.getSettings() : {};
+}
+
+export function saveSetting(key, value) {
+  const a = ipc(); if (a) a.saveSetting(key, value);
+}
+
+export async function lookupMetadata(type, query) {
+  const a = ipc(); return a ? a.lookup(type, query) : null;
+}
+
+export async function importData() {
+  const fn = (window as any).hoddDesktop?.importArchive;
+  if (!fn) return null;
+  const result = await fn();
+  if (result && !result.canceled) {
+    _catalog = null;
+    invalidateCache();
+  }
+  return result;
+}
+
+export async function exportData() {
+  await ensureCache();
+  const fn = (window as any).hoddDesktop?.exportArchive;
+  if (!fn) return null;
+  const a = ipc();
+  const [user, stories] = await Promise.all([
+    getUser(),
+    a ? a.getAllStories().catch(() => ({})) : Promise.resolve({}),
+  ]);
+  const payload = {
+    version: 1,
+    exported: new Date().toISOString(),
+    user,
+    userCollections: _userColls || [],
+    userItems: _userItems || {},
+    holdings: _holdings || {},
+    catalogOverrides: _catOv || {},
+    stories: stories || {},
+  };
+  return fn(payload);
+}
+
 export async function getSearchIndex() {
   await ensureCache();
   const cat = _catalog || [], h = _holdings || {};
+  const bcMap = Object.fromEntries((_baseCols || []).map(c => [c.id as string, c.name as string]));
   const catIdx = cat.map(c => {
     const item = joinHolding(c, h[c.id]);
-    item.coll = COLL_NAME[c.collectionId] || "Hoard";
+    item.coll = bcMap[c.collectionId] || COLL_NAME[c.collectionId] || "Hoard";
     if (c.type === "game")  item.platform = c.sub;
     if (c.type === "book")  item.author   = c.sub;
-    if (c.collectionId === "pokemon") item.completed = item.owned && c.year < 1999;
+    if (c.type === "vinyl") item.artist   = c.sub;
+    if (c.type === "movie") item.director = c.sub;
     return item;
   });
-  const ui = _userItems || {}, uc = _userColls || [], userIdx = [];
+  const ui = _userItems || {}, uc = _userColls || [], bc = _baseCols || [], userIdx = [];
   Object.keys(ui).forEach(collId => {
-    const coll = uc.find(c => c.id === collId);
+    const coll = uc.find(c => c.id === collId) || bc.find(c => c.id === collId);
     (ui[collId] || []).forEach(it => {
       const item = applyEdits(it);
-      item.coll = coll ? coll.name : "My Collection";
+      item.coll = coll ? (coll.name as string) : "My Collection";
+      if (item.type === "game")  item.platform = item.sub;
+      if (item.type === "book")  item.author   = item.sub;
+      if (item.type === "vinyl") item.artist   = item.sub;
+      if (item.type === "movie") item.director = item.sub;
       userIdx.push(item);
     });
   });
@@ -322,6 +508,8 @@ export const OllamaClient = {
         if (filters.status === "missing" && i.owned !== false) return false;
         if (filters.watched === "no"     && (i.owned === false || i.watched !== false)) return false;
         if (filters.watched === "yes"    && !i.watched) return false;
+        if (filters.completed === "no"   && (i.owned === false || i.completed !== false)) return false;
+        if (filters.completed === "yes"  && !i.completed) return false;
         if (filters.yearFrom && i.year < filters.yearFrom) return false;
         if (filters.yearTo   && i.year > filters.yearTo)   return false;
         if (filters.keywords && filters.keywords.length) {
@@ -342,11 +530,29 @@ export const OllamaClient = {
       ].join(" ");
       const answer = await ollamaGenerate(model, answerPrompt,
         "You are a helpful assistant for a personal collection app. Be concise and warm.");
-      return { tokens: [], results: results.slice(0, 12), total: results.length, summary: (answer as string).trim(), q: query, aiPowered: true };
+      return { tokens: [], results: results.slice(0, 24), total: results.length, summary: (answer as string).trim(), q: query, aiPowered: true };
     } catch (e) {
       console.warn("[HODD Ollama] search failed, falling back to heuristic:", e.message);
       return null;
     }
+  },
+
+  async enrichItem(rawText, type, model) {
+    const prompts = {
+      game:  `Input: "${rawText}"\nType: game\nReturn JSON only: {"title":"exact title","year":YYYY,"platform":"Game Boy|SNES|GBA|NES|N64|PS1|PS2|etc","completeness":"CIB|Loose|Sealed|null","condition":"Mint|Near Mint|Very Good|Good|Fair|Poor|null"}`,
+      book:  `Input: "${rawText}"\nType: book\nReturn JSON only: {"title":"exact title","year":YYYY,"author":"Full Name","edition":"First Edition|Paperback|Hardcover|Mass Market|null"}`,
+      movie: `Input: "${rawText}"\nType: movie\nReturn JSON only: {"title":"exact title","year":YYYY,"director":"Full Name or null","format":"4K Blu-ray|Blu-ray|DVD|Digital|VHS|null"}`,
+      vinyl: `Input: "${rawText}"\nType: vinyl\nReturn JSON only: {"title":"exact title","year":YYYY,"artist":"Full Name","pressing":"180g|Original Press|Limited|null"}`,
+      coin:  `Input: "${rawText}"\nType: coin\nReturn JSON only: {"title":"coin name","year":YYYY,"mint":"Philadelphia|Denver|San Francisco|New Orleans|Carson City|null","grade":"MS-63|MS-64|etc or null"}`,
+      comic: `Input: "${rawText}"\nType: comic\nReturn JSON only: {"title":"exact title","year":YYYY,"publisher":"Marvel|DC|Image|Dark Horse|etc","format":"Single Issue|TPB|Hardcover|Omnibus|null"}`,
+    };
+    const prompt = prompts[type] || `Input: "${rawText}"\nReturn JSON only: {"title":"exact title","year":YYYY}`;
+    try {
+      const raw = await ollamaGenerate(model, prompt,
+        "You are a collectibles database. Return ONLY valid JSON. No markdown, no explanations. Use null for unknown fields.");
+      const cleaned = (raw as string).trim().replace(/^```(?:json)?\s*/m, "").replace(/\s*```$/m, "");
+      return JSON.parse(cleaned);
+    } catch (_) { return null; }
   },
 
   async generateStory(item, model) {

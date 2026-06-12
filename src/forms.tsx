@@ -82,6 +82,7 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
     condition: item.condition || "",
     acquired: item.acquired || "",
     watched: !!item.watched,
+    completed: !!item.completed,
   };
   const [owned, setOwned] = React.useState(item.owned !== false);
   const [f, setF] = React.useState(init);
@@ -90,6 +91,8 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
     sub: item.sub || "",
     year: item.year != null ? String(item.year) : "",
     type: item.type || type || "other",
+    series: item.series || "",
+    region: item.region || "",
   });
   const [custom, setCustom] = React.useState(
     Array.isArray(item.custom) && item.custom.length
@@ -113,6 +116,8 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
       sub: c.sub.trim() || null,
       year: Number.isFinite(yearNum) ? yearNum : (c.year.trim() ? item.year : null),
       type: etype,
+      series: c.series.trim() || null,
+      region: c.region.trim() || null,
     };
     const customClean = custom
       .map(r => ({ label: r.label.trim(), value: r.value.trim() }))
@@ -125,10 +130,10 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
       acquired: f.acquired || null,
       custom: customClean.length ? customClean : null,
     };
-    if (etype === "game")  holding.completeness = f.completeness || null;
+    if (etype === "game")  { holding.completeness = f.completeness || null; holding.completed = f.completed; }
     if (etype === "coin")  holding.grade = f.grade || null;
     if (etype === "vinyl") holding.pressing = f.pressing || null;
-    if (etype === "book")  holding.edition = f.edition || null;
+    if (etype === "book")  { holding.edition = f.edition || null; holding.watched = f.watched; }
     if (etype === "movie") holding.watched = f.watched;
     onSave({ owned: true, holding, canonical, story: paragraphs });
   }
@@ -146,6 +151,8 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
         <EFSelect label="Type" value={etype} pairs={TYPE_OPTIONS} placeholder={false} onChange={v => setCan("type", v)} />
         <EFText label={eSub} value={c.sub} placeholder={eSub} onChange={v => setCan("sub", v)} />
         <EFText label="Year" value={c.year} placeholder="e.g. 1996" onChange={v => setCan("year", v)} />
+        <EFText label="Series" value={c.series} placeholder="e.g. Dune, Pokémon" onChange={v => setCan("series", v)} />
+        {etype === "game" && <EFText label="Region" value={c.region} placeholder="e.g. NTSC, PAL, JPN" onChange={v => setCan("region", v)} />}
       </div>
 
       {owned ? (
@@ -160,6 +167,8 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
             <EFSelect label="Condition" value={f.condition} options={CONDITION_OPTIONS} placeholder="Condition" onChange={v => set("condition", v)} />
             <EFText label="Acquired" value={f.acquired} placeholder="e.g. May 2024" onChange={v => set("acquired", v)} />
             {etype === "movie" && <EFToggle label="Watched" value={f.watched} onChange={v => set("watched", v)} hint={["Yes", "Not yet"]} />}
+            {etype === "book"  && <EFToggle label="Read" value={f.watched} onChange={v => set("watched", v)} hint={["Yes", "Not yet"]} />}
+            {etype === "game"  && <EFToggle label="Completed" value={f.completed} onChange={v => set("completed", v)} hint={["Yes", "Not yet"]} />}
           </div>
 
           <div className="ef-section ef-section-row">
@@ -291,8 +300,8 @@ export function AddItemModal({ collection, onClose, onAdded }) {
   const type = collection.type || "other";
   const subLabel = SUBLABELS[type] || "Detail";
   const [owned, setOwned] = React.useState(true);
-  const [c, setC] = React.useState({ title: "", sub: "", year: "" });
-  const [f, setF] = React.useState({ format: "", completeness: "", grade: "", pressing: "", edition: "", condition: "", acquired: "", watched: false });
+  const [c, setC] = React.useState({ title: "", sub: "", year: "", series: "", region: "" });
+  const [f, setF] = React.useState({ format: "", completeness: "", grade: "", pressing: "", edition: "", condition: "", acquired: "", watched: false, completed: false });
   const [custom, setCustom] = React.useState((collection.template || []).map(l => ({ label: l, value: "" })));
   const setCan = (k, v) => setC(p => ({ ...p, [k]: v }));
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
@@ -307,15 +316,17 @@ export function AddItemModal({ collection, onClose, onAdded }) {
     const draft = {
       title: c.title.trim(), sub: c.sub.trim() || null, type,
       year: Number.isFinite(yearNum) ? yearNum : null, owned,
+      ...(c.series.trim() ? { series: c.series.trim() } : {}),
+      ...(c.region.trim() ? { region: c.region.trim() } : {}),
     };
     if (owned) {
       draft.format = f.format || null;
       draft.condition = f.condition || null;
       draft.acquired = f.acquired || null;
-      if (type === "game")  draft.completeness = f.completeness || null;
+      if (type === "game")  { draft.completeness = f.completeness || null; draft.completed = f.completed; }
       if (type === "coin")  draft.grade = f.grade || null;
       if (type === "vinyl") draft.pressing = f.pressing || null;
-      if (type === "book")  draft.edition = f.edition || null;
+      if (type === "book")  { draft.edition = f.edition || null; draft.watched = f.watched; }
       if (type === "movie") draft.watched = f.watched;
       if (customClean.length) draft.custom = customClean;
     }
@@ -346,6 +357,8 @@ export function AddItemModal({ collection, onClose, onAdded }) {
             <EFText label="Title" value={c.title} placeholder="Item title" onChange={v => setCan("title", v)} wide />
             <EFText label={subLabel} value={c.sub} placeholder={subLabel} onChange={v => setCan("sub", v)} />
             <EFText label="Year" value={c.year} placeholder="e.g. 1996" onChange={v => setCan("year", v)} />
+            <EFText label="Series" value={c.series} placeholder="e.g. Dune, Pokémon" onChange={v => setCan("series", v)} />
+            {type === "game" && <EFText label="Region" value={c.region} placeholder="e.g. NTSC, PAL, JPN" onChange={v => setCan("region", v)} />}
           </div>
 
           {owned && (
@@ -360,6 +373,8 @@ export function AddItemModal({ collection, onClose, onAdded }) {
                 <EFSelect label="Condition" value={f.condition} options={CONDITION_OPTIONS} placeholder="Condition" onChange={v => set("condition", v)} />
                 <EFText label="Acquired" value={f.acquired} placeholder="e.g. May 2024" onChange={v => set("acquired", v)} />
                 {type === "movie" && <EFToggle label="Watched" value={f.watched} onChange={v => set("watched", v)} hint={["Yes", "Not yet"]} />}
+                {type === "book"  && <EFToggle label="Read" value={f.watched} onChange={v => set("watched", v)} hint={["Yes", "Not yet"]} />}
+                {type === "game"  && <EFToggle label="Completed" value={f.completed} onChange={v => set("completed", v)} hint={["Yes", "Not yet"]} />}
               </div>
 
               <div className="ef-section ef-section-row">

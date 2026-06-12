@@ -3,20 +3,57 @@ import React from 'react';
 import { I } from '../icons';
 import { Cover, CompletionRing, Loading, ErrorState, EmptyState } from '../components';
 import { useCollection } from '../hooks';
+import { deleteCollection } from '../api';
 
 export function CollectionDetail({ collId, ctx }) {
   const { data, loading, error, refetch } = useCollection(collId);
   const [filter, setFilter] = React.useState("all");
+  const [sort, setSort] = React.useState("default");
+  const [search, setSearch] = React.useState("");
+  const [confirmDelete, setConfirmDelete] = React.useState(false);
+  const searchRef = React.useRef(null);
+
+  const hasSearch = data && data.items && data.items.length > 12;
+  React.useEffect(() => {
+    if (!hasSearch) return;
+    function onKey(e) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
+        e.preventDefault();
+        searchRef.current && searchRef.current.focus();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [hasSearch]);
 
   if (loading) return <Loading />;
   if (error) return <ErrorState error={error} onRetry={refetch} />;
   if (!data) return <EmptyState title="Collection not found" />;
 
   const { name, sub, accent, owned, missing, pct, type, items } = data;
-  const shown = items.filter(i => filter === "all" ? true : filter === "owned" ? i.owned : !i.owned);
+  const ownedCount = items.filter(i => i.owned !== false).length;
+  const missingCount = items.filter(i => i.owned === false).length;
+  const sq = search.trim().toLowerCase();
+  const filtered = items.filter(i => {
+    if (filter !== "all" && (filter === "owned" ? !i.owned : i.owned)) return false;
+    if (sq && !(i.title || "").toLowerCase().includes(sq) && !(i.sub || "").toLowerCase().includes(sq)) return false;
+    return true;
+  });
+  const progressLabel = type === "game" ? "Played" : type === "book" ? "Read" : type === "movie" ? "Watched" : null;
+  const shown = [...filtered].sort((a, b) => {
+    if (sort === "title") return (a.title || "").localeCompare(b.title || "");
+    if (sort === "year")  return (a.year || 9999) - (b.year || 9999);
+    if (sort === "status") return (b.owned ? 1 : 0) - (a.owned ? 1 : 0);
+    if (sort === "progress") {
+      const aP = type === "game" ? (a.completed ? 1 : 0) : (a.watched ? 1 : 0);
+      const bP = type === "game" ? (b.completed ? 1 : 0) : (b.watched ? 1 : 0);
+      return bP - aP;
+    }
+    return 0;
+  });
   return (
     <div className="view-enter">
-      <div className="back" onClick={() => ctx.go("home")}><I.arrowLeft size={16} /> Back</div>
+      <div className="back" onClick={ctx.back}><I.arrowLeft size={16} /> Back</div>
       <div className="detail-head">
         <CompletionRing pct={pct} size={92} stroke={7} color={accent} fontSize={20} />
         <div className="titles">
@@ -26,24 +63,57 @@ export function CollectionDetail({ collId, ctx }) {
         </div>
         <div style={{ flex: 1 }} />
         <button className="btn solid add-item-btn" onClick={() => ctx.addToCollection(data)}><I.plus size={16} stroke={2} /> Add item</button>
+        {data.user && !confirmDelete && (
+          <button className="btn" style={{ color: "var(--danger, #cf6b5a)" }} onClick={() => setConfirmDelete(true)}>
+            <I.trash size={15} /> Delete
+          </button>
+        )}
+        {data.user && confirmDelete && (
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <span style={{ fontSize: 13, color: "var(--mute)" }}>Delete this collection?</span>
+            <button className="btn" style={{ color: "var(--danger, #cf6b5a)" }} onClick={() => { deleteCollection(collId); ctx.back(); }}>
+              Yes, delete
+            </button>
+            <button className="btn" onClick={() => setConfirmDelete(false)}>Cancel</button>
+          </div>
+        )}
         <div className="seg">
-          {["all", "owned", "missing"].map(f => (
-            <button key={f} className={filter === f ? "on" : ""} onClick={() => setFilter(f)}>{f[0].toUpperCase() + f.slice(1)}</button>
+          {[["all", "All", items.length], ["owned", "Owned", ownedCount], ["missing", "Missing", missingCount]].map(([v, l, n]) => (
+            <button key={v} className={filter === v ? "on" : ""} onClick={() => setFilter(v)}>
+              {l} <span style={{ opacity: 0.55, fontSize: 11, fontWeight: 500 }}>{n}</span>
+            </button>
           ))}
         </div>
+        <div className="seg">
+          {[["default", "Default"], ["title", "A–Z"], ["year", "Year"], ["status", "Status"], ...(progressLabel ? [["progress", progressLabel]] : [])].map(([v, l]) => (
+            <button key={v} className={sort === v ? "on" : ""} onClick={() => setSort(v)}>{l}</button>
+          ))}
+        </div>
+        {hasSearch && (
+          <div className="coll-search">
+            <I.search size={14} stroke={1.8} />
+            <input ref={searchRef} placeholder="Filter items…" value={search} onChange={e => setSearch(e.target.value)} />
+            {search && <button onClick={() => setSearch("")}><I.close size={13} /></button>}
+          </div>
+        )}
       </div>
       {items.length === 0
         ? <EmptyState title={`${name} is empty`} sub="Add your first item to start the collection." />
         : shown.length === 0
-        ? <EmptyState title={`No ${filter} items`} sub="Try a different filter." />
+        ? <EmptyState title={sq ? `No matches for "${search}"` : `No ${filter} items`} sub={sq ? "Try a different search term." : "Try a different filter."} />
         : <div className="items-grid">
             {shown.map(it => (
-              <div className={"item-cell" + (it.owned ? "" : " missing")} key={it.id}>
-                <Cover item={{ ...it, type }} h={210} ghost={!it.owned} onClick={() => ctx.openItem({ ...it, type }, { name, items, type })} />
+              <div className={"item-cell" + (it.owned ? "" : " missing")} key={it.id} onClick={() => ctx.openItem({ ...it, type }, { name, items, type })}>
+                <Cover item={{ ...it, type }} h={210} ghost={!it.owned} />
                 <div className="nm">{it.title}</div>
                 <div className="yr">{it.sub || ""}{it.year ? ` · ${it.year}` : ""}</div>
                 {it.owned
-                  ? <div className="badge badge-owned"><I.check size={12} stroke={2.2} /> Owned{it.format && it.format !== "—" ? ` · ${it.format}` : ""}</div>
+                  ? <div className="badge badge-owned"><I.check size={12} stroke={2.2} /> {
+                      (type === "game" && it.completed) ? "Played" :
+                      (type === "movie" && it.watched) ? "Watched" :
+                      (type === "book" && it.watched) ? "Read" :
+                      "Owned" + (it.format && it.format !== "—" ? ` · ${it.format}` : "")
+                    }</div>
                   : <div className="badge badge-missing"><I.plus size={12} stroke={2} /> Missing</div>}
               </div>
             ))}
