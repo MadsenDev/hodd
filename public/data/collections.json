@@ -1,0 +1,14 @@
+{
+  "data": [
+    { "id": "books",  "name": "Books",  "type": "book",  "accent": "#5BA47A", "owned": 342, "missing": 12, "pct": 76 },
+    { "id": "movies", "name": "Movies", "type": "movie", "accent": "#5C8AD6", "owned": 286, "missing": 64, "pct": 82 },
+    { "id": "games",  "name": "Games",  "type": "game",  "accent": "#9B7BD4", "owned": 178, "missing": 39, "pct": 69 },
+    { "id": "coins",  "name": "Coins",  "type": "coin",  "accent": "#C9A24C", "owned": 126, "missing": 8,  "pct": 94 },
+    { "id": "comics", "name": "Comics", "type": "comic", "accent": "#CF6B5A", "owned": 95,  "missing": 33, "pct": 57 },
+    { "id": "vinyl",  "name": "Vinyl",  "type": "vinyl", "accent": "#7FB0C4", "owned": 64,  "missing": 21, "pct": 71 }
+  ],
+  "meta": {
+    "endpoint": "GET /api/collections",
+    "total": 6
+  }
+}

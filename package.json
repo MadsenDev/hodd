@@ -1,0 +1,62 @@
+{
+  "name": "hodd-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "HODD — a local-first home for the things you collect.",
+  "main": "dist-electron/main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k \"vite\" \"npm:dev:electron\"",
+    "dev:electron": "wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
+    "build": "tsc -b && vite build && tsc -p electron/tsconfig.json",
+    "preview": "vite preview",
+    "start": "electron .",
+    "typecheck": "tsc -b --pretty false",
+    "test": "vitest run",
+    "package": "npm run build && electron-builder"
+  },
+  "build": {
+    "appId": "app.hodd.desktop",
+    "productName": "HODD",
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "mac": {
+      "category": "public.app-category.lifestyle"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    }
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "typescript": "latest",
+    "vite": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "concurrently": "^9.2.1",
+    "cross-env": "latest",
+    "electron": "^42.4.0",
+    "electron-builder": "latest",
+    "jsdom": "latest",
+    "vitest": "latest",
+    "wait-on": "latest"
+  }
+}

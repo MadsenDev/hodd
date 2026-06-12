@@ -1,0 +1,10 @@
+{
+  "data": {
+    "id": "u_chris",
+    "name": "Chris",
+    "joined": "2019-03-12"
+  },
+  "meta": {
+    "endpoint": "GET /api/user"
+  }
+}
