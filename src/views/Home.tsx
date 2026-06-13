@@ -106,6 +106,25 @@ export function Home({ ctx }) {
   const ownedShelf = F.items.filter(i => i.owned).slice(0, 3);
   const missShelf = F.items.filter(i => !i.owned).slice(0, 3);
   const openRediscover = () => redis && ctx.openItem(redis);
+
+  const isEmptyHoard = (collections && collections.length === 0) ||
+    (collections && collections.length > 0 && collections.every(c => (c.owned || 0) + (c.missing || 0) === 0));
+
+  if (isEmptyHoard) {
+    return (
+      <div className="view-enter" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "60vh", textAlign: "center", gap: 16 }}>
+        <div style={{ fontSize: 48 }}>📦</div>
+        <h2 style={{ fontSize: 22, fontWeight: 700, color: "var(--fg)", margin: 0 }}>Your hoard awaits</h2>
+        <p style={{ fontSize: 15, color: "var(--mute)", maxWidth: 320, margin: 0, lineHeight: 1.6 }}>
+          Add your first item to get started — use the <strong>+</strong> button or press <kbd style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 5, padding: "1px 6px", fontSize: 13 }}>⌘K</kbd> anywhere.
+        </p>
+        <button className="btn solid" style={{ marginTop: 8 }} onClick={() => ctx.go("collections")}>
+          Browse your collections
+        </button>
+      </div>
+    );
+  }
+
   const wishColl = (collections || [])
     .filter(c => c.pct < 100 && c.missing > 0)
     .sort((a, b) => b.pct - a.pct)[0] || null;
@@ -242,6 +261,24 @@ export function HomeNew({ ctx, art = "Covers" }) {
   const ownedShelf = F.items.filter(i => i.owned).slice(0, 3);
   const missShelf = F.items.filter(i => !i.owned).slice(0, 3);
   const openRediscover = () => redis && ctx.openItem(redis);
+
+  const isEmptyHoard = (collections && collections.length === 0) ||
+    (collections && collections.length > 0 && collections.every(c => (c.owned || 0) + (c.missing || 0) === 0));
+
+  if (isEmptyHoard) {
+    return (
+      <div className="view-enter" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "60vh", textAlign: "center", gap: 16 }}>
+        <div style={{ fontSize: 48 }}>📦</div>
+        <h2 style={{ fontSize: 22, fontWeight: 700, color: "var(--fg)", margin: 0 }}>Your hoard awaits</h2>
+        <p style={{ fontSize: 15, color: "var(--mute)", maxWidth: 320, margin: 0, lineHeight: 1.6 }}>
+          Add your first item to get started — use the <strong>+</strong> button or press <kbd style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 5, padding: "1px 6px", fontSize: 13 }}>⌘K</kbd> anywhere.
+        </p>
+        <button className="btn solid" style={{ marginTop: 8 }} onClick={() => ctx.go("collections")}>
+          Browse your collections
+        </button>
+      </div>
+    );
+  }
 
   const stillToFind = (collections || [])
     .flatMap(c => (c.items || []).filter(i => i.owned === false).map(i => ({ it: { ...i, type: i.type || c.type }, coll: c })))

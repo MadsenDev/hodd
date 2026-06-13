@@ -799,6 +799,17 @@ export function getAllStories(): Record<string, string[]> {
   return map;
 }
 
+export function clearUserData(): void {
+  db.run('DELETE FROM holdings');
+  db.run('DELETE FROM stories');
+  db.run('DELETE FROM favorites');
+  db.run('DELETE FROM catalog_overrides');
+  db.run('DELETE FROM user_items');
+  db.run('DELETE FROM user_collections');
+  db.run("DELETE FROM meta WHERE key IN ('seeded', 'onboarded')");
+  scheduleWrite();
+}
+
 export function getAllUserItemsWithTimestamps(): Record<string, unknown>[] {
   const res = db.exec(
     'SELECT id, collection_id, title, sub, year, type, color, owned, format, acquired, series, region, cover_url, created_at FROM user_items ORDER BY created_at DESC'

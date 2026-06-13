@@ -527,6 +527,8 @@ function registerIpc(): void {
     }
   });
 
+  ipcMain.handle('hodd:reset-all', () => db.clearUserData());
+
   // Online metadata lookup — free APIs (books/vinyl) + optional key-gated APIs (games/movies)
   ipcMain.handle('hodd:lookup', async (_e, type: string, query: string) => {
     const settings = db.getSettings();

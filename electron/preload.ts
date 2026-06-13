@@ -50,6 +50,7 @@ contextBridge.exposeInMainWorld('hoddDesktop', {
     getGrowth:      () => ipcRenderer.invoke('hodd:growth'),
     pickImage: (multi?: boolean) => ipcRenderer.invoke('hodd:image:pick', multi),
     deleteImage: (filename: string) => ipcRenderer.invoke('hodd:image:delete', filename),
+    resetAll: () => ipcRenderer.invoke('hodd:reset-all'),
   },
 
   // Ollama local AI

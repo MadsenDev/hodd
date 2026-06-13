@@ -5,7 +5,8 @@ import { Cover, Sidebar, Topbar, MobileTopBar, MobileTabs, useNarrow, Toaster } 
 import { toaster } from './toaster';
 import { useTweaks, TweaksPanel, TweakSection, TweakRadio, TweakColor, TweakSelect } from './tweaks';
 import { useUser, useCollections, useSearchIndex } from './hooks';
-import { OllamaClient, addItem, lookupMetadata, invalidateCache } from './api';
+import { OllamaClient, addItem, lookupMetadata, invalidateCache, getOnboarded } from './api';
+import { Onboarding } from './views/Onboarding';
 import { TYPE_COLL, TYPE_COLOR, TYPE_LABEL, parseHoardLines } from './engine';
 import { typeIcon } from './icons';
 import { CreateCollectionModal, AddItemModal, FORMAT_OPTIONS, CONDITION_OPTIONS, COMPLETENESS_OPTIONS } from './forms';
@@ -512,6 +513,9 @@ function greetingFor(d) {
 }
 
 export default function App() {
+  const [onboarded, setOnboarded] = useState<boolean | null>(null);
+  useEffect(() => { getOnboarded().then(setOnboarded); }, []);
+
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
   useEffect(() => {
     const root = document.documentElement;
@@ -631,6 +635,9 @@ export default function App() {
     setCollId(null); setItem(null); setItemColl(null);
     histRef.current = []; setView(id); scrollTop();
   };
+
+  if (onboarded === null) return null;
+  if (onboarded === false) return <Onboarding onDone={() => setOnboarded(true)} />;
 
   return (
     <div className="app">

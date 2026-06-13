@@ -22,6 +22,8 @@ export function Settings({ onSaved = undefined }) {
   const [exportDone, setExportDone] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importDone, setImportDone] = useState(false);
+  const [resetConfirm, setResetConfirm] = useState(false);
+  const [resetInput, setResetInput] = useState("");
 
   // Bulk series enrichment
   const searchIndexState = useSearchIndex();
@@ -281,6 +283,64 @@ export function Settings({ onSaved = undefined }) {
         <div className="settings-version">
           <span>HODD</span>
           <span className="settings-version-num">v1.1.0</span>
+        </div>
+
+        <div className="panel settings-panel" style={{ borderColor: "rgba(207,107,90,0.3)" }}>
+          {!resetConfirm ? (
+            <>
+              <div className="section-head" style={{ margin: "0 0 8px" }}>
+                <div className="eyebrow">Danger zone</div>
+              </div>
+              <h3 style={{ margin: "0 0 8px", fontSize: 16, fontWeight: 700, color: "var(--fg)" }}>Reset everything</h3>
+              <p className="settings-hint">
+                Permanently delete all your collections, items, holdings, and stories. Your base catalog stays intact. This cannot be undone.
+              </p>
+              <div style={{ marginTop: 16 }}>
+                <button
+                  className="btn"
+                  style={{ color: "#cf6b5a", borderColor: "rgba(207,107,90,0.4)", background: "rgba(207,107,90,0.07)" }}
+                  onClick={() => setResetConfirm(true)}
+                >
+                  Reset everything
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p style={{ margin: "0 0 16px", fontSize: 14, color: "var(--fg)", lineHeight: 1.6 }}>
+                This will permanently delete all your data. First, we'll export a backup.
+              </p>
+              <input
+                className="ef-control"
+                type="text"
+                placeholder="Type DELETE to confirm"
+                value={resetInput}
+                onChange={e => setResetInput(e.target.value)}
+                style={{ width: "100%", marginBottom: 16 }}
+              />
+              <div style={{ display: "flex", gap: 10 }}>
+                <button className="btn" onClick={() => { setResetConfirm(false); setResetInput(""); }}>
+                  Cancel
+                </button>
+                <button
+                  className="btn"
+                  style={{ color: "#cf6b5a", borderColor: "rgba(207,107,90,0.4)", background: "rgba(207,107,90,0.07)", opacity: resetInput === "DELETE" ? 1 : 0.4 }}
+                  disabled={resetInput !== "DELETE"}
+                  onClick={async () => {
+                    await handleExportJSON();
+                    setTimeout(() => {
+                      (window as any).hoddDesktop?.api?.resetAll();
+                      setTimeout(() => {
+                        window.location.reload();
+                      }, 300);
+                    }, 500);
+                  }}
+                >
+                  Reset everything
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
       </div>

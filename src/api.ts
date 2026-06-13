@@ -35,6 +35,16 @@ async function ensureCache() {
 
 export function invalidateCache() { _holdings = null; _catOv = null; _userColls = null; _userItems = null; _favorites = null; _searchIndex = null; }
 
+export async function resetAllData() {
+  const a = ipc(); if (a) await a.resetAll();
+  invalidateCache();
+}
+
+export async function getOnboarded(): Promise<boolean> {
+  const settings = await getSettings();
+  return settings['onboarded'] === '1';
+}
+
 function readOverrides()  { return _holdings  || {}; }
 function readCatalogOv()  { return _catOv     || {}; }
 function readUserColls()  { return _userColls || []; }
