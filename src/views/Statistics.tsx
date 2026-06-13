@@ -16,6 +16,33 @@ export function Statistics({ ctx }) {
 
   const GROWTH = (stats.data && stats.data.growth) || [];
   const idx = index.data || [];
+
+  // Condition distribution across all owned items that have a condition set
+  const CONDITION_ORDER = ["Mint", "Near Mint", "Very Good", "Good", "Fair", "Poor"];
+  const CONDITION_COLORS = { "Mint": "#5ba47a", "Near Mint": "#7fb0c4", "Very Good": "#6366f1", "Good": "#c9a24c", "Fair": "#cf6b5a", "Poor": "#C0392B" };
+  const conditionCounts: Record<string, number> = {};
+  idx.filter(i => i.owned !== false && i.condition).forEach(i => {
+    conditionCounts[i.condition] = (conditionCounts[i.condition] || 0) + 1;
+  });
+  const conditionData = CONDITION_ORDER.filter(c => conditionCounts[c]).map(c => ({
+    label: c, count: conditionCounts[c], color: CONDITION_COLORS[c] || "var(--accent)",
+  }));
+  const conditionTotal = conditionData.reduce((s, c) => s + c.count, 0);
+
+  // Top sub-entries per type (platform for games, author for books, etc.)
+  const subLabel = { game: "Platform", book: "Author", movie: "Director", vinyl: "Artist", coin: "Mint", comic: "Publisher" };
+  const topCreators: { type: string; label: string; entries: { name: string; count: number }[] }[] = [];
+  ["game", "book", "movie", "vinyl"].forEach(type => {
+    const owned = idx.filter(i => i.owned !== false && i.type === type && i.sub);
+    if (!owned.length) return;
+    const counts: Record<string, number> = {};
+    owned.forEach(i => { counts[i.sub] = (counts[i.sub] || 0) + 1; });
+    const entries = Object.entries(counts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+    if (entries.length >= 2) topCreators.push({ type, label: subLabel[type] || "Sub", entries });
+  });
   const consumption = [
     { label: "Games completed", icon: "check", color: "#9B7BD4", done: idx.filter(i => i.type === "game" && i.owned !== false && i.completed === true).length,  total: idx.filter(i => i.type === "game" && i.owned !== false).length },
     { label: "Movies watched",  icon: "check", color: "#5C8AD6", done: idx.filter(i => i.type === "movie" && i.owned !== false && i.watched === true).length, total: idx.filter(i => i.type === "movie" && i.owned !== false).length },
@@ -111,6 +138,62 @@ export function Statistics({ ctx }) {
           ))}
         </div>
       </div>
+
+      {conditionData.length > 0 && (
+        <div className="panel stat-panel" style={{ marginTop: 22 }}>
+          <div className="section-head" style={{ margin: "0 0 16px" }}>
+            <div className="eyebrow">Condition distribution</div>
+            <span style={{ fontSize: 12.5, color: "var(--mute)" }}>{conditionTotal} graded items</span>
+          </div>
+          <div className="dist-bar" style={{ marginBottom: 16 }}>
+            {conditionData.map(c => (
+              <span key={c.label} title={`${c.label} · ${c.count}`}
+                style={{ width: (c.count / conditionTotal * 100) + "%", background: c.color }} />
+            ))}
+          </div>
+          <div className="legend">
+            {conditionData.map(c => (
+              <div className="legend-item" key={c.label}>
+                <span className="legend-dot" style={{ background: c.color }} />
+                <span className="legend-name">{c.label}</span>
+                <span className="legend-val">{c.count} <span style={{ color: "var(--mute)", fontSize: 11 }}>({Math.round(c.count / conditionTotal * 100)}%)</span></span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {topCreators.length > 0 && (
+        <div className="panel stat-panel" style={{ marginTop: 22 }}>
+          <div className="section-head" style={{ margin: "0 0 20px" }}><div className="eyebrow">Top entries by category</div></div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 24 }}>
+            {topCreators.map(tc => {
+              const max = tc.entries[0].count;
+              return (
+                <div key={tc.type}>
+                  <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--mute)", marginBottom: 12 }}>
+                    {typeIcon(tc.type, { size: 13, stroke: 1.8, style: { display: "inline-block", verticalAlign: "middle", marginRight: 5 } })}
+                    {tc.label}
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {tc.entries.map(e => (
+                      <div key={e.name} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12.5, fontWeight: 500, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.name}</div>
+                          <div style={{ height: 4, background: "var(--panel-3)", borderRadius: 2, marginTop: 3, overflow: "hidden" }}>
+                            <div style={{ height: "100%", width: (e.count / max * 100) + "%", background: "var(--accent)", borderRadius: 2 }} />
+                          </div>
+                        </div>
+                        <div style={{ fontSize: 12, color: "var(--dim)", flex: "0 0 auto" }}>{e.count}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {consumption.length > 0 && (
         <div className="panel stat-panel" style={{ marginTop: 22 }}>

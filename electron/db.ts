@@ -681,11 +681,12 @@ export function importArchive(payload: Record<string, unknown>): { imported: num
     for (const it of (collItems || [])) {
       const w = it.watched;
       const cp = it.completed;
+      const gallery = Array.isArray(it.gallery) ? JSON.stringify(it.gallery) : (it.gallery ?? null);
       db.run(`INSERT OR REPLACE INTO user_items
         (id, collection_id, title, sub, year, type, color, owned,
          format, completeness, grade, pressing, edition, condition_val,
-         acquired, watched, completed, custom, series, region)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+         acquired, watched, completed, custom, series, region, cover_url, gallery)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
         sv(it.id), collId,
         sv(it.title) ?? '', sv(it.sub), sv(it.year), sv(it.type), sv(it.color),
         it.owned !== false ? 1 : 0,
@@ -696,6 +697,7 @@ export function importArchive(payload: Record<string, unknown>): { imported: num
         cp == null ? null : (cp ? 1 : 0),
         it.custom ? JSON.stringify(it.custom) : null,
         sv(it.series), sv(it.region),
+        sv(it.cover_url), typeof gallery === 'string' ? gallery : null,
       ]);
       count++;
     }
@@ -720,13 +722,15 @@ export function importArchive(payload: Record<string, unknown>): { imported: num
     ]);
   }
 
-  // Catalog overrides
+  // Catalog overrides (including photo references)
   const overrides = (payload.catalogOverrides as Record<string, Record<string, unknown>>) || {};
   for (const [id, patch] of Object.entries(overrides)) {
-    db.run('INSERT OR REPLACE INTO catalog_overrides (item_id, title, sub, year, type, series, region) VALUES (?, ?, ?, ?, ?, ?, ?)', [
-      id, sv(patch.title), sv(patch.sub), sv(patch.year), sv(patch.type),
-      sv(patch.series), sv(patch.region),
-    ]);
+    const gallery = Array.isArray(patch.gallery) ? JSON.stringify(patch.gallery) : (patch.gallery ?? null);
+    db.run(
+      'INSERT OR REPLACE INTO catalog_overrides (item_id, title, sub, year, type, series, region, cover_url, gallery) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, sv(patch.title), sv(patch.sub), sv(patch.year), sv(patch.type),
+       sv(patch.series), sv(patch.region), sv(patch.cover_url), typeof gallery === 'string' ? gallery : null]
+    );
   }
 
   // Stories (only restore if the archive includes them, to protect against old-format imports)
