@@ -534,12 +534,13 @@ function registerIpc(): void {
     const settings = db.getSettings();
     try {
       if (type === 'book') {
-        const res = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=5&fields=title,author_name,first_publish_year`);
-        const data = await res.json() as { docs?: { title?: string; author_name?: string[]; first_publish_year?: number }[] };
+        const res = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=5&fields=title,author_name,first_publish_year,cover_i`);
+        const data = await res.json() as { docs?: { title?: string; author_name?: string[]; first_publish_year?: number; cover_i?: number }[] };
         return (data.docs ?? []).slice(0, 3).map(d => ({
-          title: d.title ?? query,
-          year:  d.first_publish_year ?? null,
-          sub:   d.author_name?.[0] ?? null,
+          title:     d.title ?? query,
+          year:      d.first_publish_year ?? null,
+          sub:       d.author_name?.[0] ?? null,
+          cover_url: d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-L.jpg` : null,
         }));
       }
       if (type === 'vinyl') {
@@ -547,29 +548,32 @@ function registerIpc(): void {
           `https://musicbrainz.org/ws/2/release/?query=${encodeURIComponent(query)}&fmt=json&limit=3`,
           { headers: { 'User-Agent': 'HODD-Desktop/1.0 (hodd-app)' } }
         );
-        const data = await res.json() as { releases?: { title?: string; date?: string; 'artist-credit'?: { artist?: { name?: string } }[] }[] };
+        const data = await res.json() as { releases?: { title?: string; date?: string; 'artist-credit'?: { artist?: { name?: string } }[]; id?: string }[] };
         return (data.releases ?? []).slice(0, 3).map(d => ({
-          title: d.title ?? query,
-          year:  d.date ? parseInt(d.date.slice(0, 4)) : null,
-          sub:   d['artist-credit']?.[0]?.artist?.name ?? null,
+          title:     d.title ?? query,
+          year:      d.date ? parseInt(d.date.slice(0, 4)) : null,
+          sub:       d['artist-credit']?.[0]?.artist?.name ?? null,
+          cover_url: d.id ? `https://coverartarchive.org/release/${d.id}/front-250` : null,
         }));
       }
       if (type === 'game' && settings['api.rawg']) {
         const res = await fetch(`https://api.rawg.io/api/games?search=${encodeURIComponent(query)}&page_size=3&key=${settings['api.rawg']}`);
-        const data = await res.json() as { results?: { name?: string; released?: string; platforms?: { platform?: { name?: string } }[] }[] };
+        const data = await res.json() as { results?: { name?: string; released?: string; background_image?: string; platforms?: { platform?: { name?: string } }[] }[] };
         return (data.results ?? []).slice(0, 3).map(d => ({
-          title: d.name ?? query,
-          year:  d.released ? parseInt(d.released.slice(0, 4)) : null,
-          sub:   d.platforms?.[0]?.platform?.name ?? null,
+          title:     d.name ?? query,
+          year:      d.released ? parseInt(d.released.slice(0, 4)) : null,
+          sub:       d.platforms?.[0]?.platform?.name ?? null,
+          cover_url: d.background_image ?? null,
         }));
       }
       if (type === 'movie' && settings['api.omdb']) {
         const res = await fetch(`https://www.omdbapi.com/?s=${encodeURIComponent(query)}&apikey=${settings['api.omdb']}&type=movie`);
-        const data = await res.json() as { Search?: { Title?: string; Year?: string }[] };
+        const data = await res.json() as { Search?: { Title?: string; Year?: string; Poster?: string }[] };
         return (data.Search ?? []).slice(0, 3).map(d => ({
-          title: d.Title ?? query,
-          year:  d.Year ? parseInt(d.Year) : null,
-          sub:   null,
+          title:     d.Title ?? query,
+          year:      d.Year ? parseInt(d.Year) : null,
+          sub:       null,
+          cover_url: d.Poster && d.Poster !== 'N/A' ? d.Poster : null,
         }));
       }
       return null;

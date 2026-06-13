@@ -80,6 +80,7 @@ function applyEnrichment(item, enrich, aiPass = false) {
     title = enrich.title;
     fields = fields.map(f => f.k === "Title" ? { ...f, v: enrich.title, c: "high" } : f);
   }
+  const cover_url = enrich.cover_url || item.cover_url || null;
   Object.entries(enrich).forEach(([key, val]) => {
     if (!val || val === "null" || key === "title") return;
     const fieldKey = ENRICH_FIELD_MAP[key];
@@ -92,7 +93,7 @@ function applyEnrichment(item, enrich, aiPass = false) {
       fields = [...fields, { k: fieldKey, v: String(val), c: "high" }];
     }
   });
-  return { ...item, title, fields, askCount: fields.filter(f => f.c === "ask").length };
+  return { ...item, title, fields, cover_url, askCount: fields.filter(f => f.c === "ask").length };
 }
 
 function buildDraft(item) {
@@ -118,6 +119,7 @@ function buildDraft(item) {
     title: item.title, type: item.type, color: item.color,
     year: Number.isFinite(year) ? year : null,
     sub: sub || null, owned: true,
+    ...(item.cover_url ? { cover_url: item.cover_url } : {}),
     ...(ownership ? { ownership } : {}),
     ...(format ? { format } : {}),
     ...(edition && !/^Standard$|^Confirm/i.test(String(edition)) ? { edition: String(edition) } : {}),
@@ -208,7 +210,7 @@ function AddCard({ item, onChange, onRemove, collOpts }) {
   const opts = collOpts && collOpts.length ? collOpts.map(c => c.name) : [...new Set(Object.values(TYPE_COLL))];
   return (
     <div className="add-card">
-      <div className="add-card-cover"><Cover item={{ title: item.title, type: item.type, color: item.color }} h={84} /></div>
+      <div className="add-card-cover"><Cover item={{ title: item.title, type: item.type, color: item.color, cover_url: item.cover_url || null }} h={84} /></div>
       <div className="add-card-body">
         <div className="add-card-head">
           <input className="add-title" value={item.title} onChange={e => onChange({ ...item, title: e.target.value, fields: item.fields.map(f => f.k === "Title" ? { ...f, v: e.target.value } : f) })} />
