@@ -71,12 +71,12 @@ const ENRICH_FIELD_MAP = {
 
 const AI_OVERRIDE_FIELDS = new Set(["Year"]);
 
-function applyEnrichment(item, enrich, aiPass = false) {
+function applyEnrichment(item, enrich, aiPass = false, skipTitle = false) {
   if (!enrich) return item;
   let fields = [...item.fields];
   let title = item.title;
 
-  if (enrich.title && typeof enrich.title === "string" && enrich.title !== item.title) {
+  if (!skipTitle && enrich.title && typeof enrich.title === "string" && enrich.title !== item.title) {
     title = enrich.title;
     fields = fields.map(f => f.k === "Title" ? { ...f, v: enrich.title, c: "high" } : f);
   }
@@ -353,7 +353,7 @@ function AddDesktop({ onClose, onAdded, ctx, ollamaModel }) {
       ]);
       // Apply online lookup first (lower confidence), then AI on top (higher confidence)
       const afterLookup = onlineLookup && onlineLookup.length
-        ? applyEnrichment(item, onlineLookup[0])
+        ? applyEnrichment(item, onlineLookup[0], false, true)
         : item;
       return aiEnrich ? applyEnrichment(afterLookup, aiEnrich, true) : afterLookup;
     }));
