@@ -98,14 +98,12 @@ export function Onboarding({ onDone }) {
     return (
       <div style={overlayStyle}>
         <div style={{ ...cardStyle, gap: 0 }}>
-          {/* Logo mark */}
-          <div style={{
-            width: 72, height: 72, borderRadius: 20, background: "var(--accent)", marginBottom: 32,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            boxShadow: "0 8px 32px -8px var(--accent)",
-          }}>
-            <span style={{ fontFamily: "var(--display)", fontSize: 36, fontWeight: 800, color: "#fff", letterSpacing: "-0.03em" }}>H</span>
-          </div>
+          {/* App icon */}
+          <img
+            src="/assets/logo/hodd-icon.svg"
+            alt="Hodd"
+            style={{ width: 80, height: 80, marginBottom: 32, filter: "drop-shadow(0 8px 24px rgba(79,70,229,0.35))" }}
+          />
           <h1 style={{ ...headlineStyle, marginBottom: 12 }}>Welcome to Hodd</h1>
           <p style={{ fontSize: 16, color: "var(--mute)", margin: "0 0 40px", lineHeight: 1.5 }}>
             Your personal collection,<br />beautifully kept.
