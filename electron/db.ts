@@ -81,7 +81,9 @@ const SCHEMA = `
     title TEXT,
     sub TEXT,
     year INTEGER,
-    type TEXT
+    type TEXT,
+    cover_url TEXT,
+    gallery TEXT
   );
 
   CREATE TABLE IF NOT EXISTS stories (
@@ -125,6 +127,8 @@ const SCHEMA = `
     watched INTEGER,
     completed INTEGER,
     custom TEXT,
+    cover_url TEXT,
+    gallery TEXT,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
   );
 
@@ -238,6 +242,10 @@ export async function initDb(): Promise<void> {
   }
   try { db.run('ALTER TABLE holdings ADD COLUMN completed INTEGER'); } catch (_) {}
   try { db.run('ALTER TABLE user_items ADD COLUMN completed INTEGER'); } catch (_) {}
+  try { db.run('ALTER TABLE user_items ADD COLUMN cover_url TEXT'); } catch (_) {}
+  try { db.run('ALTER TABLE user_items ADD COLUMN gallery TEXT'); } catch (_) {}
+  try { db.run('ALTER TABLE catalog_overrides ADD COLUMN cover_url TEXT'); } catch (_) {}
+  try { db.run('ALTER TABLE catalog_overrides ADD COLUMN gallery TEXT'); } catch (_) {}
 
   // Check if seeded
   const seeded = db.exec("SELECT value FROM meta WHERE key = 'seeded'");
@@ -382,7 +390,7 @@ export function getHoldings(): Record<string, Record<string, unknown>> {
 }
 
 export function getCatalogOverrides(): Record<string, Record<string, unknown>> {
-  const res = db.exec('SELECT item_id, title, sub, year, type, series, region FROM catalog_overrides');
+  const res = db.exec('SELECT item_id, title, sub, year, type, series, region, cover_url, gallery FROM catalog_overrides');
   if (!res.length) return {};
   const [{ columns, values }] = res;
   const map: Record<string, Record<string, unknown>> = {};
@@ -391,6 +399,7 @@ export function getCatalogOverrides(): Record<string, Record<string, unknown>> {
     columns.forEach((col, i) => { obj[col] = row[i]; });
     const id = obj.item_id as string;
     delete obj.item_id;
+    if (obj.gallery) { try { obj.gallery = JSON.parse(obj.gallery as string); } catch (_) {} }
     map[id] = obj;
   }
   return map;
@@ -416,7 +425,7 @@ export function getUserCollections(): Record<string, unknown>[] {
 }
 
 export function getUserItems(): Record<string, Record<string, unknown>[]> {
-  const res = db.exec('SELECT id, collection_id, title, sub, year, type, color, owned, format, completeness, grade, pressing, edition, condition_val, acquired, watched, completed, custom, series, region FROM user_items ORDER BY collection_id, created_at');
+  const res = db.exec('SELECT id, collection_id, title, sub, year, type, color, owned, format, completeness, grade, pressing, edition, condition_val, acquired, watched, completed, custom, series, region, cover_url, gallery FROM user_items ORDER BY collection_id, created_at');
   if (!res.length) return {};
   const [{ columns, values }] = res;
   const map: Record<string, Record<string, unknown>[]> = {};
@@ -430,6 +439,7 @@ export function getUserItems(): Record<string, Record<string, unknown>[]> {
     if (obj.watched !== null) obj.watched = obj.watched === 1;
     if (obj.completed !== null) obj.completed = obj.completed === 1;
     if (obj.custom) { try { obj.custom = JSON.parse(obj.custom as string); } catch (_) {} }
+    if (obj.gallery) { try { obj.gallery = JSON.parse(obj.gallery as string); } catch (_) {} }
     delete obj.created_at;
     const collId = obj.collectionId as string;
     if (!map[collId]) map[collId] = [];
@@ -503,6 +513,12 @@ export function removeHolding(itemId: string): void {
   scheduleWrite();
 }
 
+function jsonOrNull(v: unknown): string | null {
+  if (v == null) return null;
+  if (typeof v === 'string') return v || null;
+  return JSON.stringify(v);
+}
+
 export function saveCatalogOverride(itemId: string, patch: Record<string, unknown>): void {
   const existing = db.exec('SELECT * FROM catalog_overrides WHERE item_id = ?', [itemId]);
   if (existing.length && existing[0].values.length) {
@@ -511,14 +527,14 @@ export function saveCatalogOverride(itemId: string, patch: Record<string, unknow
     const cur: Record<string, unknown> = {};
     cols.forEach((c, i) => { cur[c] = vals[i]; });
     const merged = { ...cur, ...patch };
-    db.run('UPDATE catalog_overrides SET title=?, sub=?, year=?, type=?, series=?, region=? WHERE item_id=?', [
+    db.run('UPDATE catalog_overrides SET title=?, sub=?, year=?, type=?, series=?, region=?, cover_url=?, gallery=? WHERE item_id=?', [
       sv(merged.title), sv(merged.sub), sv(merged.year), sv(merged.type),
-      sv(merged.series), sv(merged.region), itemId,
+      sv(merged.series), sv(merged.region), sv(merged.cover_url), jsonOrNull(merged.gallery), itemId,
     ]);
   } else {
-    db.run('INSERT INTO catalog_overrides (item_id, title, sub, year, type, series, region) VALUES (?, ?, ?, ?, ?, ?, ?)', [
+    db.run('INSERT INTO catalog_overrides (item_id, title, sub, year, type, series, region, cover_url, gallery) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [
       itemId, sv(patch.title), sv(patch.sub), sv(patch.year), sv(patch.type),
-      sv(patch.series), sv(patch.region),
+      sv(patch.series), sv(patch.region), sv(patch.cover_url), jsonOrNull(patch.gallery),
     ]);
   }
   scheduleWrite();
@@ -564,8 +580,8 @@ export function addUserItem(collectionId: string, draft: Record<string, unknown>
   const w = draft.watched;
   const cp = draft.completed;
   db.run(`INSERT INTO user_items (id, collection_id, title, sub, year, type, color, owned,
-    format, completeness, grade, pressing, edition, condition_val, acquired, watched, completed, custom, series, region)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+    format, completeness, grade, pressing, edition, condition_val, acquired, watched, completed, custom, series, region, cover_url, gallery)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
     id, collectionId,
     sv(draft.title) ?? '', sv(draft.sub), sv(draft.year),
     sv(draft.type), sv(draft.color),
@@ -577,6 +593,8 @@ export function addUserItem(collectionId: string, draft: Record<string, unknown>
     cp == null ? null : (cp ? 1 : 0),
     draft.custom ? JSON.stringify(draft.custom) : null,
     sv(draft.series), sv(draft.region),
+    sv(draft.cover_url) ?? null,
+    jsonOrNull(draft.gallery),
   ]);
   scheduleWrite();
   return { ...draft, id, collectionId, owned: draft.owned !== false };
@@ -588,16 +606,19 @@ export function setUserItemOwned(id: string, owned: boolean): void {
 }
 
 export function updateUserItemFields(id: string, fields: Record<string, unknown>): void {
-  const allowed: Record<string, 'text' | 'int'> = {
+  const allowed: Record<string, 'text' | 'int' | 'json'> = {
     title: 'text', sub: 'text', year: 'int', type: 'text',
     series: 'text', region: 'text', color: 'text',
+    cover_url: 'text', gallery: 'json',
   };
   const cols = Object.keys(fields).filter(k => k in allowed);
   if (!cols.length) return;
   const vals = cols.map(c => {
     const v = fields[c];
     if (v == null || v === '') return null;
-    return allowed[c] === 'int' ? Number(v) : String(v);
+    if (allowed[c] === 'int') return Number(v);
+    if (allowed[c] === 'json') return typeof v === 'string' ? (v || null) : JSON.stringify(v);
+    return String(v);
   });
   db.run(`UPDATE user_items SET ${cols.map(c => `${c} = ?`).join(', ')} WHERE id = ?`, [...vals, id]);
   // Remove any legacy catalog_override for this user item so it can't override direct fields
@@ -728,9 +749,25 @@ export function importArchive(payload: Record<string, unknown>): { imported: num
   return { imported: count };
 }
 
+export function getItemImages(id: string): { cover_url: string | null; gallery: string[] } {
+  const r1 = db.exec('SELECT cover_url, gallery FROM user_items WHERE id = ?', [id]);
+  if (r1.length && r1[0].values.length) {
+    const [cover_url, gallery_json] = r1[0].values[0];
+    const gallery = gallery_json ? (() => { try { return JSON.parse(gallery_json as string) as string[]; } catch (_) { return []; } })() : [];
+    return { cover_url: cover_url as string | null, gallery };
+  }
+  const r2 = db.exec('SELECT cover_url, gallery FROM catalog_overrides WHERE item_id = ?', [id]);
+  if (r2.length && r2[0].values.length) {
+    const [cover_url, gallery_json] = r2[0].values[0];
+    const gallery = gallery_json ? (() => { try { return JSON.parse(gallery_json as string) as string[]; } catch (_) { return []; } })() : [];
+    return { cover_url: cover_url as string | null, gallery };
+  }
+  return { cover_url: null, gallery: [] };
+}
+
 export function getRecentUserItems(limit = 6): Record<string, unknown>[] {
   const res = db.exec(
-    'SELECT id, collection_id, title, sub, year, type, color, owned, acquired, series, region, created_at FROM user_items ORDER BY created_at DESC LIMIT ?',
+    'SELECT id, collection_id, title, sub, year, type, color, owned, acquired, series, region, cover_url, created_at FROM user_items ORDER BY created_at DESC LIMIT ?',
     [limit]
   );
   if (!res.length) return [];
@@ -758,7 +795,7 @@ export function getAllStories(): Record<string, string[]> {
 
 export function getAllUserItemsWithTimestamps(): Record<string, unknown>[] {
   const res = db.exec(
-    'SELECT id, collection_id, title, sub, year, type, color, owned, format, acquired, series, region, created_at FROM user_items ORDER BY created_at DESC'
+    'SELECT id, collection_id, title, sub, year, type, color, owned, format, acquired, series, region, cover_url, created_at FROM user_items ORDER BY created_at DESC'
   );
   if (!res.length) return [];
   const [{ columns, values }] = res;
