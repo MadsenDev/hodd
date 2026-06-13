@@ -82,6 +82,8 @@ const SCHEMA = `
     sub TEXT,
     year INTEGER,
     type TEXT,
+    series TEXT,
+    region TEXT,
     cover_url TEXT,
     gallery TEXT
   );
