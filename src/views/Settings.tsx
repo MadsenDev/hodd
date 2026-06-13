@@ -164,6 +164,11 @@ export function Settings({ onSaved = undefined }) {
           </div>
         </div>
 
+        <div className="settings-version">
+          <span>HODD</span>
+          <span className="settings-version-num">v1.1.0</span>
+        </div>
+
       </div>
     </div>
   );
