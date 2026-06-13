@@ -203,10 +203,22 @@ const FIELD_OPTS = {
 const PLATFORM_OPTS = ["Game Boy", "Game Boy Color", "Game Boy Advance", "NES", "SNES", "N64", "GameCube", "Wii", "Wii U", "Switch", "PS1", "PS2", "PS3", "PS4", "PS5", "Xbox", "Xbox 360", "Xbox One", "Xbox Series X", "PC", "Sega Genesis", "Sega Saturn", "Dreamcast", "3DS", "DS"];
 
 function AddCard({ item, onChange, onRemove, collOpts }) {
+  const [showAlt, setShowAlt] = React.useState(false);
+
   const setField = (i, v) => {
     const fields = item.fields.map((f, j) => j === i ? { ...f, v, c: "high" } : f);
     onChange({ ...item, fields, askCount: fields.filter(f => f.c === "ask").length });
   };
+
+  function applyLookupResult(alt) {
+    let fields = item.fields.map(f => {
+      if (f.k === "Year" && alt.year) return { ...f, v: String(alt.year), c: "high" };
+      if ((f.k === "Platform" || f.k === "Author" || f.k === "Artist") && alt.sub) return { ...f, v: alt.sub, c: "high" };
+      return f;
+    });
+    onChange({ ...item, fields, cover_url: alt.cover_url || item.cover_url, askCount: fields.filter(f => f.c === "ask").length });
+    setShowAlt(false);
+  }
   const opts = collOpts && collOpts.length ? collOpts.map(c => c.name) : [...new Set(Object.values(TYPE_COLL))];
   return (
     <div className="add-card">
@@ -258,6 +270,29 @@ function AddCard({ item, onChange, onRemove, collOpts }) {
         <div style={{ background: "rgba(207,107,90,0.10)", border: "1px solid rgba(207,107,90,0.25)", borderRadius: 8, padding: "7px 11px", fontSize: 12, color: "#cf6b5a", display: "flex", alignItems: "center", gap: 7, marginTop: 8, gridColumn: "1/-1" }}>
           <span>⚠ Already in your hoard — "{item.duplicate.title}" · {item.duplicate.type}</span>
           <button onClick={() => onChange({ ...item, duplicate: null })} style={{ marginLeft: "auto", fontSize: 11, color: "#cf6b5a", background: "rgba(207,107,90,0.15)", border: "1px solid rgba(207,107,90,0.30)", borderRadius: 5, padding: "2px 8px", cursor: "pointer", whiteSpace: "nowrap" }}>Add anyway</button>
+        </div>
+      )}
+      {(item._lookupResults || []).length > 1 && (
+        <div style={{ gridColumn: "1/-1", marginTop: 4 }}>
+          <button onClick={() => setShowAlt(v => !v)} style={{ fontSize: 11, color: "var(--mute)", background: "none", border: "none", padding: 0, cursor: "pointer", textDecoration: "underline" }}>
+            {showAlt ? "Hide alternatives" : `Wrong match? View ${item._lookupResults.length - 1} other result${item._lookupResults.length > 2 ? "s" : ""}`}
+          </button>
+          {showAlt && (
+            <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+              {item._lookupResults.map((alt, i) => (
+                <button key={i} onClick={() => applyLookupResult(alt)}
+                  style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: "var(--panel)", border: "1px solid var(--border-soft)", borderRadius: 8, cursor: "pointer", textAlign: "left", maxWidth: 200 }}>
+                  {alt.cover_url
+                    ? <img src={alt.cover_url} style={{ width: 30, height: 38, objectFit: "cover", borderRadius: 3, flexShrink: 0 }} />
+                    : <div style={{ width: 30, height: 38, background: "var(--bg)", borderRadius: 3, flexShrink: 0 }} />}
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "var(--fg)", lineHeight: 1.3 }}>{alt.title}</div>
+                    <div style={{ fontSize: 10, color: "var(--mute)" }}>{[alt.year, alt.sub].filter(Boolean).join(" · ")}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
       <button className="add-remove" onClick={onRemove} title="Remove"><I.close size={15} /></button>
@@ -355,7 +390,9 @@ function AddDesktop({ onClose, onAdded, ctx, ollamaModel }) {
       const afterLookup = onlineLookup && onlineLookup.length
         ? applyEnrichment(item, onlineLookup[0], false, true)
         : item;
-      return aiEnrich ? applyEnrichment(afterLookup, aiEnrich, true) : afterLookup;
+      const enriched = aiEnrich ? applyEnrichment(afterLookup, aiEnrich, true) : afterLookup;
+      // Stash all lookup candidates so the user can switch if the top match is wrong
+      return { ...enriched, _lookupResults: onlineLookup || [] };
     }));
 
     if (ollamaFailed) toaster.error("Ollama enrichment failed — check that Ollama is running and a model is selected.");
