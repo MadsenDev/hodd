@@ -589,8 +589,10 @@ body {
 .add-field.ask { border-color: var(--accent-wash); border-style: dashed; }
 .add-field .afv-input {
   background: none; border: none; outline: none; color: var(--text); font-family: var(--sans);
-  font-size: 13px; font-weight: 600; width: 96px; border-bottom: 1px dashed var(--border-strong);
+  font-size: 13px; font-weight: 600; border-bottom: 1px dashed var(--border-strong);
 }
+.add-field input.afv-input { width: 120px; }
+.add-field select.afv-input { width: auto; max-width: 160px; appearance: auto; cursor: pointer; }
 .add-field .afv-input::placeholder { color: var(--accent-deep); opacity: .65; font-weight: 500; }
 .add-remove { flex: 0 0 auto; align-self: flex-start; width: 28px; height: 28px; border-radius: 8px; border: none; background: none; color: var(--mute); cursor: pointer; display: grid; place-items: center; transition: all .15s; }
 .add-remove:hover { background: var(--panel); color: var(--text); }

@@ -4,16 +4,23 @@ import { I, typeIcon } from './icons';
 import { createCollection, addItem } from './api';
 
 export const FORMAT_OPTIONS = {
-  game:  ["Cartridge", "Disc", "Digital", "Boxed set"],
-  book:  ["Hardcover", "Paperback", "Mass market", "Ebook", "Audiobook"],
-  movie: ["4K Blu-ray", "Blu-ray", "DVD", "Digital", "VHS"],
+  game:  ["Cartridge", "Disc", "Steam", "Epic Games", "GOG", "Xbox Game Pass", "PS Plus", "Nintendo eShop", "Battle.net", "Ubisoft Connect", "EA App", "itch.io", "Local file (ROM/ISO)"],
+  book:  ["Hardcover", "Paperback", "Mass market", "Kindle", "Kobo", "Apple Books", "Google Play Books", "Local file (EPUB/PDF)"],
+  movie: ["4K Blu-ray", "Blu-ray", "DVD", "VHS", "Apple TV+", "Amazon", "Disney+", "Vudu", "Google Play", "Local file (MKV/MP4)"],
   coin:  ["Silver dollar", "Gold", "Silver", "Copper", "Proof set"],
   vinyl: ["Vinyl LP", "7\" single", "Boxed set", "Picture disc"],
-  comic: ["Single issue", "Trade paperback", "Hardcover", "Omnibus"],
+  comic: ["Single issue", "Trade paperback", "Hardcover", "Omnibus", "Comixology", "Local file (CBZ/PDF)"],
 };
 export const CONDITION_OPTIONS = ["Mint", "Near Mint", "Very Good", "Good", "Fair", "Poor"];
 export const COMPLETENESS_OPTIONS = ["Complete in box", "Loose", "Sealed", "Manual only"];
 export const TYPE_OPTIONS = [["game", "Game"], ["book", "Book"], ["movie", "Movie"], ["coin", "Coin"], ["vinyl", "Vinyl"], ["comic", "Comic"], ["other", "Other / custom"]];
+export const OWNERSHIP_OPTIONS: [string, string][] = [
+  ["owned",        "Owned"],
+  ["borrowed",     "Borrowed"],
+  ["subscription", "Subscription"],
+  ["wishlist",     "Wishlist"],
+];
+export const OWNERSHIP_LABEL: Record<string, string> = Object.fromEntries(OWNERSHIP_OPTIONS);
 export const SUBLABELS = { book: "Author", game: "Platform", coin: "Mint", vinyl: "Artist", movie: "Director", comic: "Publisher", other: "Detail" };
 
 export const ACCENT_SWATCHES = ["#6366f1", "#5BA47A", "#5C8AD6", "#C9A24C", "#CF6B5A", "#7FB0C4", "#9B7BD4", "#C0392B"];
@@ -90,8 +97,12 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
     acquired: item.acquired || "",
     watched: !!item.watched,
     completed: !!item.completed,
+    notes: item.notes || "",
+    loan_from: item.loan_from || "",
+    loan_date: item.loan_date || "",
   };
-  const [owned, setOwned] = React.useState(item.owned !== false);
+  const initOwnership = item.ownership || (item.owned !== false ? "owned" : "wishlist");
+  const [ownership, setOwnership] = React.useState(initOwnership);
   const [f, setF] = React.useState(init);
   const [c, setC] = React.useState({
     title: item.title || "",
@@ -191,12 +202,16 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
       // If original cover was replaced by a new pick (not in original gallery), old cover stays in
       // original gallery tracking so it's handled above; new cover is already in next gallery
     }
-    if (!owned) { onSave({ owned: false, canonical, story: paragraphs }); return; }
+    if (ownership === "wishlist") { onSave({ owned: false, canonical, story: paragraphs }); return; }
     const holding = {
+      ownership,
       format: f.format || null,
       condition: f.condition || null,
       acquired: f.acquired || null,
       custom: customClean.length ? customClean : null,
+      notes: f.notes || null,
+      loan_from: ownership === "borrowed" ? (f.loan_from || null) : null,
+      loan_date: ownership === "borrowed" ? (f.loan_date || null) : null,
     };
     if (etype === "game")  { holding.completeness = f.completeness || null; holding.completed = f.completed; }
     if (etype === "coin")  holding.grade = f.grade || null;
@@ -210,7 +225,7 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
     <div className="edit-form">
       <div className="ef-head">
         <div className="ef-title">Edit item</div>
-        <EFToggle label="In collection" value={owned} onChange={setOwned} hint={["Owned", "Missing"]} />
+        <EFSelect label="Status" value={ownership} pairs={OWNERSHIP_OPTIONS} placeholder={false} onChange={setOwnership} />
       </div>
 
       <div className="ef-section ef-section-row">
@@ -262,7 +277,7 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
         {etype === "game" && <EFText label="Region" value={c.region} placeholder="e.g. NTSC, PAL, JPN" onChange={v => setCan("region", v)} />}
       </div>
 
-      {owned ? (
+      {ownership !== "wishlist" ? (
         <>
           <div className="ef-section">Your copy</div>
           <div className="ef-grid">
@@ -276,6 +291,13 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
             {etype === "movie" && <EFToggle label="Watched" value={f.watched} onChange={v => set("watched", v)} hint={["Yes", "Not yet"]} />}
             {etype === "book"  && <EFToggle label="Read" value={f.watched} onChange={v => set("watched", v)} hint={["Yes", "Not yet"]} />}
             {etype === "game"  && <EFToggle label="Completed" value={f.completed} onChange={v => set("completed", v)} hint={["Yes", "Not yet"]} />}
+            {ownership === "borrowed" && (
+              <>
+                <EFText label="Borrowed from" value={f.loan_from} placeholder="Name or place" onChange={v => set("loan_from", v)} />
+                <EFText label="Since" value={f.loan_date} placeholder="e.g. March 2024" onChange={v => set("loan_date", v)} />
+              </>
+            )}
+            <EFText label="Notes" value={f.notes} placeholder="Quick note about this copy…" onChange={v => set("notes", v)} wide />
           </div>
 
           <div className="ef-section ef-section-row">

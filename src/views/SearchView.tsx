@@ -20,6 +20,7 @@ export function SearchView({ initial, ctx, ollamaModel }) {
   const [value, setValue] = React.useState(initial || "");
   const [out, setOut] = React.useState(null);
   const [phase, setPhase] = React.useState("idle");
+  const [aiPending, setAiPending] = React.useState(false);
   const [ollamaOn, setOllamaOn] = React.useState(false);
   const [ollamaAvail, setOllamaAvail] = React.useState(false);
 
@@ -33,15 +34,19 @@ export function SearchView({ initial, ctx, ollamaModel }) {
     setValue(query);
     setPhase("thinking");
 
+    // Always run heuristic for instant token tags
+    const heuristic = { ...searchHoard(query, index.data), q: query, aiPowered: false };
+    setOut(heuristic);
+    setTimeout(() => setPhase("done"), 220);
+
     if (ollamaOn && ollamaAvail && ollamaModel) {
+      setAiPending(true);
       try {
         const result = await OllamaClient.ollamaSearch(query, index.data, ollamaModel);
-        if (result) { setOut(result); setPhase("done"); return; }
+        if (result) { setOut(result); setPhase("done"); }
       } catch (_) {}
+      setAiPending(false);
     }
-
-    setOut({ ...searchHoard(query, index.data), q: query, aiPowered: false });
-    setTimeout(() => setPhase("done"), 220);
   }
 
   React.useEffect(() => { if (initial && index.data) run(initial); /* eslint-disable-next-line */ }, [index.data]);
@@ -79,7 +84,7 @@ export function SearchView({ initial, ctx, ollamaModel }) {
         {SEARCH_SAMPLES.map(s => <div key={s} className="chip" onClick={() => run(s)}>{s}</div>)}
       </div>
 
-      {out && !out.aiPowered && (
+      {out && (
         <div className="search-translate">
           <div className="translate-eyebrow">
             <I.sparkle size={15} /> {phase === "thinking" ? "Translating…" : "Understood as"}
@@ -96,11 +101,17 @@ export function SearchView({ initial, ctx, ollamaModel }) {
 
       {out && phase === "done" && (
         <>
-          <div className="answer-card">
-            <div className="answer-mark"><I.sparkle size={16} /></div>
-            <div className="answer-text">{out.summary}</div>
-          </div>
-          {out.results.length > 0 && (
+          {!aiPending && (
+            <div className="answer-card">
+              <div className="answer-mark"><I.sparkle size={16} /></div>
+              <div className="answer-text">{out.summary}</div>
+            </div>
+          )}
+          {aiPending ? (
+            <div className="ai-hint" style={{ marginTop: 24, display: "flex", alignItems: "center", gap: 8 }}>
+              <I.refresh size={13} className="spin" /> AI is refining results…
+            </div>
+          ) : out.results.length > 0 ? (
             <div>
               <div className="section-head" style={{ marginTop: 24 }}>
                 <div className="eyebrow">{out.total} result{out.total !== 1 ? "s" : ""}{out.total > out.results.length ? ` · showing ${out.results.length}` : ""}</div>
@@ -118,7 +129,7 @@ export function SearchView({ initial, ctx, ollamaModel }) {
                 ))}
               </div>
             </div>
-          )}
+          ) : null}
         </>
       )}
     </div>

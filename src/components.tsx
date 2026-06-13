@@ -53,6 +53,118 @@ export function CompletionRing({ pct = 0, size = 54, stroke = 5, color = "var(--
   );
 }
 
+// ── Game cover helper ─────────────────────────────────────────────────────────
+
+function gameCoverBody(platform: string, color: string, h: number, item: any) {
+  const label = item.sub || "";
+  const title = item.title || "";
+
+  // Nintendo handheld: Game Boy, GBA, GBC, DS, 3DS
+  const isNintendoHandheld = /\b(game\s*boy(?: advance| color)?|gba|gbc|gbs|ds|3ds|2ds)\b/.test(platform);
+  if (isNintendoHandheld) {
+    return (
+      <>
+        <div style={{ height: "15%", background: "linear-gradient(180deg,#2b2b2b,#161616)", display: "flex", alignItems: "center", padding: "0 8%",
+          borderBottom: "2px solid " + rgba(color, 0.9) }}>
+          <span style={{ fontSize: Math.max(7, h*0.052), fontWeight: 800, letterSpacing: ".06em", color: "#d8d8d8", textTransform: "uppercase" }}>{label || "GAME BOY"}</span>
+        </div>
+        <div style={{ height: "85%", padding: "10% 9% 9%", display: "flex", flexDirection: "column", justifyContent: "center",
+          background: `radial-gradient(120% 90% at 50% 18%, ${shade(color,35)}, ${shade(color,-30)} 80%)` }}>
+          <div style={{ fontFamily: "var(--serif)", fontWeight: 700, fontSize: h*0.115, color: "#fff", lineHeight: 1.05, textShadow: "0 1px 3px rgba(0,0,0,.5)" }}>{title}</div>
+        </div>
+      </>
+    );
+  }
+
+  // Modern disc-based consoles: PS3/4/5, Xbox One/360/Series, Wii/Wii U, GameCube
+  const isDiscConsole = /\b(ps[345]|playstation\s*[345]|xbox(?:\s*(?:one|360|series[sx]?))?|wii\s*u?|gamecube|gc)\b/.test(platform);
+  if (isDiscConsole) {
+    return (
+      <>
+        <div style={{ height: "100%", background: `linear-gradient(160deg, ${shade(color,-20)}, ${shade(color,-50)} 100%)`, display: "flex", flexDirection: "column" }}>
+          <div style={{ height: "18%", background: "#e8e8e8", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 8%" }}>
+            <span style={{ fontSize: Math.max(7, h*0.055), fontWeight: 700, letterSpacing: ".05em", color: color, textTransform: "uppercase" }}>{label}</span>
+            <svg width={h*0.09} height={h*0.09} viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke={color} strokeWidth="2" />
+              <circle cx="12" cy="12" r="4" stroke={color} strokeWidth="1.5" />
+              <circle cx="12" cy="12" r="1.5" fill={color} />
+            </svg>
+          </div>
+          <div style={{ flex: 1, padding: "10% 9% 9%", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+            <div style={{ fontFamily: "var(--serif)", fontWeight: 700, fontSize: h*0.115, color: "#fff", lineHeight: 1.05, textShadow: "0 2px 6px rgba(0,0,0,.7)" }}>{title}</div>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // Classic Nintendo home: NES, SNES, N64
+  const isClassicNintendo = /\b(nes|snes|super\s*nintendo|n64|nintendo\s*64)\b/.test(platform);
+  if (isClassicNintendo) {
+    return (
+      <>
+        <div style={{ height: "60%", background: color, display: "flex", flexDirection: "column", justifyContent: "center", padding: "8% 9%",
+          boxShadow: `inset 0 -4px 12px ${rgba("#000",0.3)}` }}>
+          <div style={{ fontFamily: "var(--serif)", fontWeight: 800, fontSize: h*0.13, color: "#fff", lineHeight: 1.05, textShadow: "0 2px 6px rgba(0,0,0,.45)" }}>{title}</div>
+        </div>
+        <div style={{ height: "40%", background: "#3a3a3a",
+          backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 4px, rgba(0,0,0,0.18) 4px, rgba(0,0,0,0.18) 5px)",
+          display: "flex", alignItems: "flex-end", padding: "0 9% 8%" }}>
+          <span style={{ fontSize: Math.max(7, h*0.055), fontWeight: 700, letterSpacing: ".08em", color: rgba("#fff",0.65), textTransform: "uppercase" }}>{label}</span>
+        </div>
+      </>
+    );
+  }
+
+  // PC / Steam / Digital
+  const isPCDigital = /\b(pc|steam|windows|mac|linux|epic|gog|digital|origin|battle\.?net|uplay)\b/.test(platform);
+  if (isPCDigital) {
+    return (
+      <div style={{ height: "100%", background: `linear-gradient(135deg, ${shade(color,20)}, ${shade(color,-25)} 100%)`,
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "8%" }}>
+        <div style={{ width: "78%", border: `2px solid ${rgba("#fff",0.45)}`, borderRadius: 5, padding: "10% 8%", textAlign: "center",
+          boxShadow: `inset 0 0 0 3px ${rgba("#000",0.18)}`, background: rgba("#000",0.15) }}>
+          <div style={{ fontFamily: "var(--serif)", fontWeight: 700, fontSize: h*0.108, color: "#fff", lineHeight: 1.05, textShadow: "0 1px 4px rgba(0,0,0,.6)" }}>{title}</div>
+        </div>
+        <div style={{ marginTop: "8%", background: rgba("#000",0.35), borderRadius: 20, padding: "2% 6%",
+          fontSize: Math.max(7, h*0.05), fontWeight: 600, letterSpacing: ".06em", color: rgba("#fff",0.85), textTransform: "uppercase" }}>{label}</div>
+      </div>
+    );
+  }
+
+  // Sega: Genesis, Saturn, Dreamcast, Game Gear
+  const isSega = /\b(sega|genesis|mega\s*drive|saturn|dreamcast|game\s*gear|sg)\b/.test(platform);
+  if (isSega) {
+    return (
+      <>
+        <div style={{ height: "20%", background: "#1a237e", display: "flex", alignItems: "center", padding: "0 8%", justifyContent: "space-between" }}>
+          <span style={{ fontSize: Math.max(8, h*0.065), fontWeight: 900, letterSpacing: ".08em", color: "#fff", fontStyle: "italic" }}>SEGA</span>
+          <span style={{ fontSize: Math.max(6, h*0.048), fontWeight: 600, letterSpacing: ".04em", color: rgba("#fff",0.75), textTransform: "uppercase" }}>{label}</span>
+        </div>
+        <div style={{ height: "80%", padding: "10% 9% 9%", display: "flex", flexDirection: "column", justifyContent: "center",
+          background: `linear-gradient(160deg, ${shade(color,-10)}, ${shade(color,-45)} 100%)` }}>
+          <div style={{ fontFamily: "var(--serif)", fontWeight: 700, fontSize: h*0.115, color: "#fff", lineHeight: 1.05, textShadow: "0 2px 6px rgba(0,0,0,.6)" }}>{title}</div>
+        </div>
+      </>
+    );
+  }
+
+  // Default fallback: Game Boy style
+  return (
+    <>
+      <div style={{ height: "15%", background: "linear-gradient(180deg,#2b2b2b,#161616)", display: "flex", alignItems: "center", padding: "0 8%",
+        borderBottom: "2px solid " + rgba(color, 0.9) }}>
+        <span style={{ fontSize: Math.max(7, h*0.052), fontWeight: 800, letterSpacing: ".06em", color: "#d8d8d8", textTransform: "uppercase" }}>{label || "GAME"}</span>
+      </div>
+      <div style={{ height: "85%", padding: "10% 9% 9%", display: "flex", flexDirection: "column", justifyContent: "center",
+        background: `radial-gradient(120% 90% at 50% 18%, ${shade(color,35)}, ${shade(color,-30)} 80%)` }}>
+        <div style={{ fontFamily: "var(--serif)", fontWeight: 700, fontSize: h*0.115, color: "#fff", lineHeight: 1.05, textShadow: "0 1px 3px rgba(0,0,0,.5)" }}>{title}</div>
+        {label && <div style={{ fontSize: h*0.06, color: rgba("#fff",0.78), marginTop: 6, letterSpacing: ".02em" }}>{label}</div>}
+      </div>
+    </>
+  );
+}
+
 // ── Cover ─────────────────────────────────────────────────────────────────────
 
 export function Cover({ item, h = 168, ghost = false, onClick = undefined, glyph = true }) {
@@ -82,7 +194,7 @@ export function Cover({ item, h = 168, ghost = false, onClick = undefined, glyph
       <div className={cls} style={{ width: w, height: h, borderRadius: br, overflow: "hidden",
         boxShadow: type === "book" ? `inset -8px 0 14px ${rgba("#000",0.28)}, 0 14px 26px -14px rgba(0,0,0,.85)` : undefined }}
         onClick={onClick}>
-        <img src={`hodd-img://${item.cover_url}`} alt={item.title}
+        <img src={item.cover_url.startsWith("http://") || item.cover_url.startsWith("https://") ? item.cover_url : `hodd-img://${item.cover_url}`} alt={item.title}
           style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
       </div>
     );
@@ -119,18 +231,11 @@ export function Cover({ item, h = 168, ghost = false, onClick = undefined, glyph
   }
 
   if (type === "game") {
+    const platform = (item.sub || "").toLowerCase();
     return (
       <div className={cls} style={{ width: w, height: h, borderRadius: 6, overflow: "hidden",
-        background: "#15110a", border: "1px solid rgba(0,0,0,0.5)" }} onClick={onClick}>
-        <div style={{ height: "15%", background: "linear-gradient(180deg,#2b2b2b,#161616)", display: "flex", alignItems: "center", padding: "0 8%",
-          borderBottom: "2px solid " + rgba(color,0.9) }}>
-          <span style={{ fontSize: Math.max(7, h*0.052), fontWeight: 800, letterSpacing: ".06em", color: "#d8d8d8" }}>GAME BOY</span>
-        </div>
-        <div style={{ height: "85%", padding: "10% 9% 9%", display: "flex", flexDirection: "column", justifyContent: "center",
-          background: `radial-gradient(120% 90% at 50% 18%, ${shade(color,35)}, ${shade(color,-30)} 80%)` }}>
-          <div style={{ fontFamily: "var(--serif)", fontWeight: 700, fontSize: h*0.115, color: "#fff", lineHeight: 1.05, textShadow: "0 1px 3px rgba(0,0,0,.5)" }}>{item.title}</div>
-          {item.sub && <div style={{ fontSize: h*0.06, color: rgba("#fff",0.78), marginTop: 6, letterSpacing: ".02em" }}>{item.sub}</div>}
-        </div>
+        border: "1px solid rgba(0,0,0,0.5)" }} onClick={onClick}>
+        {gameCoverBody(platform, color, h, item)}
       </div>
     );
   }

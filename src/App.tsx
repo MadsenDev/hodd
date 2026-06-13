@@ -4,11 +4,11 @@ import { I } from './icons';
 import { Cover, Sidebar, Topbar, MobileTopBar, MobileTabs, useNarrow, Toaster } from './components';
 import { toaster } from './toaster';
 import { useTweaks, TweaksPanel, TweakSection, TweakRadio, TweakColor, TweakSelect } from './tweaks';
-import { useUser, useCollections } from './hooks';
+import { useUser, useCollections, useSearchIndex } from './hooks';
 import { OllamaClient, addItem, lookupMetadata, invalidateCache } from './api';
-import { TYPE_COLL, TYPE_LABEL, parseHoardLines } from './engine';
+import { TYPE_COLL, TYPE_COLOR, TYPE_LABEL, parseHoardLines } from './engine';
 import { typeIcon } from './icons';
-import { CreateCollectionModal, AddItemModal } from './forms';
+import { CreateCollectionModal, AddItemModal, FORMAT_OPTIONS, CONDITION_OPTIONS, COMPLETENESS_OPTIONS } from './forms';
 import { Home, HomeNew } from './views/Home';
 import { Collections, CollectionsNew } from './views/Collections';
 import { CollectionDetail } from './views/CollectionDetail';
@@ -68,7 +68,9 @@ const ENRICH_FIELD_MAP = {
   series: "Series", region: "Region",
 };
 
-function applyEnrichment(item, enrich) {
+const AI_OVERRIDE_FIELDS = new Set(["Year"]);
+
+function applyEnrichment(item, enrich, aiPass = false) {
   if (!enrich) return item;
   let fields = [...item.fields];
   let title = item.title;
@@ -82,7 +84,8 @@ function applyEnrichment(item, enrich) {
     const fieldKey = ENRICH_FIELD_MAP[key];
     if (!fieldKey) return;
     const idx = fields.findIndex(f => f.k === fieldKey);
-    if (idx >= 0 && fields[idx].c === "ask") {
+    const canOverride = fields[idx]?.c === "ask" || (aiPass && AI_OVERRIDE_FIELDS.has(fieldKey));
+    if (idx >= 0 && canOverride) {
       fields = fields.map((f, i) => i === idx ? { ...f, v: String(val), c: "high" } : f);
     } else if (idx < 0) {
       fields = [...fields, { k: fieldKey, v: String(val), c: "high" }];
@@ -99,16 +102,23 @@ function buildDraft(item) {
     : (yearRaw && !/^Confirm/i.test(String(yearRaw))) ? parseInt(String(yearRaw), 10) : null;
   const sub = ["Platform", "Author", "Artist", "Mint", "Director", "Publisher"]
     .map(k => byKey[k]).find(v => v && !/^Confirm/i.test(String(v)));
-  const edition = byKey["Edition"];
+  const editionRaw = byKey["Edition"];
   const completeness = byKey["Completeness"];
   const grade = byKey["Grade"];
   const pressing = byKey["Pressing"];
   const series = byKey["Series"];
   const region = byKey["Region"];
+  const ownership = byKey["Ownership"];
+  const typeFormatOpts = FORMAT_OPTIONS[item.type] || [];
+  const isFormatVal = editionRaw && typeFormatOpts.includes(String(editionRaw));
+  const format = isFormatVal ? String(editionRaw) : null;
+  const edition = !isFormatVal ? editionRaw : null;
   return {
     title: item.title, type: item.type, color: item.color,
     year: Number.isFinite(year) ? year : null,
     sub: sub || null, owned: true,
+    ...(ownership ? { ownership } : {}),
+    ...(format ? { format } : {}),
     ...(edition && !/^Standard$|^Confirm/i.test(String(edition)) ? { edition: String(edition) } : {}),
     ...(completeness && !/^Confirm/i.test(String(completeness)) ? { completeness: String(completeness) } : {}),
     ...(grade && !/^Confirm|^Add/i.test(String(grade)) ? { grade: String(grade) } : {}),
@@ -118,9 +128,76 @@ function buildDraft(item) {
   };
 }
 
+function normalizeTitle(s) {
+  return (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
+function parseCSVRow(line) {
+  const result = [];
+  let cur = '', inQ = false;
+  for (const ch of line) {
+    if (ch === '"') inQ = !inQ;
+    else if (ch === ',' && !inQ) { result.push(cur.trim()); cur = ''; }
+    else cur += ch;
+  }
+  result.push(cur.trim());
+  return result;
+}
+
+function parseCSVItems(csvText) {
+  const lines = csvText.split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) return [];
+  const headers = parseCSVRow(lines[0]).map(h => h.toLowerCase());
+  const idx = (k) => headers.indexOf(k);
+  const items = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cols = parseCSVRow(lines[i]);
+    const get = (k) => { const j = idx(k); return j >= 0 ? (cols[j] || '') : ''; };
+    const title = get('title');
+    if (!title) continue;
+    const type = get('type') || 'game';
+    const year = get('year') ? parseInt(get('year'), 10) : null;
+    const sub = get('platform') || null;
+    const series = get('series') || null;
+    const format = get('format') || null;
+    const condition = get('condition') || null;
+    const ownership = get('status') || 'owned';
+    const notes = get('notes') || null;
+    const color = TYPE_COLOR[type] || TYPE_COLOR['game'];
+    const collection = TYPE_COLL[type] || 'Games';
+    const fields = [
+      { k: 'Title', v: title, c: 'high' },
+      { k: 'Type', v: TYPE_LABEL[type] || type, c: 'high' },
+      ...(type === 'game' ? [{ k: 'Platform', v: sub || 'Confirm platform', c: sub ? 'high' : 'ask' }] : []),
+      ...(type === 'book' ? [{ k: 'Author', v: sub || 'Confirm author', c: sub ? 'high' : 'ask' }] : []),
+      ...(type === 'vinyl' ? [{ k: 'Artist', v: sub || 'Confirm artist', c: sub ? 'high' : 'ask' }] : []),
+      ...(type === 'coin' ? [{ k: 'Mint', v: sub || 'Confirm mint', c: sub ? 'high' : 'ask' }] : []),
+      { k: 'Year', v: year || 'Confirm year', c: year ? 'high' : 'ask' },
+      ...(format ? [{ k: 'Edition', v: format, c: 'high' }] : [{ k: 'Edition', v: 'Standard', c: 'ask' }]),
+      ...(condition ? [{ k: 'Condition', v: condition, c: 'high' }] : []),
+      ...(series ? [{ k: 'Series', v: series, c: 'high' }] : []),
+      ...(notes ? [{ k: 'Notes', v: notes, c: 'high' }] : []),
+    ];
+    items.push({
+      id: 'csv-' + Math.random().toString(36).slice(2, 8),
+      raw: title, title, type, color, collection,
+      sub, series, format, condition, ownership,
+      fields,
+      askCount: fields.filter(f => f.c === 'ask').length,
+    });
+  }
+  return items;
+}
+
 function ConfBadge({ c }) {
   return <span className={"conf " + c}>{c === "high" ? "Confident" : "Confirm"}</span>;
 }
+
+const FIELD_OPTS = {
+  Completeness: COMPLETENESS_OPTIONS,
+  Condition: CONDITION_OPTIONS,
+};
+const PLATFORM_OPTS = ["Game Boy", "Game Boy Color", "Game Boy Advance", "NES", "SNES", "N64", "GameCube", "Wii", "Wii U", "Switch", "PS1", "PS2", "PS3", "PS4", "PS5", "Xbox", "Xbox 360", "Xbox One", "Xbox Series X", "PC", "Sega Genesis", "Sega Saturn", "Dreamcast", "3DS", "DS"];
 
 function AddCard({ item, onChange, onRemove, collOpts }) {
   const setField = (i, v) => {
@@ -145,18 +222,41 @@ function AddCard({ item, onChange, onRemove, collOpts }) {
         <div className="add-fields">
           {item.fields.filter(f => f.k !== "Title" && f.k !== "Type").map((f, i0) => {
             const i = item.fields.indexOf(f);
+            const isAsk = f.c === "ask";
+            const dropOpts = FIELD_OPTS[f.k] || (f.k === "Platform" && item.type === "game" ? PLATFORM_OPTS : null)
+                          || (f.k === "Edition" && FORMAT_OPTIONS[item.type] ? FORMAT_OPTIONS[item.type] : null);
             return (
-              <div className={"add-field" + (f.c === "ask" ? " ask" : "")} key={f.k}>
+              <div className={"add-field" + (isAsk ? " ask" : "")} key={f.k}>
                 <span className="afk">{f.k}</span>
-                {f.c === "ask"
-                  ? <input className="afv-input" placeholder={f.v} onChange={e => setField(i, e.target.value)} />
-                  : <span className="afv">{f.v}</span>}
-                {f.c === "high" && <I.check size={12} stroke={2.6} className="af-ok" />}
+                {dropOpts ? (
+                  <select
+                    className="afv-input"
+                    value={/^Confirm/i.test(String(f.v)) ? "" : f.v}
+                    onChange={e => setField(i, e.target.value)}
+                  >
+                    <option value="">{isAsk ? `Choose ${f.k.toLowerCase()}` : "—"}</option>
+                    {dropOpts.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                ) : (
+                  <input
+                    className="afv-input"
+                    value={/^Confirm/i.test(String(f.v)) ? "" : f.v}
+                    placeholder={isAsk ? f.v : ""}
+                    onChange={e => setField(i, e.target.value)}
+                  />
+                )}
+                {!isAsk && f.v && !/^Confirm/i.test(String(f.v)) && <I.check size={12} stroke={2.6} className="af-ok" />}
               </div>
             );
           })}
         </div>
       </div>
+      {item.duplicate && (
+        <div style={{ background: "rgba(207,107,90,0.10)", border: "1px solid rgba(207,107,90,0.25)", borderRadius: 8, padding: "7px 11px", fontSize: 12, color: "#cf6b5a", display: "flex", alignItems: "center", gap: 7, marginTop: 8, gridColumn: "1/-1" }}>
+          <span>⚠ Already in your hoard — "{item.duplicate.title}" · {item.duplicate.type}</span>
+          <button onClick={() => onChange({ ...item, duplicate: null })} style={{ marginLeft: "auto", fontSize: 11, color: "#cf6b5a", background: "rgba(207,107,90,0.15)", border: "1px solid rgba(207,107,90,0.30)", borderRadius: 5, padding: "2px 8px", cursor: "pointer", whiteSpace: "nowrap" }}>Add anyway</button>
+        </div>
+      )}
       <button className="add-remove" onClick={onRemove} title="Remove"><I.close size={15} /></button>
     </div>
   );
@@ -212,10 +312,23 @@ function AddDesktop({ onClose, onAdded, ctx, ollamaModel }) {
   const [stage, setStage] = useState("input"); // input | thinking | review
   const [statusMsg, setStatusMsg] = useState("");
   const [items, setItems] = useState([]);
+  const [isCSVImport, setIsCSVImport] = useState(false);
+  const csvFileRef = useRef(null);
   const inputRef = useRef(null);
   useEffect(() => { inputRef.current && inputRef.current.focus(); }, []);
   const colls = useCollections();
   const collOpts = colls.data || [];
+  const searchIndex = useSearchIndex();
+
+  function applyDuplicateDetection(parsed) {
+    const idx = searchIndex.data || [];
+    return parsed.map(item => {
+      const normItem = normalizeTitle(item.title);
+      const existing = idx.find(e => normalizeTitle(e.title || "") === normItem);
+      if (existing) return { ...item, duplicate: { id: existing.id, title: existing.title, type: existing.type } };
+      return item;
+    });
+  }
 
   const lineCount = text.split("\n").map(s => s.trim()).filter(Boolean).length;
 
@@ -239,13 +352,45 @@ function AddDesktop({ onClose, onAdded, ctx, ollamaModel }) {
       const afterLookup = onlineLookup && onlineLookup.length
         ? applyEnrichment(item, onlineLookup[0])
         : item;
-      return aiEnrich ? applyEnrichment(afterLookup, aiEnrich) : afterLookup;
+      return aiEnrich ? applyEnrichment(afterLookup, aiEnrich, true) : afterLookup;
     }));
 
     if (ollamaFailed) toaster.error("Ollama enrichment failed — check that Ollama is running and a model is selected.");
     if (metaFailed) toaster.error("Online metadata lookup failed — items will need manual review.");
-    setItems(parsed);
+    setIsCSVImport(false);
+    setItems(applyDuplicateDetection(parsed));
     setStage("review");
+  }
+
+  async function importCSV() {
+    const desktop = (window as any).hoddDesktop;
+    if (desktop?.api?.pickFile) {
+      const result = await desktop.api.pickFile({ filters: [{ name: 'CSV', extensions: ['csv'] }] });
+      if (!result || result.canceled || !result.content) return;
+      const parsed = parseCSVItems(result.content);
+      if (!parsed.length) { toaster.error("No valid rows found in the CSV file."); return; }
+      setIsCSVImport(true);
+      setItems(applyDuplicateDetection(parsed));
+      setStage("review");
+    } else {
+      csvFileRef.current && csvFileRef.current.click();
+    }
+  }
+
+  function onCSVFileChange(e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const content = (ev.target as any).result as string;
+      const parsed = parseCSVItems(content);
+      if (!parsed.length) { toaster.error("No valid rows found in the CSV file."); return; }
+      setIsCSVImport(true);
+      setItems(applyDuplicateDetection(parsed));
+      setStage("review");
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   }
 
   function addExample(s) {
@@ -268,6 +413,7 @@ function AddDesktop({ onClose, onAdded, ctx, ollamaModel }) {
   }
 
   const totalAsk = items.reduce((n, it) => n + it.askCount, 0);
+  const dupCount = items.filter(it => it.duplicate).length;
   const enrichLabel = ollamaModel ? "Ollama + metadata" : "online metadata";
 
   return (
@@ -278,7 +424,12 @@ function AddDesktop({ onClose, onAdded, ctx, ollamaModel }) {
             <I.sparkle size={20} style={{ color: "var(--accent)" }} />
             <div>
               <div className="lbl">Add to your hoard</div>
-              <h3>{stage === "review" ? `${items.length} item${items.length !== 1 ? "s" : ""} ready to add` : "What did you collect?"}</h3>
+              <h3>
+                {stage === "review" ? `${items.length} item${items.length !== 1 ? "s" : ""} ready to add` : "What did you collect?"}
+                {stage === "review" && isCSVImport && (
+                  <span style={{ marginLeft: 10, fontSize: 12, fontWeight: 600, background: "var(--accent-wash)", color: "var(--accent)", borderRadius: 6, padding: "2px 8px", verticalAlign: "middle" }}>Import CSV</span>
+                )}
+              </h3>
             </div>
           </div>
           <button className="icon-btn" onClick={onClose} style={{ width: 38, height: 38 }}><I.close size={18} /></button>
@@ -291,7 +442,11 @@ function AddDesktop({ onClose, onAdded, ctx, ollamaModel }) {
                 placeholder={"Type or paste — one item per line\n\nPokemon Red CIB\nMorgan Dollar 1884-O\nDune hardcover"}
                 value={text} onChange={e => setText(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) analyze(); }} />
-              <div className="ai-hint"><I.sparkle size={13} /> Shorthand is parsed on-device, then enriched via {enrichLabel}. Nothing saves until you confirm.</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 6 }}>
+                <div className="ai-hint" style={{ margin: 0 }}><I.sparkle size={13} /> Shorthand is parsed on-device, then enriched via {enrichLabel}. Nothing saves until you confirm.</div>
+                <button onClick={importCSV} style={{ fontSize: 12, color: "var(--accent)", background: "none", border: "none", padding: 0, cursor: "pointer", whiteSpace: "nowrap", textDecoration: "underline", flexShrink: 0 }}>or import from CSV</button>
+              </div>
+              <input ref={csvFileRef} type="file" accept=".csv" style={{ display: "none" }} onChange={onCSVFileChange} />
               <div className="add-examples">
                 <span className="add-examples-lbl">Try</span>
                 {ADD_EXAMPLES.map(s => <div className="chip" key={s} onClick={() => addExample(s)}>{s}</div>)}
@@ -308,6 +463,9 @@ function AddDesktop({ onClose, onAdded, ctx, ollamaModel }) {
             <div className="parse">
               <div className="parse-status">
                 <I.check size={16} stroke={2.4} /> Ready.{" "}
+                {dupCount > 0 && (
+                  <span style={{ color: "#cf6b5a" }}>{dupCount} possible duplicate{dupCount !== 1 ? "s" : ""} detected.{" "}</span>
+                )}
                 {totalAsk > 0
                   ? <span>{totalAsk} field{totalAsk !== 1 ? "s" : ""} still need a confirm — fill them in or leave blank.</span>
                   : <span>All fields filled in — looking good.</span>}
@@ -319,7 +477,7 @@ function AddDesktop({ onClose, onAdded, ctx, ollamaModel }) {
                     onRemove={() => setItems(items.filter((_, j) => j !== i))} />
                 ))}
               </div>
-              <button className="add-more" onClick={() => setStage("input")}><I.plus size={15} /> Add more shorthand</button>
+              <button className="add-more" onClick={() => { setStage("input"); setIsCSVImport(false); }}><I.plus size={15} /> Add more shorthand</button>
             </div>
           )}
         </div>
@@ -386,6 +544,7 @@ export default function App() {
   useEffect(() => {
     OllamaClient.getModels().then(setOllamaModels).catch(() => {});
   }, []);
+  const activeOllamaModel = t.ollamaModel || ollamaModels[0] || "";
   const histRef = useRef([]);
   const scrollRef = useRef(null);
   const searchNavRef = useRef(0);
@@ -454,8 +613,8 @@ export default function App() {
   if (view === "home") body = t.homeStyle === "Dashboard" ? <Home ctx={ctx} /> : <HomeNew ctx={ctx} art={t.shelfArt} />;
   else if (view === "collections") body = t.collStyle === "Cards" ? <Collections ctx={ctx} /> : <CollectionsNew ctx={ctx} art={t.shelfArt} />;
   else if (view === "collection") body = <CollectionDetail collId={collId} ctx={ctx} />;
-  else if (view === "item") body = <ItemDetail item={item} collection={itemColl} ctx={ctx} ollamaModel={t.ollamaModel} />;
-  else if (view === "search") body = <SearchView initial={searchInit} ctx={ctx} ollamaModel={t.ollamaModel} />;
+  else if (view === "item") body = <ItemDetail item={item} collection={itemColl} ctx={ctx} ollamaModel={activeOllamaModel} />;
+  else if (view === "search") body = <SearchView initial={searchInit} ctx={ctx} ollamaModel={activeOllamaModel} />;
   else if (view === "statistics") body = <Statistics ctx={ctx} />;
   else if (view === "wishlist")   body = <Wishlist ctx={ctx} />;
   else if (view === "favorites")  body = <Favorites ctx={ctx} />;
@@ -489,7 +648,7 @@ export default function App() {
         </div>
       </div>
       <MobileTabs active={activeNav} onNav={navTo} />
-      {addOpen && <AddModal onClose={() => setAddOpen(false)} onAdded={bumpData} ctx={ctx} ollamaModel={t.ollamaModel} />}
+      {addOpen && <AddModal onClose={() => setAddOpen(false)} onAdded={bumpData} ctx={ctx} ollamaModel={activeOllamaModel} />}
       {createCollOpen && <CreateCollectionModal
         onClose={() => setCreateCollOpen(false)}
         onCreated={(rec) => { setCreateCollOpen(false); bumpData(); ctx.openCollection(rec.id); }} />}

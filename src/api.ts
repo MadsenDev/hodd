@@ -5,7 +5,7 @@
 import { toaster } from './toaster';
 
 const COLL_NAME = { pokemon: "Pokémon Games", books: "Books", movies: "Movies", games: "Games", coins: "Coins", comics: "Comics", vinyl: "Vinyl" };
-export const HOLDING_FIELDS = ["format", "completeness", "grade", "pressing", "edition", "condition", "acquired", "watched", "custom"];
+export const HOLDING_FIELDS = ["ownership", "notes", "loan_from", "loan_date", "format", "completeness", "grade", "pressing", "edition", "condition", "acquired", "watched", "custom"];
 const USER_HUES = ["#6366f1", "#5BA47A", "#5C8AD6", "#C9A24C", "#CF6B5A", "#7FB0C4", "#9B7BD4", "#C0392B"];
 
 let _catalog   = null;
@@ -247,6 +247,10 @@ function joinHolding(cat, h) {
     watched:      h ? h.watched : undefined,
     completed:    h ? h.completed : undefined,
     custom:       (h && h.custom)       || null,
+    notes:        (h && h.notes)        || null,
+    ownership:    (h && h.ownership)    || null,
+    loan_from:    (h && h.loan_from)    || null,
+    loan_date:    (h && h.loan_date)    || null,
   });
 }
 
@@ -553,7 +557,7 @@ export const OllamaClient = {
       "The collection may contain: games, books, movies, coins, comics, vinyl records.",
       "Parse the user's query and respond with ONLY valid JSON (no markdown):",
       '{ "type": "game|book|movie|coin|comic|vinyl|null",',
-      '  "status": "owned|missing|null",',
+      '  "status": "owned|missing|null (null unless the user explicitly says owned/have/my or missing/want/looking for)",',
       '  "watched": "yes|no|null",',
       '  "completed": "yes|no|null",',
       '  "yearFrom": number_or_null,',
@@ -592,7 +596,16 @@ export const OllamaClient = {
       ].join(" ");
       const answer = await ollamaGenerate(model, answerPrompt,
         "You are a helpful assistant for a personal collection app. Be concise and warm.");
-      return { tokens: [], results: results.slice(0, 24), total: results.length, summary: (answer as string).trim(), q: query, aiPowered: true };
+      const tokens: [string, string][] = [];
+      if (filters.type)              tokens.push(["Type",      filters.type.charAt(0).toUpperCase() + filters.type.slice(1)]);
+      if (filters.status)            tokens.push(["Status",    filters.status === "owned" ? "Owned" : "Missing"]);
+      if (filters.watched === "yes") tokens.push(["Watched",   "Yes"]);
+      if (filters.watched === "no")  tokens.push(["Watched",   "No"]);
+      if (filters.completed === "yes") tokens.push(["Completed", "Yes"]);
+      if (filters.completed === "no")  tokens.push(["Completed", "No"]);
+      if (filters.yearFrom || filters.yearTo) tokens.push(["Year", [filters.yearFrom, filters.yearTo].filter(Boolean).join("–")]);
+      if (filters.keywords?.length)  tokens.push(["Keywords",  filters.keywords.join(", ")]);
+      return { tokens, results: results.slice(0, 24), total: results.length, summary: (answer as string).trim(), q: query, aiPowered: true };
     } catch (e) {
       console.warn("[HODD Ollama] search failed, falling back to heuristic:", e.message);
       return null;
@@ -601,14 +614,14 @@ export const OllamaClient = {
 
   async enrichItem(rawText, type, model) {
     const prompts = {
-      game:  `Input: "${rawText}"\nType: game\nReturn JSON only: {"title":"exact title","year":YYYY,"platform":"Game Boy|SNES|GBA|NES|N64|PS1|PS2|etc","completeness":"CIB|Loose|Sealed|null","condition":"Mint|Near Mint|Very Good|Good|Fair|Poor|null"}`,
-      book:  `Input: "${rawText}"\nType: book\nReturn JSON only: {"title":"exact title","year":YYYY,"author":"Full Name","edition":"First Edition|Paperback|Hardcover|Mass Market|null"}`,
-      movie: `Input: "${rawText}"\nType: movie\nReturn JSON only: {"title":"exact title","year":YYYY,"director":"Full Name or null","format":"4K Blu-ray|Blu-ray|DVD|Digital|VHS|null"}`,
-      vinyl: `Input: "${rawText}"\nType: vinyl\nReturn JSON only: {"title":"exact title","year":YYYY,"artist":"Full Name","pressing":"180g|Original Press|Limited|null"}`,
-      coin:  `Input: "${rawText}"\nType: coin\nReturn JSON only: {"title":"coin name","year":YYYY,"mint":"Philadelphia|Denver|San Francisco|New Orleans|Carson City|null","grade":"MS-63|MS-64|etc or null"}`,
-      comic: `Input: "${rawText}"\nType: comic\nReturn JSON only: {"title":"exact title","year":YYYY,"publisher":"Marvel|DC|Image|Dark Horse|etc","format":"Single Issue|TPB|Hardcover|Omnibus|null"}`,
+      game:  `Input: "${rawText}"\nType: game\nReturn JSON only: {"title":"clean game title only — no platform name, no year, no edition (e.g. 'Cyberpunk 2077' not 'Cyberpunk 2077 PS4')","year":REAL_RELEASE_YEAR_NOT_FROM_TITLE,"platform":"Game Boy|SNES|GBA|NES|N64|PS1|PS2|PS3|PS4|PS5|Xbox|Xbox 360|Xbox One|PC|Switch|etc","completeness":"CIB|Loose|Sealed|null (null unless explicitly stated)","condition":"Mint|Near Mint|Very Good|Good|Fair|Poor|null (null unless explicitly stated)","series":"franchise/series name or null (e.g. The Legend of Zelda, Mario, Halo)"}`,
+      book:  `Input: "${rawText}"\nType: book\nReturn JSON only: {"title":"exact title","year":YYYY,"author":"Full Name","edition":"First Edition|Paperback|Hardcover|Mass Market|null","series":"book series name or null (e.g. Harry Potter, Dune, The Expanse)"}`,
+      movie: `Input: "${rawText}"\nType: movie\nReturn JSON only: {"title":"exact title","year":YYYY,"director":"Full Name or null","format":"4K Blu-ray|Blu-ray|DVD|Digital|VHS|null","series":"film series/franchise or null (e.g. Marvel Cinematic Universe, James Bond, Star Wars)"}`,
+      vinyl: `Input: "${rawText}"\nType: vinyl\nReturn JSON only: {"title":"exact title","year":YYYY,"artist":"Full Name","pressing":"180g|Original Press|Limited|null","series":"album series or box set name or null"}`,
+      coin:  `Input: "${rawText}"\nType: coin\nReturn JSON only: {"title":"coin name","year":YYYY,"mint":"Philadelphia|Denver|San Francisco|New Orleans|Carson City|null","grade":"MS-63|MS-64|etc or null","series":"coin series or program or null (e.g. State Quarters, Walking Liberty, Morgan Dollar)"}`,
+      comic: `Input: "${rawText}"\nType: comic\nReturn JSON only: {"title":"exact title","year":YYYY,"publisher":"Marvel|DC|Image|Dark Horse|etc","format":"Single Issue|TPB|Hardcover|Omnibus|null","series":"comic series name or null (e.g. Amazing Spider-Man, Batman, Saga)"}`,
     };
-    const prompt = prompts[type] || `Input: "${rawText}"\nReturn JSON only: {"title":"exact title","year":YYYY}`;
+    const prompt = prompts[type] || `Input: "${rawText}"\nReturn JSON only: {"title":"exact title","year":YYYY,"series":"series or franchise name or null"}`;
     try {
       const raw = await ollamaGenerate(model, prompt,
         "You are a collectibles database. Return ONLY valid JSON. No markdown, no explanations. Use null for unknown fields.");

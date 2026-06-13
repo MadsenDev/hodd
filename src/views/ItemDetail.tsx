@@ -5,7 +5,7 @@ import { Cover, FluidCover, useNarrow } from '../components';
 import { useCollection, useStory } from '../hooks';
 import { saveCatalog, saveStory, saveHolding, removeHolding, removeItem, setItemOwned, toggleFavorite, OllamaClient } from '../api';
 import { useFavorite } from '../hooks';
-import { ItemEditForm, SUBLABELS } from '../forms';
+import { ItemEditForm, SUBLABELS, OWNERSHIP_LABEL } from '../forms';
 
 function fallbackStory(item) {
   return [
@@ -20,6 +20,9 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
   const [editing, setEditing] = React.useState(false);
   const [storyOv, setStoryOv] = React.useState(null);
   const [generatingStory, setGeneratingStory] = React.useState(false);
+  const [findingCover, setFindingCover] = React.useState(false);
+  const [coverCandidates, setCoverCandidates] = React.useState([]);
+  const [pasteUrlInput, setPasteUrlInput] = React.useState("");
   const [confirmDelete, setConfirmDelete] = React.useState(false);
   const [lightboxImg, setLightboxImg] = React.useState(null);
   const favState = useFavorite(item.id);
@@ -58,7 +61,7 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
   const medium = (item.format && item.format !== "—" && item.format !== "Owned") ? item.format : null;
   const subLabel = SUBLABELS[type] || "Detail";
   const facts = [
-    ["Status", owned ? "Owned" : "Missing"],
+    ["Status", owned ? (OWNERSHIP_LABEL[item.ownership] || "Owned") : "Wishlist"],
     owned && ["Format", medium],
     ["Year", item.year],
     [subLabel, item.sub],
@@ -74,6 +77,9 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
     owned && ["Condition", item.condition],
     ...(owned && Array.isArray(item.custom) ? item.custom.map(x => [x.label, x.value]) : []),
     owned && ["Acquired", item.acquired],
+    owned && item.notes && ["Notes", item.notes],
+    owned && item.ownership === "borrowed" && item.loan_from && ["Borrowed from", item.loan_from],
+    owned && item.ownership === "borrowed" && item.loan_date && ["Since", item.loan_date],
   ].filter(f => f && f[1] != null && f[1] !== "");
 
   return (
@@ -125,16 +131,85 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
               ))}
             </div>
           )}
+          {!item.cover_url && !editing && (
+            <div style={{ marginTop: 10, textAlign: "center" }}>
+              {!findingCover ? (
+                <button className="btn" style={{ fontSize: 11, padding: "3px 10px" }}
+                  onClick={async () => {
+                    setFindingCover(true);
+                    setCoverCandidates([]);
+                    setPasteUrlInput("");
+                    if (type === "book" && item.title) {
+                      try {
+                        const q = `https://openlibrary.org/search.json?title=${encodeURIComponent(item.title)}${item.sub ? `&author=${encodeURIComponent(item.sub)}` : ""}&limit=3`;
+                        const res = await fetch(q);
+                        const data = await res.json();
+                        const ids = (data.docs || []).map(d => d.cover_i).filter(Boolean).slice(0, 3);
+                        setCoverCandidates(ids.map(id => `https://covers.openlibrary.org/b/id/${id}-L.jpg`));
+                      } catch (_) {}
+                    }
+                  }}>
+                  <I.image size={12} /> Find cover online
+                </button>
+              ) : (
+                <div style={{ marginTop: 8 }}>
+                  {type === "book" ? (
+                    coverCandidates.length > 0 ? (
+                      <div>
+                        <div style={{ fontSize: 11, color: "var(--mute)", marginBottom: 6 }}>Select a cover:</div>
+                        <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+                          {coverCandidates.map(url => (
+                            <img key={url} src={url} alt="" style={{ height: 90, borderRadius: 4, cursor: "pointer", border: "2px solid transparent", objectFit: "cover" }}
+                              onClick={() => {
+                                saveCatalog(item.id, { cover_url: url });
+                                setItem(prev => ({ ...prev, cover_url: url }));
+                                setFindingCover(false);
+                                setCoverCandidates([]);
+                              }} />
+                          ))}
+                        </div>
+                        <button className="btn" style={{ fontSize: 11, padding: "3px 8px", marginTop: 8 }} onClick={() => setFindingCover(false)}>Cancel</button>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 12, color: "var(--mute)" }}>
+                        No covers found on Open Library.{" "}
+                        <button className="btn" style={{ fontSize: 11, padding: "2px 8px" }} onClick={() => setFindingCover(false)}>Close</button>
+                      </div>
+                    )
+                  ) : (
+                    <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", justifyContent: "center" }}>
+                      <input style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--panel-2)", color: "var(--fg)", width: 220 }}
+                        placeholder="Paste image URL…"
+                        value={pasteUrlInput}
+                        onChange={e => setPasteUrlInput(e.target.value)} />
+                      <button className="btn solid" style={{ fontSize: 11, padding: "4px 10px" }}
+                        disabled={!pasteUrlInput.trim().startsWith("http")}
+                        onClick={() => {
+                          const url = pasteUrlInput.trim();
+                          saveCatalog(item.id, { cover_url: url });
+                          setItem(prev => ({ ...prev, cover_url: url }));
+                          setFindingCover(false);
+                          setPasteUrlInput("");
+                        }}>
+                        Use this URL
+                      </button>
+                      <button className="btn" style={{ fontSize: 11, padding: "4px 8px" }} onClick={() => setFindingCover(false)}>Cancel</button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <div>
           <div className="eyebrow" style={{ color: "var(--gold-deep)" }}>{collection ? collection.name : (item.collName || item.sub || type)}</div>
           <h1>{item.title}</h1>
-          <div className="byline">{item.sub || subLabel}</div>
+          {type !== "game" && <div className="byline">{item.sub || subLabel}</div>}
           {!editing && (
             <div style={{ display: "flex", gap: 10, marginTop: 18, flexWrap: "wrap", alignItems: "center" }}>
               {item.owned === false
-                ? <span className="badge badge-missing" style={{ fontSize: 12, padding: "8px 14px", border: "1px solid var(--border-soft)", borderRadius: 20 }}><I.plus size={13} stroke={2} /> Not in collection</span>
-                : <span className="badge badge-owned" style={{ fontSize: 12, padding: "8px 14px", border: "1px solid var(--border)", borderRadius: 20, background: "var(--accent-wash)" }}><I.check size={13} stroke={2.2} /> In your collection</span>}
+                ? <span className="badge badge-missing" style={{ fontSize: 12, padding: "8px 14px", border: "1px solid var(--border-soft)", borderRadius: 20 }}><I.plus size={13} stroke={2} /> Wishlist</span>
+                : <span className="badge badge-owned" style={{ fontSize: 12, padding: "8px 14px", border: "1px solid var(--border)", borderRadius: 20, background: "var(--accent-wash)" }}><I.check size={13} stroke={2.2} /> {OWNERSHIP_LABEL[item.ownership] || "Owned"}</span>}
               <button className="btn" onClick={() => setEditing(true)}><I.edit size={16} /> Edit details</button>
               {item.owned === false
                 ? <button className="btn solid" onClick={() => setEditing(true)}><I.plus size={16} /> Add to collection</button>
@@ -179,7 +254,7 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
                   if (isOwned === false) {
                     removeHolding(item.id);
                     if (isUserItem) setItemOwned(item.id, false);
-                    setItem({ ...item, ...(canonical || {}), ...photoUpdate, owned: false, format: null, completeness: null, completed: null, grade: null, pressing: null, edition: null, condition: null, acquired: null, watched: undefined });
+                    setItem({ ...item, ...(canonical || {}), ...photoUpdate, owned: false, format: null, completeness: null, completed: null, grade: null, pressing: null, edition: null, condition: null, acquired: null, watched: undefined, notes: null, ownership: null, loan_from: null, loan_date: null });
                   } else {
                     saveHolding(item.id, holding);
                     if (isUserItem && item.owned === false) setItemOwned(item.id, true);

@@ -28,6 +28,32 @@ export function Discover({ ctx }) {
   const almostDone    = colls.filter(c => c.pct >= 75 && c.pct < 100 && c.missing > 0);
   const biggestGaps   = [...colls].sort((a, b) => b.missing - a.missing).slice(0, 3).filter(c => c.missing > 0);
 
+  // Flatten all items across all collections
+  const allItems = colls.flatMap(c => c.items || []);
+
+  // Acquisition pace: items added in last 30 days vs prev 30 days
+  const now = Date.now();
+  const MS30 = 30 * 24 * 60 * 60 * 1000;
+  const thisMonth = allItems.filter(i => i.created_at && (now - new Date(i.created_at).getTime()) < MS30).length;
+  const prevMonth = allItems.filter(i => {
+    if (!i.created_at) return false;
+    const age = now - new Date(i.created_at).getTime();
+    return age >= MS30 && age < MS30 * 2;
+  }).length;
+  const paceTrend = thisMonth > prevMonth ? "up" : thisMonth < prevMonth ? "down" : "flat";
+
+  // Type breakdown
+  const TYPE_COLORS = { game: "#9B7BD4", book: "#5BA47A", movie: "#5C8AD6", coin: "#C9A24C", comic: "#CF6B5A", vinyl: "#7FB0C4" };
+  const typeCounts = {};
+  allItems.forEach(i => { if (i.type) typeCounts[i.type] = (typeCounts[i.type] || 0) + 1; });
+  const typeEntries = Object.entries(typeCounts).sort((a, b) => b[1] - a[1]);
+  const maxTypeCount = typeEntries.length ? typeEntries[0][1] : 1;
+
+  // Most active series
+  const seriesCounts = {};
+  allItems.forEach(i => { if (i.series) seriesCounts[i.series] = (seriesCounts[i.series] || 0) + 1; });
+  const topSeries = Object.entries(seriesCounts).sort((a, b) => b[1] - a[1]).slice(0, 3);
+
   return (
     <div className="view-enter">
       <div className="discover-hero">
@@ -86,6 +112,60 @@ export function Discover({ ctx }) {
                   <div className="dr-sub">{c.owned} owned · {c.missing} to find</div>
                 </div>
                 <I.arrowRight size={16} style={{ color: 'var(--mute)', flexShrink: 0 }} />
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Acquisition pace */}
+      <div className="section-head" style={{ marginTop: 32 }}>
+        <div className="eyebrow">Acquisition pace</div>
+      </div>
+      <div style={{ background: 'var(--panel)', border: '1px solid var(--border-soft)', borderRadius: 12, padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--fg)' }}>{thisMonth}</div>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg)' }}>
+            item{thisMonth !== 1 ? 's' : ''} added this month
+            {paceTrend === 'up' && <span style={{ marginLeft: 8, color: '#5BA47A' }}>▲ up from {prevMonth}</span>}
+            {paceTrend === 'down' && <span style={{ marginLeft: 8, color: '#CF6B5A' }}>▼ down from {prevMonth}</span>}
+            {paceTrend === 'flat' && prevMonth > 0 && <span style={{ marginLeft: 8, color: 'var(--mute)', fontSize: 11 }}>same as last month</span>}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--mute)', marginTop: 2 }}>compared to {prevMonth} item{prevMonth !== 1 ? 's' : ''} the month before</div>
+        </div>
+      </div>
+
+      {/* Type breakdown */}
+      {typeEntries.length > 0 && (
+        <>
+          <div className="section-head" style={{ marginTop: 32 }}>
+            <div className="eyebrow">Type breakdown</div>
+          </div>
+          <div style={{ background: 'var(--panel)', border: '1px solid var(--border-soft)', borderRadius: 12, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {typeEntries.map(([type, count]) => (
+              <div key={type} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 52, fontSize: 11, color: 'var(--mute)', textAlign: 'right', textTransform: 'capitalize', flexShrink: 0 }}>{type}</div>
+                <div style={{ flex: 1, background: 'var(--bg)', borderRadius: 4, height: 10, overflow: 'hidden' }}>
+                  <div style={{ width: `${Math.round(count / maxTypeCount * 100)}%`, height: '100%', background: TYPE_COLORS[type] || 'var(--accent)', borderRadius: 4, transition: 'width 0.3s' }} />
+                </div>
+                <div style={{ width: 28, fontSize: 12, fontWeight: 600, color: 'var(--fg)', textAlign: 'right', flexShrink: 0 }}>{count}</div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Most active series */}
+      {topSeries.length > 0 && (
+        <>
+          <div className="section-head" style={{ marginTop: 32 }}>
+            <div className="eyebrow">Most active series</div>
+          </div>
+          <div style={{ background: 'var(--panel)', border: '1px solid var(--border-soft)', borderRadius: 12, padding: '16px 20px', display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+            {topSeries.map(([series, count]) => (
+              <div key={series} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--bg)', border: '1px solid var(--border-soft)', borderRadius: 20, padding: '5px 12px', fontSize: 12 }}>
+                <span style={{ color: 'var(--fg)', fontWeight: 500 }}>{series}</span>
+                <span style={{ background: 'var(--accent)', color: '#fff', borderRadius: 10, padding: '1px 7px', fontSize: 10, fontWeight: 700 }}>{count}</span>
               </div>
             ))}
           </div>

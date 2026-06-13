@@ -11,12 +11,14 @@ export function Wishlist({ ctx }) {
   if (index.loading) return <Loading label="Building your wishlist…" />;
   if (index.error) return <ErrorState error={index.error} onRetry={index.refetch} />;
 
-  const items = (index.data || []).filter(i => i.owned === false);
+  const items = (index.data || []).filter(i =>
+    i.ownership === "wishlist" || (i.owned === false && !i.ownership)
+  );
 
   if (!items.length) return (
     <EmptyState
-      title="Nothing missing yet"
-      sub="Items you mark as not owned appear here — your hunt list. Browse your collections and track what you're still after."
+      title="Your wishlist is empty"
+      sub="Your wishlist is empty — mark items as Wishlist when editing to track what you want to hunt down next."
     />
   );
 

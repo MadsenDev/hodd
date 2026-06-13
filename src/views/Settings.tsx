@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { I } from '../icons';
 import { Loading } from '../components';
-import { getSettings, saveSetting, exportData, importData } from '../api';
+import { getSettings, saveSetting, exportData, importData, OllamaClient, saveCatalog, getSearchIndex, invalidateCache } from '../api';
+import { useSearchIndex } from '../hooks';
 import { OllamaSetupCard } from './OllamaSetupCard';
 import { toaster } from '../toaster';
 
@@ -21,6 +22,16 @@ export function Settings({ onSaved = undefined }) {
   const [exportDone, setExportDone] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importDone, setImportDone] = useState(false);
+
+  // Bulk series enrichment
+  const searchIndexState = useSearchIndex();
+  const allItems = searchIndexState.data || [];
+  const [ollamaRunning, setOllamaRunning] = useState(false);
+  const [enrichProgress, setEnrichProgress] = useState<string | null>(null);
+
+  useEffect(() => {
+    OllamaClient.isRunning().then(setOllamaRunning).catch(() => setOllamaRunning(false));
+  }, []);
 
   useEffect(() => {
     getSettings().then(s => {
@@ -79,6 +90,61 @@ export function Settings({ onSaved = undefined }) {
     } finally {
       setExporting(false);
     }
+  }
+
+  function triggerDownload(content: string, filename: string, mimeType: string) {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleExportCSV() {
+    const items = await getSearchIndex();
+    const headers = "title,type,year,platform,series,format,completeness,condition,grade,pressing,edition,ownership,acquired,notes,favorite";
+    const escape = (v: any) => {
+      if (v == null) return "";
+      const s = String(v);
+      return s.includes(",") || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const rows = items.map(i => [
+      i.title, i.type, i.year, i.sub, i.series, i.format,
+      i.completeness, i.condition, i.grade, i.pressing, i.edition,
+      i.owned !== false ? (i.ownership || "owned") : "wishlist", i.acquired, i.notes, i.favorite ? "true" : "",
+    ].map(escape).join(","));
+    triggerDownload([headers, ...rows].join("\n"), "hoard.csv", "text/csv");
+  }
+
+  async function handleExportJSON() {
+    const items = await getSearchIndex();
+    triggerDownload(JSON.stringify(items, null, 2), "hoard.json", "application/json");
+  }
+
+  async function handleBulkEnrichSeries() {
+    const items = (await getSearchIndex()).filter(i => i.owned !== false && !i.series);
+    if (!items.length) { toaster.success("All owned items already have a series set."); return; }
+    const model = await OllamaClient.getModels().then(m => m[0]).catch(() => null);
+    if (!model) { toaster.error("No Ollama model found. Please pull a model first."); return; }
+    let detected = 0;
+    const total = items.length;
+    const batchSize = 3;
+    for (let i = 0; i < items.length; i += batchSize) {
+      setEnrichProgress(`Enriching ${Math.min(i + batchSize, total)} of ${total}…`);
+      const batch = items.slice(i, i + batchSize);
+      await Promise.all(batch.map(async item => {
+        const text = item.title + (item.sub ? ' ' + item.sub : '');
+        const result = await OllamaClient.enrichItem(text, item.type, model).catch(() => null);
+        if (result && result.series) {
+          saveCatalog(item.id, { series: result.series });
+          detected++;
+        }
+      }));
+    }
+    invalidateCache();
+    searchIndexState.refetch();
+    setEnrichProgress(`Done — ${detected} series detected`);
+    setTimeout(() => setEnrichProgress(null), 5000);
   }
 
   if (loading) return <Loading label="Loading settings…" />;
@@ -170,6 +236,47 @@ export function Settings({ onSaved = undefined }) {
             </button>
           </div>
         </div>
+
+        <div className="panel settings-panel">
+          <div className="section-head" style={{ margin: "0 0 8px" }}>
+            <div className="eyebrow">Export your hoard</div>
+          </div>
+          <p className="settings-hint">
+            Download your entire collection as a CSV spreadsheet or a JSON file for use in other apps.
+          </p>
+          <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button className="btn" onClick={handleExportCSV}>
+              <I.download size={16} /> Export as CSV
+            </button>
+            <button className="btn" onClick={handleExportJSON}>
+              <I.download size={16} /> Export as JSON
+            </button>
+          </div>
+        </div>
+
+        {ollamaRunning && (
+          <div className="panel settings-panel">
+            <div className="section-head" style={{ margin: "0 0 8px" }}>
+              <div className="eyebrow">Bulk enrich series</div>
+            </div>
+            <p className="settings-hint">
+              Automatically detect the series for items that don't have one set yet, using your local Ollama model.
+            </p>
+            <div style={{ marginTop: 16, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+              <button className="btn" disabled={!!enrichProgress} onClick={handleBulkEnrichSeries}>
+                <I.sparkle size={16} /> Detect series for items missing one
+                {allItems.filter(i => i.owned !== false && !i.series).length > 0 && (
+                  <span style={{ marginLeft: 6, fontSize: 11, color: "var(--mute)", fontWeight: 400 }}>
+                    ({allItems.filter(i => i.owned !== false && !i.series).length} items)
+                  </span>
+                )}
+              </button>
+              {enrichProgress && (
+                <span style={{ fontSize: 13, color: "var(--mute)" }}>{enrichProgress}</span>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="settings-version">
           <span>HODD</span>
