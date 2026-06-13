@@ -75,6 +75,18 @@ export function Cover({ item, h = 168, ghost = false, onClick = undefined, glyph
     );
   }
 
+  if (item.cover_url) {
+    const br = type === "coin" ? "50%" : type === "book" ? "3px 6px 6px 3px" : 6;
+    return (
+      <div className={cls} style={{ width: w, height: h, borderRadius: br, overflow: "hidden",
+        boxShadow: type === "book" ? `inset -8px 0 14px ${rgba("#000",0.28)}, 0 14px 26px -14px rgba(0,0,0,.85)` : undefined }}
+        onClick={onClick}>
+        <img src={`hodd-img://${item.cover_url}`} alt={item.title}
+          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+      </div>
+    );
+  }
+
   if (type === "coin") {
     return (
       <div className={cls} style={{ width: w, height: h, borderRadius: "50%",

@@ -21,6 +21,7 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
   const [storyOv, setStoryOv] = React.useState(null);
   const [generatingStory, setGeneratingStory] = React.useState(false);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
+  const [lightboxImg, setLightboxImg] = React.useState(null);
   const favState = useFavorite(item.id);
   const isFav = !!favState.data;
   const [favOptimistic, setFavOptimistic] = React.useState(null);
@@ -112,6 +113,18 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
       <div className="item-detail">
         <div className="big-cover">
           <FluidCover item={item} ghost={item.owned === false} maxWidth={narrow ? 300 : 360} />
+          {Array.isArray(item.gallery) && item.gallery.length > 0 && (
+            <div className="gallery-strip">
+              {item.gallery.map(filename => (
+                <div key={filename}
+                  className={"gallery-thumb" + (filename === item.cover_url ? " is-cover" : "")}
+                  onClick={() => setLightboxImg(filename)}
+                  title={filename === item.cover_url ? "Cover photo" : "View photo"}>
+                  <img src={`hodd-img://${filename}`} alt="" />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <div>
           <div className="eyebrow" style={{ color: "var(--gold-deep)" }}>{collection ? collection.name : (item.collName || item.sub || type)}</div>
@@ -152,16 +165,25 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
             ? <ItemEditForm item={item} type={type} subLabel={subLabel} story={story}
                 onCancel={() => setEditing(false)}
                 onSave={({ owned: isOwned, holding, canonical, story: paras }) => {
-                  if (canonical) saveCatalog(item.id, canonical);
+                  if (canonical) {
+                    const patch = { ...canonical };
+                    if (Array.isArray(patch.gallery)) patch.gallery = JSON.stringify(patch.gallery);
+                    saveCatalog(item.id, patch);
+                  }
                   if (paras) { saveStory(item.id, paras); setStoryOv(paras); }
+                  const photoUpdate = {
+                    cover_url: canonical?.cover_url ?? null,
+                    gallery: Array.isArray(canonical?.gallery) ? canonical.gallery
+                      : (canonical?.gallery ? (() => { try { return JSON.parse(canonical.gallery); } catch (_) { return item.gallery; } })() : null),
+                  };
                   if (isOwned === false) {
                     removeHolding(item.id);
                     if (isUserItem) setItemOwned(item.id, false);
-                    setItem({ ...item, ...(canonical || {}), owned: false, format: null, completeness: null, completed: null, grade: null, pressing: null, edition: null, condition: null, acquired: null, watched: undefined });
+                    setItem({ ...item, ...(canonical || {}), ...photoUpdate, owned: false, format: null, completeness: null, completed: null, grade: null, pressing: null, edition: null, condition: null, acquired: null, watched: undefined });
                   } else {
                     saveHolding(item.id, holding);
                     if (isUserItem && item.owned === false) setItemOwned(item.id, true);
-                    setItem({ ...item, ...(canonical || {}), owned: true, ...holding });
+                    setItem({ ...item, ...(canonical || {}), ...photoUpdate, owned: true, ...holding });
                   }
                   setEditing(false);
                 }} />
@@ -201,6 +223,20 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
           )}
         </div>
       </div>
+
+      {lightboxImg && (
+        <div className="lightbox-scrim" onClick={() => setLightboxImg(null)}>
+          <button className="lightbox-close" onClick={() => setLightboxImg(null)} title="Close">
+            <I.close size={22} stroke={2} />
+          </button>
+          <img
+            src={`hodd-img://${lightboxImg}`}
+            alt=""
+            className="lightbox-img"
+            onClick={e => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }

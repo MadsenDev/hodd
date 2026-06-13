@@ -72,6 +72,8 @@ export function EFToggle({ label, value, onChange, hint }) {
   );
 }
 
+const ipc = () => (window as any).hoddDesktop?.api;
+
 export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) {
   const init = {
     format: item.format && item.format !== "—" && item.format !== "Owned" ? item.format : "",
@@ -100,11 +102,52 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
       : []
   );
   const [storyText, setStoryText] = React.useState((story || []).join("\n\n"));
+
+  // Photo state
+  const originalGallery = React.useRef(Array.isArray(item.gallery) ? item.gallery : []);
+  const [coverUrl, setCoverUrl] = React.useState(item.cover_url || null);
+  const [gallery, setGallery] = React.useState(Array.isArray(item.gallery) ? item.gallery : []);
+
   const set = (k, v) => setF(prev => ({ ...prev, [k]: v }));
   const setCan = (k, v) => setC(prev => ({ ...prev, [k]: v }));
   const setRow = (i, k, v) => setCustom(p => p.map((r, idx) => idx === i ? { ...r, [k]: v } : r));
   const addRow = () => setCustom(p => [...p, { label: "", value: "" }]);
   const delRow = (i) => setCustom(p => p.filter((_, idx) => idx !== i));
+
+  async function pickCoverPhoto() {
+    const a = ipc(); if (!a) return;
+    const result = await a.pickImage(false);
+    if (result?.canceled || !result?.files?.length) return;
+    const filename = result.files[0];
+    setCoverUrl(filename);
+    setGallery(g => g.includes(filename) ? g : [filename, ...g]);
+  }
+
+  async function addGalleryPhotos() {
+    const a = ipc(); if (!a) return;
+    const result = await a.pickImage(true);
+    if (result?.canceled || !result?.files?.length) return;
+    setGallery(g => {
+      const existing = new Set(g);
+      return [...g, ...result.files.filter(f => !existing.has(f))];
+    });
+  }
+
+  function removeGalleryPhoto(filename) {
+    setGallery(g => g.filter(f => f !== filename));
+    if (coverUrl === filename) setCoverUrl(null);
+  }
+
+  function handleCancel() {
+    // Delete any newly picked images (they'd be orphaned if we don't save)
+    const a = ipc();
+    if (a) {
+      const orig = new Set(originalGallery.current);
+      gallery.filter(f => !orig.has(f)).forEach(f => a.deleteImage(f));
+      if (coverUrl && !orig.has(coverUrl) && !gallery.includes(coverUrl)) a.deleteImage(coverUrl);
+    }
+    onCancel();
+  }
 
   const etype = c.type || "other";
   const eSub = SUBLABELS[etype] || "Detail";
@@ -118,11 +161,22 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
       type: etype,
       series: c.series.trim() || null,
       region: c.region.trim() || null,
+      cover_url: coverUrl || null,
+      gallery: gallery.length ? gallery : null,
     };
     const customClean = custom
       .map(r => ({ label: r.label.trim(), value: r.value.trim() }))
       .filter(r => r.label && r.value);
     const paragraphs = storyText.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
+    // Delete images that were removed during this edit session
+    const a = ipc();
+    if (a) {
+      const orig = new Set(originalGallery.current);
+      const next = new Set(gallery);
+      originalGallery.current.filter(f => !next.has(f)).forEach(f => a.deleteImage(f));
+      // If original cover was replaced by a new pick (not in original gallery), old cover stays in
+      // original gallery tracking so it's handled above; new cover is already in next gallery
+    }
     if (!owned) { onSave({ owned: false, canonical, story: paragraphs }); return; }
     const holding = {
       format: f.format || null,
@@ -144,6 +198,42 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
         <div className="ef-title">Edit item</div>
         <EFToggle label="In collection" value={owned} onChange={setOwned} hint={["Owned", "Missing"]} />
       </div>
+
+      <div className="ef-section ef-section-row">
+        <span>Photos</span>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button type="button" className="ef-add" onClick={pickCoverPhoto}>
+            <I.image size={14} stroke={1.8} /> {coverUrl ? "Change cover" : "Set cover"}
+          </button>
+          <button type="button" className="ef-add" onClick={addGalleryPhotos}>
+            <I.plus size={14} stroke={2} /> Add photos
+          </button>
+        </div>
+      </div>
+      {gallery.length > 0 ? (
+        <div className="ef-gallery">
+          {gallery.map(filename => (
+            <div key={filename} className={"ef-gallery-thumb" + (filename === coverUrl ? " is-cover" : "")}>
+              <img src={`hodd-img://${filename}`} alt="" />
+              {filename !== coverUrl && (
+                <button type="button" className="ef-gallery-set" title="Set as cover"
+                  onClick={() => setCoverUrl(filename)}>
+                  <I.image size={11} stroke={2} />
+                </button>
+              )}
+              {filename === coverUrl && (
+                <span className="ef-gallery-cover-badge">Cover</span>
+              )}
+              <button type="button" className="ef-gallery-del" title="Remove photo"
+                onClick={() => removeGalleryPhoto(filename)}>
+                <I.close size={12} stroke={2.2} />
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="ef-empty">No photos yet — add a cover photo or gallery shots for this item.</div>
+      )}
 
       <div className="ef-section">Item details</div>
       <div className="ef-grid">
@@ -197,7 +287,7 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
       </div>
 
       <div className="ef-actions">
-        <button className="btn" onClick={onCancel}>Cancel</button>
+        <button className="btn" onClick={handleCancel}>Cancel</button>
         <button className="btn solid" onClick={handleSave}><I.check size={16} stroke={2.2} /> Save changes</button>
       </div>
     </div>

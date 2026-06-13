@@ -1,8 +1,13 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, net, protocol, shell } from 'electron';
 import { promises as fs } from 'node:fs';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+// Must run before app.whenReady()
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'hodd-img', privileges: { secure: true, supportFetchAPI: true, bypassCSP: true, corsEnabled: true } },
+]);
 import { spawn, ChildProcess } from 'node:child_process';
 import * as db from './db.js';
 
@@ -105,6 +110,13 @@ function createWindow() {
 // ─── IPC handlers ──────────────────────────────────────────────────────────
 
 function registerIpc(): void {
+  // Serve user-uploaded images via hodd-img:// protocol
+  protocol.handle('hodd-img', (req) => {
+    const filename = path.basename(decodeURIComponent(req.url.slice('hodd-img://'.length)));
+    const imagePath = path.join(app.getPath('userData'), 'images', filename);
+    return net.fetch(pathToFileURL(imagePath).toString());
+  });
+
   // Data reads
   ipcMain.handle('hodd:catalog',            () => db.getCatalog());
   ipcMain.handle('hodd:holdings',           () => db.getHoldings());
@@ -140,13 +152,52 @@ function registerIpc(): void {
   ipcMain.handle('hodd:collection:create', (_e, def: { name: string; type: string; accent: string; template: string[] }) => db.createCollection(def));
   ipcMain.handle('hodd:collection:delete', (_e, id: string) => db.deleteUserCollection(id));
   ipcMain.handle('hodd:item:add',        (_e, collId: string, draft: Record<string, unknown>) => db.addUserItem(collId, draft));
-  ipcMain.handle('hodd:item:delete',     (_e, id: string)                                      => db.deleteUserItem(id));
+  ipcMain.handle('hodd:item:delete', async (_e, id: string) => {
+    const { cover_url, gallery } = db.getItemImages(id);
+    db.deleteUserItem(id);
+    const imagesDir = path.join(app.getPath('userData'), 'images');
+    const toDelete = new Set([...gallery]);
+    if (cover_url) toDelete.add(cover_url);
+    for (const filename of toDelete) {
+      try { await fs.unlink(path.join(imagesDir, path.basename(filename))); } catch (_) {}
+    }
+  });
   ipcMain.handle('hodd:item:set-owned',    (_e, id: string, owned: boolean)                       => db.setUserItemOwned(id, owned));
   ipcMain.handle('hodd:item:update-fields',(_e, id: string, fields: Record<string, unknown>)      => db.updateUserItemFields(id, fields));
   ipcMain.handle('hodd:setting:save',    (_e, key: string, value: string)                 => db.saveSetting(key, value));
   ipcMain.handle('hodd:favorites',                                                          () => db.getFavorites());
   ipcMain.handle('hodd:favorite:add',    (_e, id: string)                                  => db.addFavorite(id));
   ipcMain.handle('hodd:favorite:remove', (_e, id: string)                                  => db.removeFavorite(id));
+
+  // Image pick — copies chosen file(s) to userData/images/, returns filenames
+  ipcMain.handle('hodd:image:pick', async (_e, multi = false) => {
+    const result = await dialog.showOpenDialog({
+      title: 'Choose photo',
+      filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'avif'] }],
+      properties: multi ? ['openFile', 'multiSelections'] : ['openFile'],
+    });
+    if (result.canceled || !result.filePaths.length) return { canceled: true, files: [] };
+    const imagesDir = path.join(app.getPath('userData'), 'images');
+    await fs.mkdir(imagesDir, { recursive: true });
+    const saved: string[] = [];
+    for (const src of result.filePaths) {
+      const ext = path.extname(src).toLowerCase() || '.jpg';
+      const name = `img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`;
+      await fs.copyFile(src, path.join(imagesDir, name));
+      saved.push(name);
+    }
+    return { canceled: false, files: saved };
+  });
+
+  // Image delete — removes a single image file from userData/images/
+  ipcMain.handle('hodd:image:delete', async (_e, filename: string) => {
+    const safeName = path.basename(filename);
+    if (!safeName) return { ok: false };
+    try {
+      await fs.unlink(path.join(app.getPath('userData'), 'images', safeName));
+      return { ok: true };
+    } catch (_) { return { ok: false }; }
+  });
 
   // Title bar theme (Windows only — keeps overlay in sync with in-app dark mode)
   ipcMain.handle('hodd:titlebar:set-theme', (_e, theme: 'light' | 'dark') => {

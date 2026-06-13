@@ -48,6 +48,8 @@ contextBridge.exposeInMainWorld('hoddDesktop', {
     getHomeDynamic: () => ipcRenderer.invoke('hodd:home-dynamic'),
     getTimeline:    () => ipcRenderer.invoke('hodd:timeline'),
     getGrowth:      () => ipcRenderer.invoke('hodd:growth'),
+    pickImage: (multi?: boolean) => ipcRenderer.invoke('hodd:image:pick', multi),
+    deleteImage: (filename: string) => ipcRenderer.invoke('hodd:image:delete', filename),
   },
 
   // Ollama local AI
