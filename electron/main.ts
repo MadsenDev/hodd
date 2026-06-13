@@ -529,6 +529,17 @@ function registerIpc(): void {
 
   ipcMain.handle('hodd:reset-all', () => db.clearUserData());
 
+  // Score how closely a result title matches the search query (word overlap ratio)
+  function titleSim(result: string, q: string): number {
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+    const a = norm(result), b = norm(q);
+    if (a === b) return 1;
+    const wa = new Set(a.split(/\s+/));
+    const wb = new Set(b.split(/\s+/));
+    const common = [...wa].filter(w => wb.has(w)).length;
+    return common / Math.max(wa.size, wb.size);
+  }
+
   // Online metadata lookup — free APIs (books/vinyl) + optional key-gated APIs (games/movies)
   ipcMain.handle('hodd:lookup', async (_e, type: string, query: string) => {
     const settings = db.getSettings();
@@ -557,9 +568,10 @@ function registerIpc(): void {
         }));
       }
       if (type === 'game' && settings['api.rawg']) {
-        const res = await fetch(`https://api.rawg.io/api/games?search=${encodeURIComponent(query)}&page_size=5&search_precise=true&key=${settings['api.rawg']}`);
+        const res = await fetch(`https://api.rawg.io/api/games?search=${encodeURIComponent(query)}&page_size=10&search_precise=true&key=${settings['api.rawg']}`);
         const data = await res.json() as { results?: { name?: string; released?: string; background_image?: string; platforms?: { platform?: { name?: string } }[] }[] };
-        return (data.results ?? []).slice(0, 3).map(d => ({
+        const sorted = (data.results ?? []).sort((a, b) => titleSim(b.name ?? '', query) - titleSim(a.name ?? '', query));
+        return sorted.slice(0, 3).map(d => ({
           title:     d.name ?? query,
           year:      d.released ? parseInt(d.released.slice(0, 4)) : null,
           sub:       d.platforms?.[0]?.platform?.name ?? null,
@@ -569,7 +581,8 @@ function registerIpc(): void {
       if (type === 'movie' && settings['api.omdb']) {
         const res = await fetch(`https://www.omdbapi.com/?s=${encodeURIComponent(query)}&apikey=${settings['api.omdb']}&type=movie`);
         const data = await res.json() as { Search?: { Title?: string; Year?: string; Poster?: string }[] };
-        return (data.Search ?? []).slice(0, 3).map(d => ({
+        const sorted = (data.Search ?? []).sort((a, b) => titleSim(b.Title ?? '', query) - titleSim(a.Title ?? '', query));
+        return sorted.slice(0, 3).map(d => ({
           title:     d.Title ?? query,
           year:      d.Year ? parseInt(d.Year) : null,
           sub:       null,
