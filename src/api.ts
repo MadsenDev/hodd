@@ -46,15 +46,18 @@ export function saveHolding(id, patch) {
   const prev = _holdings && _holdings[id] ? { ..._holdings[id] } : undefined;
   if (!_holdings) _holdings = {};
   _holdings[id] = Object.assign({}, _holdings[id] || {}, patch);
+  _searchIndex = null;
   const a = ipc();
   if (a) a.saveHolding(id, patch).catch(() => {
     if (_holdings) { if (prev === undefined) delete _holdings[id]; else _holdings[id] = prev; }
+    _searchIndex = null;
     toaster.error("Couldn't save changes — please try again.");
   });
 }
 export function removeHolding(id) {
   const prev = _holdings && _holdings[id] ? { ..._holdings[id] } : undefined;
   if (_holdings) delete _holdings[id];
+  _searchIndex = null;
   const a = ipc();
   if (a) a.removeHolding(id).catch(() => {
     if (prev !== undefined) { if (!_holdings) _holdings = {}; _holdings[id] = prev; }
@@ -63,7 +66,7 @@ export function removeHolding(id) {
 }
 
 export function removeItem(id) {
-  // Snapshot before mutation for rollback
+  _searchIndex = null;
   const prevItems = _userItems ? JSON.parse(JSON.stringify(_userItems)) : undefined;
   const prevHolding = _holdings && _holdings[id] ? { ..._holdings[id] } : undefined;
   const prevCatOv = _catOv && _catOv[id] ? { ..._catOv[id] } : undefined;
@@ -88,6 +91,7 @@ export function removeItem(id) {
 }
 
 export function setItemOwned(id, owned) {
+  _searchIndex = null;
   const prevOwned = _userItems
     ? Object.values(_userItems).flat().find(i => i.id === id)?.owned
     : undefined;
@@ -107,6 +111,7 @@ export function setItemOwned(id, owned) {
   });
 }
 export function saveCatalog(id, patch) {
+  _searchIndex = null;
   if (String(id).startsWith("i-")) {
     const prevItem = _userItems
       ? Object.values(_userItems).flat().find(i => i.id === id)
@@ -197,6 +202,7 @@ export function createCollection(def) {
 }
 
 export function addItem(collectionId, draft) {
+  _searchIndex = null;
   const id = "i-" + Math.random().toString(36).slice(2, 9);
   if (!_userItems) _userItems = {};
   if (!_userItems[collectionId]) _userItems[collectionId] = [];
