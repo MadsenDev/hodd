@@ -568,7 +568,7 @@ function registerIpc(): void {
         }));
       }
       if (type === 'game' && settings['api.rawg']) {
-        const res = await fetch(`https://api.rawg.io/api/games?search=${encodeURIComponent(query)}&page_size=10&search_precise=true&key=${settings['api.rawg']}`);
+        const res = await fetch(`https://api.rawg.io/api/games?search=${encodeURIComponent(query)}&page_size=10&key=${settings['api.rawg']}`);
         const data = await res.json() as { results?: { name?: string; released?: string; background_image?: string; platforms?: { platform?: { name?: string } }[] }[] };
         const sorted = (data.results ?? []).sort((a, b) => titleSim(b.name ?? '', query) - titleSim(a.name ?? '', query));
         return sorted.slice(0, 3).map(d => ({

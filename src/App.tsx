@@ -220,82 +220,88 @@ function AddCard({ item, onChange, onRemove, collOpts }) {
     setShowAlt(false);
   }
   const opts = collOpts && collOpts.length ? collOpts.map(c => c.name) : [...new Set(Object.values(TYPE_COLL))];
+  const extras = item.duplicate || (item._lookupResults || []).length > 1;
   return (
     <div className="add-card">
-      <div className="add-card-cover"><Cover item={{ title: item.title, type: item.type, color: item.color, cover_url: item.cover_url || null }} h={84} /></div>
-      <div className="add-card-body">
-        <div className="add-card-head">
-          <input className="add-title" value={item.title} onChange={e => onChange({ ...item, title: e.target.value, fields: item.fields.map(f => f.k === "Title" ? { ...f, v: e.target.value } : f) })} />
-          <div className="add-card-meta">
-            <span className="add-type">{typeIcon(item.type, { size: 13, stroke: 1.8 })} {TYPE_LABEL[item.type]}</span>
-            <span className="add-arrow">→</span>
-            <select className="add-coll" value={item.collection} onChange={e => onChange({ ...item, collection: e.target.value })}>
-              {opts.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+      <div className="add-card-row">
+        <div className="add-card-cover"><Cover item={{ title: item.title, type: item.type, color: item.color, cover_url: item.cover_url || null }} h={84} /></div>
+        <div className="add-card-body">
+          <div className="add-card-head">
+            <input className="add-title" value={item.title} onChange={e => onChange({ ...item, title: e.target.value, fields: item.fields.map(f => f.k === "Title" ? { ...f, v: e.target.value } : f) })} />
+            <div className="add-card-meta">
+              <span className="add-type">{typeIcon(item.type, { size: 13, stroke: 1.8 })} {TYPE_LABEL[item.type]}</span>
+              <span className="add-arrow">→</span>
+              <select className="add-coll" value={item.collection} onChange={e => onChange({ ...item, collection: e.target.value })}>
+                {opts.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="add-fields">
+            {item.fields.filter(f => f.k !== "Title" && f.k !== "Type").map((f, i0) => {
+              const i = item.fields.indexOf(f);
+              const isAsk = f.c === "ask";
+              const dropOpts = FIELD_OPTS[f.k] || (f.k === "Platform" && item.type === "game" ? PLATFORM_OPTS : null)
+                            || (f.k === "Edition" && FORMAT_OPTIONS[item.type] ? FORMAT_OPTIONS[item.type] : null);
+              return (
+                <div className={"add-field" + (isAsk ? " ask" : "")} key={f.k}>
+                  <span className="afk">{f.k}</span>
+                  {dropOpts ? (
+                    <select
+                      className="afv-input"
+                      value={/^Confirm/i.test(String(f.v)) ? "" : f.v}
+                      onChange={e => setField(i, e.target.value)}
+                    >
+                      <option value="">{isAsk ? `Choose ${f.k.toLowerCase()}` : "—"}</option>
+                      {dropOpts.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  ) : (
+                    <input
+                      className="afv-input"
+                      value={/^Confirm/i.test(String(f.v)) ? "" : f.v}
+                      placeholder={isAsk ? f.v : ""}
+                      onChange={e => setField(i, e.target.value)}
+                    />
+                  )}
+                  {!isAsk && f.v && !/^Confirm/i.test(String(f.v)) && <I.check size={12} stroke={2.6} className="af-ok" />}
+                </div>
+              );
+            })}
           </div>
         </div>
-        <div className="add-fields">
-          {item.fields.filter(f => f.k !== "Title" && f.k !== "Type").map((f, i0) => {
-            const i = item.fields.indexOf(f);
-            const isAsk = f.c === "ask";
-            const dropOpts = FIELD_OPTS[f.k] || (f.k === "Platform" && item.type === "game" ? PLATFORM_OPTS : null)
-                          || (f.k === "Edition" && FORMAT_OPTIONS[item.type] ? FORMAT_OPTIONS[item.type] : null);
-            return (
-              <div className={"add-field" + (isAsk ? " ask" : "")} key={f.k}>
-                <span className="afk">{f.k}</span>
-                {dropOpts ? (
-                  <select
-                    className="afv-input"
-                    value={/^Confirm/i.test(String(f.v)) ? "" : f.v}
-                    onChange={e => setField(i, e.target.value)}
-                  >
-                    <option value="">{isAsk ? `Choose ${f.k.toLowerCase()}` : "—"}</option>
-                    {dropOpts.map(o => <option key={o} value={o}>{o}</option>)}
-                  </select>
-                ) : (
-                  <input
-                    className="afv-input"
-                    value={/^Confirm/i.test(String(f.v)) ? "" : f.v}
-                    placeholder={isAsk ? f.v : ""}
-                    onChange={e => setField(i, e.target.value)}
-                  />
-                )}
-                {!isAsk && f.v && !/^Confirm/i.test(String(f.v)) && <I.check size={12} stroke={2.6} className="af-ok" />}
-              </div>
-            );
-          })}
-        </div>
+        <button className="add-remove" onClick={onRemove} title="Remove"><I.close size={15} /></button>
       </div>
-      {item.duplicate && (
-        <div style={{ background: "rgba(207,107,90,0.10)", border: "1px solid rgba(207,107,90,0.25)", borderRadius: 8, padding: "7px 11px", fontSize: 12, color: "#cf6b5a", display: "flex", alignItems: "center", gap: 7, marginTop: 8, gridColumn: "1/-1" }}>
-          <span>⚠ Already in your hoard — "{item.duplicate.title}" · {item.duplicate.type}</span>
-          <button onClick={() => onChange({ ...item, duplicate: null })} style={{ marginLeft: "auto", fontSize: 11, color: "#cf6b5a", background: "rgba(207,107,90,0.15)", border: "1px solid rgba(207,107,90,0.30)", borderRadius: 5, padding: "2px 8px", cursor: "pointer", whiteSpace: "nowrap" }}>Add anyway</button>
-        </div>
-      )}
-      {(item._lookupResults || []).length > 1 && (
-        <div style={{ gridColumn: "1/-1", marginTop: 4 }}>
-          <button onClick={() => setShowAlt(v => !v)} style={{ fontSize: 11, color: "var(--mute)", background: "none", border: "none", padding: 0, cursor: "pointer", textDecoration: "underline" }}>
-            {showAlt ? "Hide alternatives" : `Wrong match? View ${item._lookupResults.length - 1} other result${item._lookupResults.length > 2 ? "s" : ""}`}
-          </button>
-          {showAlt && (
-            <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-              {item._lookupResults.map((alt, i) => (
-                <button key={i} onClick={() => applyLookupResult(alt)}
-                  style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: "var(--panel)", border: "1px solid var(--border-soft)", borderRadius: 8, cursor: "pointer", textAlign: "left", maxWidth: 200 }}>
-                  {alt.cover_url
-                    ? <img src={alt.cover_url} style={{ width: 30, height: 38, objectFit: "cover", borderRadius: 3, flexShrink: 0 }} />
-                    : <div style={{ width: 30, height: 38, background: "var(--bg)", borderRadius: 3, flexShrink: 0 }} />}
-                  <div>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: "var(--fg)", lineHeight: 1.3 }}>{alt.title}</div>
-                    <div style={{ fontSize: 10, color: "var(--mute)" }}>{[alt.year, alt.sub].filter(Boolean).join(" · ")}</div>
-                  </div>
-                </button>
-              ))}
+      {extras && (
+        <div className="add-card-extras">
+          {item.duplicate && (
+            <div style={{ background: "rgba(207,107,90,0.10)", border: "1px solid rgba(207,107,90,0.25)", borderRadius: 8, padding: "7px 11px", fontSize: 12, color: "#cf6b5a", display: "flex", alignItems: "center", gap: 7 }}>
+              <span>⚠ Already in your hoard — "{item.duplicate.title}" · {item.duplicate.type}</span>
+              <button onClick={() => onChange({ ...item, duplicate: null })} style={{ marginLeft: "auto", fontSize: 11, color: "#cf6b5a", background: "rgba(207,107,90,0.15)", border: "1px solid rgba(207,107,90,0.30)", borderRadius: 5, padding: "2px 8px", cursor: "pointer", whiteSpace: "nowrap" }}>Add anyway</button>
+            </div>
+          )}
+          {(item._lookupResults || []).length > 1 && (
+            <div>
+              <button className="alt-toggle" onClick={() => setShowAlt(v => !v)}>
+                {showAlt ? "Hide alternatives" : `Wrong match? See ${item._lookupResults.length - 1} other result${item._lookupResults.length > 2 ? "s" : ""}`}
+              </button>
+              {showAlt && (
+                <div className="alt-list">
+                  {item._lookupResults.map((alt, i) => (
+                    <button key={i} className="alt-item" onClick={() => applyLookupResult(alt)}>
+                      {alt.cover_url
+                        ? <img src={alt.cover_url} className="alt-thumb" />
+                        : <div className="alt-thumb-ph" />}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div className="alt-name">{alt.title}</div>
+                        {(alt.year || alt.sub) && <div className="alt-sub">{[alt.year, alt.sub].filter(Boolean).join(" · ")}</div>}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
       )}
-      <button className="add-remove" onClick={onRemove} title="Remove"><I.close size={15} /></button>
     </div>
   );
 }
