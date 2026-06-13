@@ -205,23 +205,49 @@ function registerIpc(): void {
     mainWindow.setTitleBarOverlay(titleBarOverlay(theme === 'dark'));
   });
 
-  // Archive export
+  // Archive export — bundles referenced images as base64 under an `images` key
   ipcMain.handle('hodd:archive:export', async (_event, payload: Record<string, unknown>) => {
     const result = await dialog.showSaveDialog({
       title: 'Export HODD archive',
-      defaultPath: `hodd-archive-${new Date().toISOString().slice(0, 10)}.json`,
-      filters: [{ name: 'HODD archive', extensions: ['json'] }],
+      defaultPath: `hodd-archive-${new Date().toISOString().slice(0, 10)}.hodd`,
+      filters: [{ name: 'HODD archive', extensions: ['hodd', 'json'] }],
     });
     if (result.canceled || !result.filePath) return { canceled: true };
-    await fs.writeFile(result.filePath, JSON.stringify(payload, null, 2), 'utf8');
-    return { canceled: false, path: result.filePath };
+
+    // Collect all image filenames referenced anywhere in the payload
+    const filenames = new Set<string>();
+    const items = (payload.userItems ?? {}) as Record<string, { cover_url?: string; gallery?: string[] }[]>;
+    for (const collItems of Object.values(items)) {
+      for (const it of collItems ?? []) {
+        if (it.cover_url) filenames.add(path.basename(it.cover_url));
+        if (Array.isArray(it.gallery)) it.gallery.forEach(f => filenames.add(path.basename(f)));
+      }
+    }
+    const overrides = (payload.catalogOverrides ?? {}) as Record<string, { cover_url?: string; gallery?: string[] }>;
+    for (const patch of Object.values(overrides)) {
+      if (patch.cover_url) filenames.add(path.basename(patch.cover_url));
+      if (Array.isArray(patch.gallery)) patch.gallery.forEach(f => filenames.add(path.basename(f)));
+    }
+
+    const imagesDir = path.join(app.getPath('userData'), 'images');
+    const images: Record<string, string> = {};
+    for (const name of filenames) {
+      try {
+        const data = await fs.readFile(path.join(imagesDir, name));
+        images[name] = data.toString('base64');
+      } catch (_) { /* file may have been deleted, skip */ }
+    }
+
+    const enriched = { ...payload, version: 2, images };
+    await fs.writeFile(result.filePath, JSON.stringify(enriched, null, 2), 'utf8');
+    return { canceled: false, path: result.filePath, imageCount: Object.keys(images).length };
   });
 
-  // Archive import
+  // Archive import — restores images from base64 bundle if present
   ipcMain.handle('hodd:archive:import', async (_event) => {
     const open = await dialog.showOpenDialog({
       title: 'Import HODD archive',
-      filters: [{ name: 'HODD archive', extensions: ['json'] }],
+      filters: [{ name: 'HODD archive', extensions: ['hodd', 'json'] }],
       properties: ['openFile'],
     });
     if (open.canceled || !open.filePaths[0]) return { canceled: true };
@@ -238,8 +264,23 @@ function registerIpc(): void {
 
     const content = await fs.readFile(open.filePaths[0], 'utf8');
     const payload = JSON.parse(content) as Record<string, unknown>;
-    const outcome = db.importArchive(payload);
-    return { canceled: false, imported: outcome.imported };
+
+    // Restore bundled images (v2 archives)
+    const images = payload.images as Record<string, string> | undefined;
+    if (images && typeof images === 'object') {
+      const imagesDir = path.join(app.getPath('userData'), 'images');
+      await fs.mkdir(imagesDir, { recursive: true });
+      for (const [name, b64] of Object.entries(images)) {
+        try {
+          const safeName = path.basename(name);
+          await fs.writeFile(path.join(imagesDir, safeName), Buffer.from(b64, 'base64'));
+        } catch (_) {}
+      }
+    }
+
+    const { images: _stripped, ...dbPayload } = payload;
+    const outcome = db.importArchive(dbPayload as Record<string, unknown>);
+    return { canceled: false, imported: outcome.imported, imageCount: images ? Object.keys(images).length : 0 };
   });
 
   // Dynamic home data — real user items for recent/rediscover

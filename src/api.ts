@@ -2,6 +2,8 @@
 // Electron IPC data layer. All reads go through an in-memory cache; writes
 // update the cache immediately so the UI never waits on IPC, then persist async.
 
+import { toaster } from './toaster';
+
 const COLL_NAME = { pokemon: "Pokémon Games", books: "Books", movies: "Movies", games: "Games", coins: "Coins", comics: "Comics", vinyl: "Vinyl" };
 export const HOLDING_FIELDS = ["format", "completeness", "grade", "pressing", "edition", "condition", "acquired", "watched", "custom"];
 const USER_HUES = ["#6366f1", "#5BA47A", "#5C8AD6", "#C9A24C", "#CF6B5A", "#7FB0C4", "#9B7BD4", "#C0392B"];
@@ -31,7 +33,7 @@ async function ensureCache() {
   _catalog = cat; _holdings = h; _catOv = co; _userColls = uc; _userItems = ui; _baseCols = bc;
 }
 
-export function invalidateCache() { _holdings = null; _catOv = null; _userColls = null; _userItems = null; _favorites = null; }
+export function invalidateCache() { _holdings = null; _catOv = null; _userColls = null; _userItems = null; _favorites = null; _searchIndex = null; }
 
 function readOverrides()  { return _holdings  || {}; }
 function readCatalogOv()  { return _catOv     || {}; }
@@ -41,16 +43,35 @@ function readUserItems()  { return _userItems || {}; }
 // ── Write operations ─────────────────────────────────────────────────────────
 
 export function saveHolding(id, patch) {
+  const prev = _holdings && _holdings[id] ? { ..._holdings[id] } : undefined;
   if (!_holdings) _holdings = {};
   _holdings[id] = Object.assign({}, _holdings[id] || {}, patch);
-  const a = ipc(); if (a) a.saveHolding(id, patch);
+  _searchIndex = null;
+  const a = ipc();
+  if (a) a.saveHolding(id, patch).catch(() => {
+    if (_holdings) { if (prev === undefined) delete _holdings[id]; else _holdings[id] = prev; }
+    _searchIndex = null;
+    toaster.error("Couldn't save changes — please try again.");
+  });
 }
 export function removeHolding(id) {
+  const prev = _holdings && _holdings[id] ? { ..._holdings[id] } : undefined;
   if (_holdings) delete _holdings[id];
-  const a = ipc(); if (a) a.removeHolding(id);
+  _searchIndex = null;
+  const a = ipc();
+  if (a) a.removeHolding(id).catch(() => {
+    if (prev !== undefined) { if (!_holdings) _holdings = {}; _holdings[id] = prev; }
+    toaster.error("Couldn't remove holding — please try again.");
+  });
 }
 
 export function removeItem(id) {
+  _searchIndex = null;
+  const prevItems = _userItems ? JSON.parse(JSON.stringify(_userItems)) : undefined;
+  const prevHolding = _holdings && _holdings[id] ? { ..._holdings[id] } : undefined;
+  const prevCatOv = _catOv && _catOv[id] ? { ..._catOv[id] } : undefined;
+  const prevFavs = _favorites ? [..._favorites] : undefined;
+
   if (_userItems) {
     for (const collId of Object.keys(_userItems)) {
       _userItems[collId] = (_userItems[collId] || []).filter(i => i.id !== id);
@@ -59,31 +80,68 @@ export function removeItem(id) {
   if (_holdings) delete _holdings[id];
   if (_catOv) delete _catOv[id];
   if (_favorites) _favorites = _favorites.filter(f => f !== id);
-  const a = ipc(); if (a) a.deleteItem(id);
+  const a = ipc();
+  if (a) a.deleteItem(id).catch(() => {
+    if (prevItems !== undefined) _userItems = prevItems;
+    if (prevHolding !== undefined) { if (!_holdings) _holdings = {}; _holdings[id] = prevHolding; }
+    if (prevCatOv !== undefined) { if (!_catOv) _catOv = {}; _catOv[id] = prevCatOv; }
+    if (prevFavs !== undefined) _favorites = prevFavs;
+    toaster.error("Couldn't delete item — please try again.");
+  });
 }
 
 export function setItemOwned(id, owned) {
+  _searchIndex = null;
+  const prevOwned = _userItems
+    ? Object.values(_userItems).flat().find(i => i.id === id)?.owned
+    : undefined;
   if (_userItems) {
     for (const collId of Object.keys(_userItems)) {
       _userItems[collId] = (_userItems[collId] || []).map(i => i.id === id ? { ...i, owned } : i);
     }
   }
-  const a = ipc(); if (a) a.setItemOwned(id, owned);
+  const a = ipc();
+  if (a) a.setItemOwned(id, owned).catch(() => {
+    if (prevOwned !== undefined && _userItems) {
+      for (const collId of Object.keys(_userItems)) {
+        _userItems[collId] = (_userItems[collId] || []).map(i => i.id === id ? { ...i, owned: prevOwned } : i);
+      }
+    }
+    toaster.error("Couldn't update item — please try again.");
+  });
 }
 export function saveCatalog(id, patch) {
+  _searchIndex = null;
   if (String(id).startsWith("i-")) {
-    // User item — update user_items directly, not catalog_overrides
+    const prevItem = _userItems
+      ? Object.values(_userItems).flat().find(i => i.id === id)
+      : undefined;
+    const prevSnap = prevItem ? { ...prevItem } : undefined;
     if (_userItems) {
       for (const collId of Object.keys(_userItems)) {
         _userItems[collId] = (_userItems[collId] || []).map(i => i.id === id ? { ...i, ...patch } : i);
       }
     }
     if (_catOv) delete _catOv[id];
-    const a = ipc(); if (a) a.updateUserItem(id, patch);
+    const a = ipc();
+    if (a) a.updateUserItem(id, patch).catch(() => {
+      if (prevSnap !== undefined && _userItems) {
+        for (const collId of Object.keys(_userItems)) {
+          _userItems[collId] = (_userItems[collId] || []).map(i => i.id === id ? prevSnap : i);
+        }
+      }
+      toaster.error("Couldn't save item — please try again.");
+    });
   } else {
+    const prev = _catOv && _catOv[id] ? { ..._catOv[id] } : undefined;
     if (!_catOv) _catOv = {};
     _catOv[id] = Object.assign({}, _catOv[id] || {}, patch);
-    const a = ipc(); if (a) a.saveCatalog(id, patch);
+    const a = ipc();
+    if (a) a.saveCatalog(id, patch).catch(() => {
+      if (!_catOv) return;
+      if (prev === undefined) delete _catOv[id]; else _catOv[id] = prev;
+      toaster.error("Couldn't save item — please try again.");
+    });
   }
 }
 export function saveStory(id, paragraphs) {
@@ -91,6 +149,7 @@ export function saveStory(id, paragraphs) {
 }
 
 let _favorites: string[] | null = null;
+let _searchIndex: any[] | null = null;
 
 export async function getFavorites(): Promise<string[]> {
   if (_favorites) return _favorites;
@@ -143,6 +202,7 @@ export function createCollection(def) {
 }
 
 export function addItem(collectionId, draft) {
+  _searchIndex = null;
   const id = "i-" + Math.random().toString(36).slice(2, 9);
   if (!_userItems) _userItems = {};
   if (!_userItems[collectionId]) _userItems[collectionId] = [];
@@ -427,6 +487,7 @@ export async function exportData() {
 }
 
 export async function getSearchIndex() {
+  if (_searchIndex) return _searchIndex;
   await ensureCache();
   const cat = _catalog || [], h = _holdings || {};
   const bcMap = Object.fromEntries((_baseCols || []).map(c => [c.id as string, c.name as string]));
@@ -452,7 +513,8 @@ export async function getSearchIndex() {
       userIdx.push(item);
     });
   });
-  return catIdx.concat(userIdx);
+  _searchIndex = catIdx.concat(userIdx);
+  return _searchIndex;
 }
 
 // ── Ollama local AI client ────────────────────────────────────────────────────

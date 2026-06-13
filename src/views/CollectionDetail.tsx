@@ -8,6 +8,7 @@ import { deleteCollection } from '../api';
 export function CollectionDetail({ collId, ctx }) {
   const { data, loading, error, refetch } = useCollection(collId);
   const [filter, setFilter] = React.useState("all");
+  const [statusFilter, setStatusFilter] = React.useState("all");
   const [sort, setSort] = React.useState("default");
   const [search, setSearch] = React.useState("");
   const [confirmDelete, setConfirmDelete] = React.useState(false);
@@ -33,13 +34,25 @@ export function CollectionDetail({ collId, ctx }) {
   const { name, sub, accent, owned, missing, pct, type, items } = data;
   const ownedCount = items.filter(i => i.owned !== false).length;
   const missingCount = items.filter(i => i.owned === false).length;
+
+  const progressLabel = type === "game" ? "Played" : type === "book" ? "Read" : type === "movie" ? "Watched" : null;
+  const progressField = type === "game" ? "completed" : (type === "movie" || type === "book") ? "watched" : null;
+  const progressDoneLabel = type === "game" ? "Completed" : type === "book" ? "Read" : type === "movie" ? "Watched" : null;
+  const progressNotDoneLabel = type === "game" ? "Not completed" : type === "book" ? "Unread" : type === "movie" ? "Unwatched" : null;
+  const progressCount = progressField ? items.filter(i => i.owned !== false && i[progressField]).length : 0;
+  const progressNotDoneCount = progressField ? items.filter(i => i.owned !== false && !i[progressField]).length : 0;
+
   const sq = search.trim().toLowerCase();
   const filtered = items.filter(i => {
     if (filter !== "all" && (filter === "owned" ? !i.owned : i.owned)) return false;
+    if (progressField && statusFilter !== "all") {
+      if (i.owned === false) return false;
+      if (statusFilter === "done" && !i[progressField]) return false;
+      if (statusFilter === "notdone" && i[progressField]) return false;
+    }
     if (sq && !(i.title || "").toLowerCase().includes(sq) && !(i.sub || "").toLowerCase().includes(sq)) return false;
     return true;
   });
-  const progressLabel = type === "game" ? "Played" : type === "book" ? "Read" : type === "movie" ? "Watched" : null;
   const shown = [...filtered].sort((a, b) => {
     if (sort === "title") return (a.title || "").localeCompare(b.title || "");
     if (sort === "year")  return (a.year || 9999) - (b.year || 9999);
@@ -84,6 +97,15 @@ export function CollectionDetail({ collId, ctx }) {
             </button>
           ))}
         </div>
+        {progressField && (
+          <div className="seg">
+            {[["all", "Any status"], ["done", progressDoneLabel, progressCount], ["notdone", progressNotDoneLabel, progressNotDoneCount]].map(([v, l, n]) => (
+              <button key={v} className={statusFilter === v ? "on" : ""} onClick={() => setStatusFilter(v)}>
+                {l}{n != null ? <span style={{ opacity: 0.55, fontSize: 11, fontWeight: 500 }}> {n}</span> : null}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="seg">
           {[["default", "Default"], ["title", "A–Z"], ["year", "Year"], ["status", "Status"], ...(progressLabel ? [["progress", progressLabel]] : [])].map(([v, l]) => (
             <button key={v} className={sort === v ? "on" : ""} onClick={() => setSort(v)}>{l}</button>

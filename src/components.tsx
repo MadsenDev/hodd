@@ -1,6 +1,7 @@
 // @ts-nocheck
 import React from 'react';
 import { HoddMark, Icon, I, typeIcon } from './icons';
+import { toaster } from './toaster';
 
 // ── Color utilities ───────────────────────────────────────────────────────────
 
@@ -225,6 +226,7 @@ export function Sidebar({ active, onNav, user, onSettings }) {
     ["favorites", "Favorites", I.heartFill],
     ["timeline", "Timeline", I.clock],
     ["discover", "Discover", I.compass],
+    ["series", "Series", I.layers],
     ["statistics", "Statistics", I.chart],
     ["search", "Search", I.search],
   ];
@@ -399,6 +401,44 @@ export function SpineMosaic({ accent, pct = 0, count = 14, height = 150 }) {
           style={{ width: s.w, height: Math.round((height - 22) * s.hf), background: s.gap ? "transparent" : shade(accent, s.sh) }} />
       ))}
       <div className="plank" style={{ background: shade(accent, -50) }} />
+    </div>
+  );
+}
+
+// ── Toast notifications ───────────────────────────────────────────────────────
+
+export function Toaster() {
+  const [toasts, setToasts] = React.useState([]);
+
+  React.useEffect(() => {
+    return toaster.on(t => {
+      setToasts(prev => [...prev, t]);
+      setTimeout(() => setToasts(prev => prev.filter(x => x.id !== t.id)), 5000);
+    });
+  }, []);
+
+  if (!toasts.length) return null;
+
+  return (
+    <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 9999, display: "flex", flexDirection: "column", gap: 8, maxWidth: 360 }}>
+      {toasts.map(t => (
+        <div key={t.id} style={{
+          display: "flex", alignItems: "flex-start", gap: 10, padding: "12px 16px",
+          background: t.kind === "error" ? "var(--danger, #cf6b5a)" : t.kind === "success" ? "#5ba47a" : "var(--panel-2)",
+          color: t.kind === "info" ? "var(--text)" : "#fff",
+          borderRadius: 10, boxShadow: "0 4px 16px rgba(0,0,0,.18)",
+          fontSize: 13.5, fontWeight: 500, lineHeight: 1.4,
+          animation: "toast-in .18s ease",
+        }}>
+          {t.kind === "error" && <I.alert size={16} stroke={2} style={{ flex: "0 0 auto", marginTop: 1 }} />}
+          {t.kind === "success" && <I.check size={16} stroke={2.5} style={{ flex: "0 0 auto", marginTop: 1 }} />}
+          <span style={{ flex: 1 }}>{t.message}</span>
+          <button onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}
+            style={{ background: "none", border: "none", cursor: "pointer", opacity: .7, padding: 0, color: "inherit", flex: "0 0 auto" }}>
+            <I.close size={14} />
+          </button>
+        </div>
+      ))}
     </div>
   );
 }
