@@ -806,7 +806,10 @@ export function clearUserData(): void {
   db.run('DELETE FROM catalog_overrides');
   db.run('DELETE FROM user_items');
   db.run('DELETE FROM user_collections');
-  db.run("DELETE FROM meta WHERE key IN ('seeded', 'onboarded')");
+  db.run('DELETE FROM catalog');
+  db.run('DELETE FROM base_collections');
+  // Keep 'seeded' so initDb doesn't re-seed on next launch; only clear 'onboarded'
+  db.run("DELETE FROM meta WHERE key = 'onboarded'");
   scheduleWrite();
 }
 
