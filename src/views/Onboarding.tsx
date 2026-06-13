@@ -78,8 +78,7 @@ export function Onboarding({ onDone }) {
   const subStyle = {
     fontSize: 16,
     color: "var(--mute)",
-    margin: 0,
-    marginTop: -16,
+    margin: "8px 0 0",
   };
 
   const inputStyle = {
@@ -98,14 +97,23 @@ export function Onboarding({ onDone }) {
   if (step === 0) {
     return (
       <div style={overlayStyle}>
-        <div style={cardStyle}>
-          <div>
-            <h1 style={headlineStyle}>Welcome to Hodd</h1>
-            <p style={subStyle}>Your personal collection, beautifully kept.</p>
+        <div style={{ ...cardStyle, gap: 0 }}>
+          {/* Logo mark */}
+          <div style={{
+            width: 72, height: 72, borderRadius: 20, background: "var(--accent)", marginBottom: 32,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: "0 8px 32px -8px var(--accent)",
+          }}>
+            <span style={{ fontFamily: "var(--display)", fontSize: 36, fontWeight: 800, color: "#fff", letterSpacing: "-0.03em" }}>H</span>
           </div>
-          <button className="btn solid" style={{ minWidth: 180, justifyContent: "center" }} onClick={() => setStep(1)}>
+          <h1 style={{ ...headlineStyle, marginBottom: 12 }}>Welcome to Hodd</h1>
+          <p style={{ fontSize: 16, color: "var(--mute)", margin: "0 0 40px", lineHeight: 1.5 }}>
+            Your personal collection,<br />beautifully kept.
+          </p>
+          <button className="btn solid" style={{ padding: "12px 32px", fontSize: 15, borderRadius: 12, justifyContent: "center" }} onClick={() => setStep(1)}>
             Get started
           </button>
+          <p style={{ fontSize: 12, color: "var(--mute)", marginTop: 20, opacity: 0.7 }}>Everything stays on your device. Always.</p>
         </div>
       </div>
     );
