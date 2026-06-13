@@ -17,6 +17,11 @@ export const TYPE_OPTIONS = [["game", "Game"], ["book", "Book"], ["movie", "Movi
 export const SUBLABELS = { book: "Author", game: "Platform", coin: "Mint", vinyl: "Artist", movie: "Director", comic: "Publisher", other: "Detail" };
 
 export const ACCENT_SWATCHES = ["#6366f1", "#5BA47A", "#5C8AD6", "#C9A24C", "#CF6B5A", "#7FB0C4", "#9B7BD4", "#C0392B"];
+export const COVER_COLORS = [
+  "#6366f1", "#8B5CF6", "#EC4899", "#EF4444", "#F97316",
+  "#EAB308", "#22C55E", "#14B8A6", "#3B82F6", "#6B7280",
+  "#92400E", "#1E3A5F", "#7B2D8B", "#C0392B", "#2D5016",
+];
 
 function withCurrent(options, current) {
   if (current && options.indexOf(current) === -1) return [current].concat(options);
@@ -102,6 +107,7 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
       : []
   );
   const [storyText, setStoryText] = React.useState((story || []).join("\n\n"));
+  const [color, setColor] = React.useState(item.color || COVER_COLORS[0]);
 
   // Photo state
   const originalGallery = React.useRef(Array.isArray(item.gallery) ? item.gallery : []);
@@ -152,17 +158,25 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
   const etype = c.type || "other";
   const eSub = SUBLABELS[etype] || "Detail";
 
+  const yearRaw = c.year.trim();
+  const yearNum = yearRaw ? parseInt(yearRaw, 10) : null;
+  const yearError = yearRaw && (!Number.isFinite(yearNum) || yearNum < 1000 || yearNum > 2099)
+    ? "Year must be a number between 1000 and 2099"
+    : null;
+  const titleError = c.title.trim().length > 300 ? "Title is too long (max 300 characters)" : null;
+
   function handleSave() {
-    const yearNum = c.year.trim() ? parseInt(c.year, 10) : null;
+    if (yearError || titleError) return;
     const canonical = {
       title: c.title.trim() || item.title,
       sub: c.sub.trim() || null,
-      year: Number.isFinite(yearNum) ? yearNum : (c.year.trim() ? item.year : null),
+      year: Number.isFinite(yearNum) ? yearNum : (yearRaw ? item.year : null),
       type: etype,
       series: c.series.trim() || null,
       region: c.region.trim() || null,
       cover_url: coverUrl || null,
       gallery: gallery.length ? gallery : null,
+      color: color || null,
     };
     const customClean = custom
       .map(r => ({ label: r.label.trim(), value: r.value.trim() }))
@@ -238,9 +252,12 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
       <div className="ef-section">Item details</div>
       <div className="ef-grid">
         <EFText label="Title" value={c.title} placeholder="Item title" onChange={v => setCan("title", v)} wide />
+        {titleError && <div className="ef-error">{titleError}</div>}
         <EFSelect label="Type" value={etype} pairs={TYPE_OPTIONS} placeholder={false} onChange={v => setCan("type", v)} />
+        {!coverUrl && <ColorPicker value={color} onChange={setColor} />}
         <EFText label={eSub} value={c.sub} placeholder={eSub} onChange={v => setCan("sub", v)} />
         <EFText label="Year" value={c.year} placeholder="e.g. 1996" onChange={v => setCan("year", v)} />
+        {yearError && <div className="ef-error">{yearError}</div>}
         <EFText label="Series" value={c.series} placeholder="e.g. Dune, Pokémon" onChange={v => setCan("series", v)} />
         {etype === "game" && <EFText label="Region" value={c.region} placeholder="e.g. NTSC, PAL, JPN" onChange={v => setCan("region", v)} />}
       </div>
@@ -288,7 +305,23 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
 
       <div className="ef-actions">
         <button className="btn" onClick={handleCancel}>Cancel</button>
-        <button className="btn solid" onClick={handleSave}><I.check size={16} stroke={2.2} /> Save changes</button>
+        <button className="btn solid" disabled={!!(yearError || titleError)} onClick={handleSave}><I.check size={16} stroke={2.2} /> Save changes</button>
+      </div>
+    </div>
+  );
+}
+
+export function ColorPicker({ value, onChange }) {
+  return (
+    <div className="ef-field">
+      <span className="ef-k">Cover color</span>
+      <div className="accent-swatches">
+        {COVER_COLORS.map(c => (
+          <button type="button" key={c} className={"swatch" + (value === c ? " on" : "")}
+            style={{ background: c }} onClick={() => onChange(c)} aria-label={c}>
+            {value === c && <I.check size={15} stroke={2.6} />}
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -399,13 +432,18 @@ export function AddItemModal({ collection, onClose, onAdded }) {
   const addRow = () => setCustom(p => [...p, { label: "", value: "" }]);
   const delRow = (i) => setCustom(p => p.filter((_, idx) => idx !== i));
 
+  const addYearRaw = c.year.trim();
+  const addYearNum = addYearRaw ? parseInt(addYearRaw, 10) : null;
+  const addYearError = addYearRaw && (!Number.isFinite(addYearNum) || addYearNum < 1000 || addYearNum > 2099)
+    ? "Year must be a number between 1000 and 2099"
+    : null;
+
   function add() {
-    if (!c.title.trim()) return;
-    const yearNum = c.year.trim() ? parseInt(c.year, 10) : null;
+    if (!c.title.trim() || addYearError) return;
     const customClean = custom.map(r => ({ label: r.label.trim(), value: r.value.trim() })).filter(r => r.label && r.value);
     const draft = {
       title: c.title.trim(), sub: c.sub.trim() || null, type,
-      year: Number.isFinite(yearNum) ? yearNum : null, owned,
+      year: Number.isFinite(addYearNum) ? addYearNum : null, owned,
       ...(c.series.trim() ? { series: c.series.trim() } : {}),
       ...(c.region.trim() ? { region: c.region.trim() } : {}),
     };
@@ -447,6 +485,7 @@ export function AddItemModal({ collection, onClose, onAdded }) {
             <EFText label="Title" value={c.title} placeholder="Item title" onChange={v => setCan("title", v)} wide />
             <EFText label={subLabel} value={c.sub} placeholder={subLabel} onChange={v => setCan("sub", v)} />
             <EFText label="Year" value={c.year} placeholder="e.g. 1996" onChange={v => setCan("year", v)} />
+            {addYearError && <div className="ef-error">{addYearError}</div>}
             <EFText label="Series" value={c.series} placeholder="e.g. Dune, Pokémon" onChange={v => setCan("series", v)} />
             {type === "game" && <EFText label="Region" value={c.region} placeholder="e.g. NTSC, PAL, JPN" onChange={v => setCan("region", v)} />}
           </div>
@@ -488,7 +527,7 @@ export function AddItemModal({ collection, onClose, onAdded }) {
 
         <div className="modal-foot">
           <div style={{ fontSize: 12, color: "var(--mute)" }}>{collection.template && collection.template.length ? `${collection.template.length} template field${collection.template.length !== 1 ? "s" : ""} ready` : "Saved on this device"}</div>
-          <button className="btn solid" disabled={!c.title.trim()} onClick={add}><I.check size={16} /> Add item</button>
+          <button className="btn solid" disabled={!c.title.trim() || !!addYearError} onClick={add}><I.check size={16} /> Add item</button>
         </div>
       </div>
     </div>

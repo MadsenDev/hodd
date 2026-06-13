@@ -1,7 +1,8 @@
 // @ts-nocheck
 import React, { useState, useEffect, useRef } from 'react';
 import { I } from './icons';
-import { Cover, Sidebar, Topbar, MobileTopBar, MobileTabs, useNarrow } from './components';
+import { Cover, Sidebar, Topbar, MobileTopBar, MobileTabs, useNarrow, Toaster } from './components';
+import { toaster } from './toaster';
 import { useTweaks, TweaksPanel, TweakSection, TweakRadio, TweakColor, TweakSelect } from './tweaks';
 import { useUser, useCollections } from './hooks';
 import { OllamaClient, addItem, lookupMetadata, invalidateCache } from './api';
@@ -20,6 +21,7 @@ import { Wishlist } from './views/Wishlist';
 import { Favorites } from './views/Favorites';
 import { Timeline } from './views/Timeline';
 import { Discover } from './views/Discover';
+import { SeriesView } from './views/Series';
 
 // Each entry: [light accent, light soft, light deep]  /  [dark accent, dark soft, dark deep]
 const ACCENTS: Record<string, [string[], string[]]> = {
@@ -227,10 +229,11 @@ function AddDesktop({ onClose, onAdded, ctx, ollamaModel }) {
 
     // 2. Enrich each item in parallel: Ollama + online lookup
     setStatusMsg("Enriching with AI and metadata sources…");
+    let metaFailed = false, ollamaFailed = false;
     parsed = await Promise.all(parsed.map(async item => {
       const [aiEnrich, onlineLookup] = await Promise.all([
-        ollamaModel ? OllamaClient.enrichItem(item.raw, item.type, ollamaModel).catch(() => null) : null,
-        lookupMetadata(item.type, item.raw).catch(() => null),
+        ollamaModel ? OllamaClient.enrichItem(item.raw, item.type, ollamaModel).catch(() => { ollamaFailed = true; return null; }) : null,
+        lookupMetadata(item.type, item.raw).catch(() => { metaFailed = true; return null; }),
       ]);
       // Apply online lookup first (lower confidence), then AI on top (higher confidence)
       const afterLookup = onlineLookup && onlineLookup.length
@@ -239,6 +242,8 @@ function AddDesktop({ onClose, onAdded, ctx, ollamaModel }) {
       return aiEnrich ? applyEnrichment(afterLookup, aiEnrich) : afterLookup;
     }));
 
+    if (ollamaFailed) toaster.error("Ollama enrichment failed — check that Ollama is running and a model is selected.");
+    if (metaFailed) toaster.error("Online metadata lookup failed — items will need manual review.");
     setItems(parsed);
     setStage("review");
   }
@@ -440,6 +445,7 @@ export default function App() {
   else if (view === "favorites")  bar = { title: "Favorites", subtitle: "Your most treasured pieces." };
   else if (view === "timeline") bar = { title: "Timeline", subtitle: "How your collection has grown." };
   else if (view === "discover") bar = { title: "Discover", subtitle: "Find what connects, and what's missing." };
+  else if (view === "series") bar = { title: "Series", subtitle: "Browse by franchise, arc, or set." };
   else if (view === "statistics") bar = { title: "Statistics", subtitle: "The shape of your hoard." };
   else if (view === "settings") bar = { title: "Settings", subtitle: null };
   else bar = { bare: true };
@@ -455,6 +461,7 @@ export default function App() {
   else if (view === "favorites")  body = <Favorites ctx={ctx} />;
   else if (view === "timeline")   body = <Timeline ctx={ctx} />;
   else if (view === "discover")   body = <Discover ctx={ctx} />;
+  else if (view === "series")     body = <SeriesView ctx={ctx} />;
   else if (view === "settings")   body = <Settings onSaved={user.refetch} />;
   else body = <ComingSoon name={bar.title || "Coming soon"} />;
 
@@ -489,6 +496,7 @@ export default function App() {
       {addItemColl && <AddItemModal collection={addItemColl}
         onClose={() => setAddItemColl(null)}
         onAdded={() => { setAddItemColl(null); bumpData(); }} />}
+      <Toaster />
       <TweaksPanel>
         <TweakSection label="Layout" />
         <TweakRadio label="Home" value={t.homeStyle} options={["Collection-first", "Dashboard"]}

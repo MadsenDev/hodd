@@ -62,6 +62,7 @@ export const I = {
   upload:     (p) => <Icon {...p}><path d="M12 21V8M7 13l5-5 5 5" /><path d="M3 4h18" /></Icon>,
   image:      (p) => <Icon {...p}><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8.5" cy="9.5" r="1.5" /><path d="M21 15l-5-5-8 8" /></Icon>,
   expand:     (p) => <Icon {...p}><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></Icon>,
+  layers:     (p) => <Icon {...p}><path d="M12 2L2 7l10 5 10-5-10-5Z" /><path d="M2 12l10 5 10-5" /><path d="M2 17l10 5 10-5" /></Icon>,
 };
 
 export function typeIcon(type, props) {

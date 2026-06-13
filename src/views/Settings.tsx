@@ -4,6 +4,7 @@ import { I } from '../icons';
 import { Loading } from '../components';
 import { getSettings, saveSetting, exportData, importData } from '../api';
 import { OllamaSetupCard } from './OllamaSetupCard';
+import { toaster } from '../toaster';
 
 export function Settings({ onSaved = undefined }) {
   const [loading, setLoading] = useState(true);
@@ -54,8 +55,11 @@ export function Settings({ onSaved = undefined }) {
       if (result && !result.canceled) {
         setImportDone(true);
         if (onSaved) onSaved();
+        toaster.success("Archive imported successfully.");
         setTimeout(() => setImportDone(false), 3000);
       }
+    } catch (e) {
+      toaster.error("Import failed — the archive may be corrupt or from an incompatible version.");
     } finally {
       setImporting(false);
     }
@@ -67,8 +71,11 @@ export function Settings({ onSaved = undefined }) {
       const result = await exportData();
       if (result && !result.canceled) {
         setExportDone(true);
+        toaster.success("Archive exported successfully.");
         setTimeout(() => setExportDone(false), 3000);
       }
+    } catch (e) {
+      toaster.error("Export failed — please try again.");
     } finally {
       setExporting(false);
     }

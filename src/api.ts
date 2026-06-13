@@ -31,7 +31,7 @@ async function ensureCache() {
   _catalog = cat; _holdings = h; _catOv = co; _userColls = uc; _userItems = ui; _baseCols = bc;
 }
 
-export function invalidateCache() { _holdings = null; _catOv = null; _userColls = null; _userItems = null; _favorites = null; }
+export function invalidateCache() { _holdings = null; _catOv = null; _userColls = null; _userItems = null; _favorites = null; _searchIndex = null; }
 
 function readOverrides()  { return _holdings  || {}; }
 function readCatalogOv()  { return _catOv     || {}; }
@@ -91,6 +91,7 @@ export function saveStory(id, paragraphs) {
 }
 
 let _favorites: string[] | null = null;
+let _searchIndex: any[] | null = null;
 
 export async function getFavorites(): Promise<string[]> {
   if (_favorites) return _favorites;
@@ -427,6 +428,7 @@ export async function exportData() {
 }
 
 export async function getSearchIndex() {
+  if (_searchIndex) return _searchIndex;
   await ensureCache();
   const cat = _catalog || [], h = _holdings || {};
   const bcMap = Object.fromEntries((_baseCols || []).map(c => [c.id as string, c.name as string]));
@@ -452,7 +454,8 @@ export async function getSearchIndex() {
       userIdx.push(item);
     });
   });
-  return catIdx.concat(userIdx);
+  _searchIndex = catIdx.concat(userIdx);
+  return _searchIndex;
 }
 
 // ── Ollama local AI client ────────────────────────────────────────────────────
