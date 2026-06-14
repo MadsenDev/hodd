@@ -21,7 +21,10 @@ function ipc() { return (window as any).hoddDesktop?.api; }
 async function ensureCache() {
   if (_catalog && _holdings && _catOv && _userColls && _userItems && _baseCols) return;
   const a = ipc();
-  if (!a) throw new Error("Electron IPC not available");
+  if (!a) {
+    _catalog = []; _holdings = {}; _catOv = {}; _userColls = []; _userItems = {}; _baseCols = [];
+    return;
+  }
   const [cat, h, co, uc, ui, bc] = await Promise.all([
     _catalog   || a.getCatalog(),
     _holdings  || a.getHoldings(),
