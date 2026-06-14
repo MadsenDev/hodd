@@ -1,9 +1,9 @@
 // @ts-nocheck
 import React from 'react';
 
-export function HoddMark({ size = 28, stroke = 1.6, color = "currentColor", style = undefined }) {
+export function HoddMark({ size = 28, stroke = 1.6, color = "currentColor", style = undefined, className = undefined }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" fill="none" style={style}>
+    <svg width={size} height={size} viewBox="0 0 100 100" fill="none" style={style} className={className}>
       <g fill={color}>
         <rect x="22" y="24" width="9" height="52" rx="4" />
         <rect x="69" y="24" width="9" height="52" rx="4" />
