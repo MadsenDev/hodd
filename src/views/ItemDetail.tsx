@@ -80,6 +80,10 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
     owned && item.notes && ["Notes", item.notes],
     owned && item.ownership === "borrowed" && item.loan_from && ["Borrowed from", item.loan_from],
     owned && item.ownership === "borrowed" && item.loan_date && ["Since", item.loan_date],
+    owned && item.purchase_price && ["Paid", `${item.purchase_currency || "USD"} ${item.purchase_price}`],
+    owned && item.current_value && ["Est. value", `${item.purchase_currency || "USD"} ${item.current_value}`],
+    owned && item.loan_to && ["Lent to", item.loan_to],
+    owned && item.loan_to && item.loan_to_date && ["Since (lent)", item.loan_to_date],
   ].filter(f => f && f[1] != null && f[1] !== "");
 
   return (
@@ -254,7 +258,7 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
                   if (isOwned === false) {
                     removeHolding(item.id);
                     if (isUserItem) setItemOwned(item.id, false);
-                    setItem({ ...item, ...(canonical || {}), ...photoUpdate, owned: false, format: null, completeness: null, completed: null, grade: null, pressing: null, edition: null, condition: null, acquired: null, watched: undefined, notes: null, ownership: null, loan_from: null, loan_date: null });
+                    setItem({ ...item, ...(canonical || {}), ...photoUpdate, owned: false, format: null, completeness: null, completed: null, grade: null, pressing: null, edition: null, condition: null, acquired: null, watched: undefined, notes: null, ownership: null, loan_from: null, loan_date: null, purchase_price: null, purchase_currency: null, current_value: null, loan_to: null, loan_to_date: null });
                   } else {
                     saveHolding(item.id, holding);
                     if (isUserItem && item.owned === false) setItemOwned(item.id, true);

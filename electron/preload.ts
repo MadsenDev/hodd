@@ -56,7 +56,18 @@ contextBridge.exposeInMainWorld('hoddDesktop', {
     pickImage: (multi?: boolean) => ipcRenderer.invoke('hodd:image:pick', multi),
     deleteImage: (filename: string) => ipcRenderer.invoke('hodd:image:delete', filename),
     resetAll: () => ipcRenderer.invoke('hodd:reset-all'),
+    getSavedFilters: () => ipcRenderer.invoke('hodd:filters:get'),
+    saveFilter: (name: string, query: string, collectionId?: string) => ipcRenderer.invoke('hodd:filters:save', name, query, collectionId),
+    deleteFilter: (id: number) => ipcRenderer.invoke('hodd:filters:delete', id),
+    getProfiles: () => ipcRenderer.invoke('hodd:profiles:get'),
+    createProfile: (name: string, color: string) => ipcRenderer.invoke('hodd:profile:create', name, color),
+    deleteProfile: (id: string) => ipcRenderer.invoke('hodd:profile:delete', id),
+    getActiveProfile: () => ipcRenderer.invoke('hodd:profile:active'),
+    switchProfile: (id: string) => ipcRenderer.invoke('hodd:profile:switch', id),
   },
+
+  printToPdf: (title: string) => ipcRenderer.invoke('hodd:print:pdf', title),
+  getCompanionStatus: () => ipcRenderer.invoke('hodd:companion:status'),
 
   // Ollama local AI
   ollama: {

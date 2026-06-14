@@ -10,6 +10,8 @@ protocol.registerSchemesAsPrivileged([
 ]);
 import { spawn, ChildProcess } from 'node:child_process';
 import * as db from './db.js';
+import { createServer } from 'node:http';
+import { networkInterfaces } from 'node:os';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -67,6 +69,8 @@ async function ollamaGenerate(model: string, prompt: string, system?: string): P
 // ─── Window ────────────────────────────────────────────────────────────────
 
 let mainWindow: BrowserWindow | null = null;
+let companionServerPort = 0;
+let companionServer: ReturnType<typeof createServer> | null = null;
 
 function titleBarOverlay(dark: boolean) {
   return {
@@ -74,6 +78,125 @@ function titleBarOverlay(dark: boolean) {
     symbolColor: dark ? '#8b8893' : '#5d5a6f',
     height: 32,
   };
+}
+
+function getLocalIP(): string {
+  const nets = networkInterfaces();
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name]!) {
+      if (net.family === 'IPv4' && !net.internal) return net.address;
+    }
+  }
+  return '127.0.0.1';
+}
+
+function startCompanionServer(): void {
+  const server = createServer(async (req, res) => {
+    const url = new URL(req.url || '/', `http://localhost`);
+
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+
+    function json(data: unknown, status = 200) {
+      res.writeHead(status, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(data));
+    }
+
+    async function body(): Promise<Record<string, unknown>> {
+      return new Promise(resolve => {
+        let data = '';
+        req.on('data', chunk => { data += chunk; });
+        req.on('end', () => { try { resolve(JSON.parse(data)); } catch (_) { resolve({}); } });
+      });
+    }
+
+    const pathname = url.pathname;
+
+    if (pathname === '/api/status') {
+      json({ ok: true, name: 'Hodd', version: '1.1.0' });
+      return;
+    }
+    if (pathname === '/api/collections' && req.method === 'GET') {
+      const base = db.getBaseCollections();
+      const user = db.getUserCollections();
+      json([...base, ...user]);
+      return;
+    }
+    if (pathname.startsWith('/api/collections/') && pathname.endsWith('/items') && req.method === 'GET') {
+      const collId = pathname.split('/')[3];
+      const userItems = db.getUserItems();
+      json(userItems[collId] || []);
+      return;
+    }
+    if (pathname === '/api/items/add' && req.method === 'POST') {
+      const b = await body();
+      const collId = String(b.collectionId || '');
+      const draft = (b.draft || {}) as Record<string, unknown>;
+      const item = db.addUserItem(collId, draft);
+      json({ ok: true, item });
+      return;
+    }
+    if (pathname === '/api/lookup' && req.method === 'POST') {
+      const b = await body();
+      const type = String(b.type || 'book');
+      const query = String(b.query || '');
+      try {
+        let results: unknown[] = [];
+        if (type === 'book') {
+          const r = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=5&fields=title,author_name,first_publish_year,cover_i`);
+          const data = await r.json() as { docs?: { title?: string; author_name?: string[]; first_publish_year?: number; cover_i?: number }[] };
+          results = (data.docs ?? []).slice(0, 3).map(d => ({
+            title: d.title ?? query, year: d.first_publish_year ?? null, sub: d.author_name?.[0] ?? null,
+            cover_url: d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-L.jpg` : null,
+          }));
+        } else if (type === 'vinyl') {
+          const r = await fetch(`https://musicbrainz.org/ws/2/release/?query=${encodeURIComponent(query)}&fmt=json&limit=3`, { headers: { 'User-Agent': 'HODD-Desktop/1.0' } });
+          const data = await r.json() as { releases?: { title?: string; date?: string; 'artist-credit'?: { artist?: { name?: string } }[] }[] };
+          results = (data.releases ?? []).slice(0, 3).map(d => ({
+            title: d.title ?? query, year: d.date ? parseInt(d.date.slice(0, 4)) : null, sub: d['artist-credit']?.[0]?.artist?.name ?? null, cover_url: null,
+          }));
+        }
+        json(results);
+      } catch (e) {
+        json([], 200);
+      }
+      return;
+    }
+
+    const companionDist = (() => {
+      const devPath = path.join(__dirname, '../companion/dist');
+      if (existsSync(devPath)) return devPath;
+      return path.join(__dirname, '../companion-dist');
+    })();
+
+    let filePath = path.join(companionDist, pathname === '/' ? 'index.html' : pathname.slice(1));
+    if (!filePath.startsWith(companionDist)) { res.writeHead(403); res.end('Forbidden'); return; }
+    if (!existsSync(filePath)) filePath = path.join(companionDist, 'index.html');
+
+    if (existsSync(filePath)) {
+      const ext = path.extname(filePath).toLowerCase();
+      const mime: Record<string, string> = {
+        '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css',
+        '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml',
+        '.ico': 'image/x-icon', '.json': 'application/json', '.woff2': 'font/woff2',
+      };
+      res.writeHead(200, { 'Content-Type': mime[ext] || 'application/octet-stream' });
+      const data = await fs.readFile(filePath);
+      res.end(data);
+    } else {
+      res.writeHead(404); res.end('Not found');
+    }
+  });
+
+  server.listen(0, '0.0.0.0', () => {
+    const addr = server.address();
+    companionServerPort = typeof addr === 'object' && addr ? addr.port : 7842;
+    console.log(`[HODD companion] Server on port ${companionServerPort}`);
+  });
+  companionServer = server;
 }
 
 function createWindow() {
@@ -168,7 +291,7 @@ function registerIpc(): void {
   });
   ipcMain.handle('hodd:item:set-owned',    (_e, id: string, owned: boolean)                       => db.setUserItemOwned(id, owned));
   ipcMain.handle('hodd:item:update-fields',(_e, id: string, fields: Record<string, unknown>)      => db.updateUserItemFields(id, fields));
-  const WRITABLE_SETTINGS = new Set(['user.name', 'user.joined', 'api.rawg', 'api.omdb', 'ollama.model', 'onboarded']);
+  const WRITABLE_SETTINGS = new Set(['user.name', 'user.joined', 'api.rawg', 'api.omdb', 'ollama.model', 'onboarded', 'active_profile']);
   ipcMain.handle('hodd:setting:save', (_e, key: string, value: string) => {
     if (!WRITABLE_SETTINGS.has(key)) return;
     db.saveSetting(key, value);
@@ -616,6 +739,49 @@ function registerIpc(): void {
       return null;
     }
   });
+
+  // Saved filters
+  ipcMain.handle('hodd:filters:get', () => db.getSavedFilters());
+  ipcMain.handle('hodd:filters:save', (_e, name: string, query: string, collectionId?: string) => db.saveSavedFilter(name, query, collectionId));
+  ipcMain.handle('hodd:filters:delete', (_e, id: number) => db.deleteSavedFilter(id));
+
+  // Profiles
+  ipcMain.handle('hodd:profiles:get', () => db.getProfiles());
+  ipcMain.handle('hodd:profile:create', (_e, name: string, color: string) => db.createProfile(name, color));
+  ipcMain.handle('hodd:profile:delete', (_e, id: string) => db.deleteProfile(id));
+  ipcMain.handle('hodd:profile:active', () => db.getActiveProfile());
+  ipcMain.handle('hodd:profile:switch', (_e, id: string) => db.setActiveProfile(id));
+
+  // Companion server status
+  ipcMain.handle('hodd:companion:status', () => ({
+    port: companionServerPort,
+    ip: getLocalIP(),
+    url: `http://${getLocalIP()}:${companionServerPort}`,
+  }));
+
+  // Print to PDF
+  ipcMain.handle('hodd:print:pdf', async (_e, title: string) => {
+    if (!mainWindow) return { ok: false };
+    try {
+      const data = await mainWindow.webContents.printToPDF({
+        printBackground: true,
+        pageSize: 'A4',
+        margins: { marginType: 'custom', top: 0.5, bottom: 0.5, left: 0.5, right: 0.5 },
+      });
+      const savePath = await dialog.showSaveDialog({
+        title: 'Save PDF',
+        defaultPath: `${title.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.pdf`,
+        filters: [{ name: 'PDF', extensions: ['pdf'] }],
+      });
+      if (savePath.canceled || !savePath.filePath) return { ok: false };
+      await fs.writeFile(savePath.filePath, data);
+      await shell.openPath(savePath.filePath);
+      return { ok: true, path: savePath.filePath };
+    } catch (e) {
+      console.error('[HODD print]', e);
+      return { ok: false, error: String(e) };
+    }
+  });
 }
 
 // ─── Boot ──────────────────────────────────────────────────────────────────
@@ -628,6 +794,7 @@ app.whenReady().then(async () => {
     console.error('[HODD] Database init failed:', e);
   }
 
+  startCompanionServer();
   registerIpc();
   createWindow();
 

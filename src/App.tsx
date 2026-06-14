@@ -23,6 +23,7 @@ import { Favorites } from './views/Favorites';
 import { Timeline } from './views/Timeline';
 import { Discover } from './views/Discover';
 import { SeriesView } from './views/Series';
+import { LoanView } from './views/LoanView';
 
 // Each entry: [light accent, light soft, light deep]  /  [dark accent, dark soft, dark deep]
 const ACCENTS: Record<string, [string[], string[]]> = {
@@ -654,6 +655,7 @@ export default function App() {
   else if (view === "timeline") bar = { title: "Timeline", subtitle: "How your collection has grown." };
   else if (view === "discover") bar = { title: "Discover", subtitle: "Find what connects, and what's missing." };
   else if (view === "series") bar = { title: "Series", subtitle: "Browse by franchise, arc, or set." };
+  else if (view === "loans") bar = { title: "Loans", subtitle: "What you've borrowed and lent." };
   else if (view === "statistics") bar = { title: "Statistics", subtitle: "The shape of your hoard." };
   else if (view === "settings") bar = { title: "Settings", subtitle: null };
   else bar = { bare: true };
@@ -670,6 +672,7 @@ export default function App() {
   else if (view === "timeline")   body = <Timeline ctx={ctx} />;
   else if (view === "discover")   body = <Discover ctx={ctx} />;
   else if (view === "series")     body = <SeriesView ctx={ctx} />;
+  else if (view === "loans")      body = <LoanView ctx={ctx} />;
   else if (view === "settings")   body = <Settings onSaved={user.refetch} />;
   else body = <ComingSoon name={bar.title || "Coming soon"} />;
 

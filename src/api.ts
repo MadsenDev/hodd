@@ -5,7 +5,7 @@
 import { toaster } from './toaster';
 
 const COLL_NAME = { pokemon: "Pokémon Games", books: "Books", movies: "Movies", games: "Games", coins: "Coins", comics: "Comics", vinyl: "Vinyl" };
-export const HOLDING_FIELDS = ["ownership", "notes", "loan_from", "loan_date", "format", "completeness", "grade", "pressing", "edition", "condition", "acquired", "watched", "custom"];
+export const HOLDING_FIELDS = ["ownership", "notes", "loan_from", "loan_date", "loan_to", "loan_to_date", "format", "completeness", "grade", "pressing", "edition", "condition", "acquired", "watched", "custom", "purchase_price", "purchase_currency", "current_value"];
 const USER_HUES = ["#6366f1", "#5BA47A", "#5C8AD6", "#C9A24C", "#CF6B5A", "#7FB0C4", "#9B7BD4", "#C0392B"];
 
 let _catalog   = null;
@@ -262,8 +262,13 @@ function joinHolding(cat, h) {
     custom:       (h && h.custom)       || null,
     notes:        (h && h.notes)        || null,
     ownership:    (h && h.ownership)    || null,
-    loan_from:    (h && h.loan_from)    || null,
-    loan_date:    (h && h.loan_date)    || null,
+    loan_from:        (h && h.loan_from)        || null,
+    loan_date:        (h && h.loan_date)        || null,
+    loan_to:          (h && h.loan_to)          || null,
+    loan_to_date:     (h && h.loan_to_date)     || null,
+    purchase_price:   (h && h.purchase_price)   ?? null,
+    purchase_currency:(h && h.purchase_currency) || 'USD',
+    current_value:    (h && h.current_value)    ?? null,
   });
 }
 
