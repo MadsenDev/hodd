@@ -5,8 +5,8 @@ import { Cover, Sidebar, Topbar, MobileTopBar, MobileTabs, useNarrow, Toaster } 
 import { toaster } from './toaster';
 import { useTweaks, TweaksPanel, TweakSection, TweakRadio, TweakColor, TweakSelect } from './tweaks';
 import { useUser, useCollections, useSearchIndex } from './hooks';
-import { OllamaClient, addItem, lookupMetadata, invalidateCache, getOnboarded } from './api';
-import { Onboarding } from './views/Onboarding';
+import { OllamaClient, addItem, lookupMetadata, invalidateCache, getSettings } from './api';
+import { Onboarding, LoadingScreen } from './views/Onboarding';
 import { TYPE_COLL, TYPE_COLOR, TYPE_LABEL, parseHoardLines } from './engine';
 import { typeIcon } from './icons';
 import { CreateCollectionModal, AddItemModal, FORMAT_OPTIONS, CONDITION_OPTIONS, COMPLETENESS_OPTIONS } from './forms';
@@ -560,9 +560,23 @@ function greetingFor(d) {
 
 export default function App() {
   const [onboarded, setOnboarded] = useState<boolean | null>(null);
-  useEffect(() => { getOnboarded().then(setOnboarded); }, []);
+  const [bootReady, setBootReady] = useState(false);
 
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+
+  // Load persisted state, while guaranteeing the splash shows long enough to
+  // breathe rather than flashing past.
+  useEffect(() => {
+    const minSplash = new Promise(res => setTimeout(res, 900));
+    Promise.all([getSettings(), minSplash]).then(([s]) => {
+      setOnboarded(s["onboarded"] === "1");
+      const edits: Record<string, string> = {};
+      if (s["theme"]) edits.theme = s["theme"];
+      if (s["accent"] && ACCENTS[s["accent"]]) edits.accent = s["accent"];
+      if (Object.keys(edits).length) setTweak(edits);
+      setBootReady(true);
+    });
+  }, []);
   useEffect(() => {
     const root = document.documentElement;
     root.setAttribute("data-theme", t.theme === "dark" ? "dark" : "light");
@@ -684,8 +698,13 @@ export default function App() {
     histRef.current = []; setView(id); scrollTop();
   };
 
-  if (onboarded === null) return null;
-  if (onboarded === false) return <Onboarding onDone={() => setOnboarded(true)} />;
+  if (!bootReady || onboarded === null) return <LoadingScreen />;
+  if (onboarded === false) return (
+    <Onboarding onDone={(prefs) => {
+      if (prefs) setTweak({ theme: prefs.theme, accent: prefs.accent });
+      setOnboarded(true);
+    }} />
+  );
 
   return (
     <div className="app">
