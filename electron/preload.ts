@@ -1,5 +1,10 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
+type StreamCb = (_e: unknown, d: { type: string; data: string }) => void;
+type PullCb   = (_e: unknown, d: { status: string; pct: number | null }) => void;
+let _streamListener: StreamCb | null = null;
+let _pullListener: PullCb | null = null;
+
 contextBridge.exposeInMainWorld('hoddDesktop', {
   platform: process.platform,
 
@@ -64,11 +69,27 @@ contextBridge.exposeInMainWorld('hoddDesktop', {
     start:          () => ipcRenderer.invoke('hodd:ollama:start'),
     pullModel:      (name: string) => ipcRenderer.invoke('hodd:ollama:pull', name),
     stop:           () => ipcRenderer.invoke('hodd:ollama:stop'),
-    onStream:       (cb: (data: { type: string; data: string }) => void) =>
-      ipcRenderer.on('hodd:ollama:stream', (_e, d) => cb(d)),
-    offStream:      () => ipcRenderer.removeAllListeners('hodd:ollama:stream'),
-    onPullProgress: (cb: (data: { status: string; pct: number | null }) => void) =>
-      ipcRenderer.on('hodd:ollama:pull-progress', (_e, d) => cb(d)),
-    offPullProgress: () => ipcRenderer.removeAllListeners('hodd:ollama:pull-progress'),
+    onStream: (cb: (data: { type: string; data: string }) => void) => {
+      if (_streamListener) ipcRenderer.removeListener('hodd:ollama:stream', _streamListener);
+      _streamListener = (_e: unknown, d: { type: string; data: string }) => cb(d);
+      ipcRenderer.on('hodd:ollama:stream', _streamListener);
+    },
+    offStream: () => {
+      if (_streamListener) {
+        ipcRenderer.removeListener('hodd:ollama:stream', _streamListener);
+        _streamListener = null;
+      }
+    },
+    onPullProgress: (cb: (data: { status: string; pct: number | null }) => void) => {
+      if (_pullListener) ipcRenderer.removeListener('hodd:ollama:pull-progress', _pullListener);
+      _pullListener = (_e: unknown, d: { status: string; pct: number | null }) => cb(d);
+      ipcRenderer.on('hodd:ollama:pull-progress', _pullListener);
+    },
+    offPullProgress: () => {
+      if (_pullListener) {
+        ipcRenderer.removeListener('hodd:ollama:pull-progress', _pullListener);
+        _pullListener = null;
+      }
+    },
   },
 });

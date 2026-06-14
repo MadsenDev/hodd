@@ -73,7 +73,11 @@ const SCHEMA = `
     acquired TEXT,
     watched INTEGER,
     completed INTEGER,
-    custom TEXT
+    custom TEXT,
+    notes TEXT,
+    loan_from TEXT,
+    loan_date TEXT,
+    ownership TEXT
   );
 
   CREATE TABLE IF NOT EXISTS catalog_overrides (
@@ -244,6 +248,10 @@ export async function initDb(): Promise<void> {
   }
   try { db.run('ALTER TABLE holdings ADD COLUMN completed INTEGER'); } catch (_) {}
   try { db.run('ALTER TABLE user_items ADD COLUMN completed INTEGER'); } catch (_) {}
+  try { db.run('ALTER TABLE holdings ADD COLUMN notes TEXT'); } catch (_) {}
+  try { db.run('ALTER TABLE holdings ADD COLUMN loan_from TEXT'); } catch (_) {}
+  try { db.run('ALTER TABLE holdings ADD COLUMN loan_date TEXT'); } catch (_) {}
+  try { db.run('ALTER TABLE holdings ADD COLUMN ownership TEXT'); } catch (_) {}
   try { db.run('ALTER TABLE user_items ADD COLUMN cover_url TEXT'); } catch (_) {}
   try { db.run('ALTER TABLE user_items ADD COLUMN gallery TEXT'); } catch (_) {}
   try { db.run('ALTER TABLE catalog_overrides ADD COLUMN cover_url TEXT'); } catch (_) {}
@@ -371,7 +379,7 @@ export function getCatalog(): Record<string, unknown>[] {
 }
 
 export function getHoldings(): Record<string, Record<string, unknown>> {
-  const res = db.exec('SELECT item_id, format, completeness, grade, pressing, edition, condition_val, acquired, watched, completed, custom FROM holdings');
+  const res = db.exec('SELECT item_id, format, completeness, grade, pressing, edition, condition_val, acquired, watched, completed, custom, notes, loan_from, loan_date, ownership FROM holdings');
   if (!res.length) return {};
   const [{ columns, values }] = res;
   const map: Record<string, Record<string, unknown>> = {};
@@ -488,16 +496,19 @@ export function saveHolding(itemId: string, patch: Record<string, unknown>): voi
     }
     if (merged.custom && typeof merged.custom !== 'string') merged.custom = JSON.stringify(merged.custom);
     db.run(`UPDATE holdings SET format=?, completeness=?, grade=?, pressing=?, edition=?,
-      condition_val=?, acquired=?, watched=?, completed=?, custom=? WHERE item_id=?`, [
+      condition_val=?, acquired=?, watched=?, completed=?, custom=?,
+      notes=?, loan_from=?, loan_date=?, ownership=? WHERE item_id=?`, [
       sv(merged.format), sv(merged.completeness), sv(merged.grade),
       sv(merged.pressing), sv(merged.edition), sv(merged.condition_val),
-      sv(merged.acquired), sv(merged.watched), sv(merged.completed), sv(merged.custom), itemId,
+      sv(merged.acquired), sv(merged.watched), sv(merged.completed), sv(merged.custom),
+      sv(merged.notes), sv(merged.loan_from), sv(merged.loan_date), sv(merged.ownership), itemId,
     ]);
   } else {
     const w = patch.watched;
     const cp = patch.completed;
     db.run(`INSERT INTO holdings (item_id, format, completeness, grade, pressing, edition,
-      condition_val, acquired, watched, completed, custom) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+      condition_val, acquired, watched, completed, custom,
+      notes, loan_from, loan_date, ownership) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
       itemId,
       sv(patch.format), sv(patch.completeness), sv(patch.grade),
       sv(patch.pressing), sv(patch.edition), sv(patch.condition),
@@ -505,6 +516,7 @@ export function saveHolding(itemId: string, patch: Record<string, unknown>): voi
       w == null ? null : (w ? 1 : 0),
       cp == null ? null : (cp ? 1 : 0),
       patch.custom ? JSON.stringify(patch.custom) : null,
+      sv(patch.notes), sv(patch.loan_from), sv(patch.loan_date), sv(patch.ownership),
     ]);
   }
   scheduleWrite();
@@ -800,15 +812,13 @@ export function getAllStories(): Record<string, string[]> {
 }
 
 export function clearUserData(): void {
-  db.run('DELETE FROM holdings');
-  db.run('DELETE FROM stories');
-  db.run('DELETE FROM favorites');
-  db.run('DELETE FROM catalog_overrides');
   db.run('DELETE FROM user_items');
   db.run('DELETE FROM user_collections');
-  db.run('DELETE FROM catalog');
-  db.run('DELETE FROM base_collections');
-  // Keep 'seeded' so initDb doesn't re-seed on next launch; only clear 'onboarded'
+  db.run('DELETE FROM holdings');
+  db.run('DELETE FROM catalog_overrides');
+  db.run('DELETE FROM stories');
+  db.run('DELETE FROM favorites');
+  // catalog and base_collections are seeded from bundled JSON — leave them intact
   db.run("DELETE FROM meta WHERE key = 'onboarded'");
   scheduleWrite();
 }

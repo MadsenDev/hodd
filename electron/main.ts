@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // Must run before app.whenReady()
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'hodd-img', privileges: { secure: true, supportFetchAPI: true, bypassCSP: true, corsEnabled: true } },
+  { scheme: 'hodd-img', privileges: { secure: true, supportFetchAPI: true, corsEnabled: true } },
 ]);
 import { spawn, ChildProcess } from 'node:child_process';
 import * as db from './db.js';
@@ -91,7 +91,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
     },
   });
 
@@ -113,7 +113,11 @@ function registerIpc(): void {
   // Serve user-uploaded images via hodd-img:// protocol
   protocol.handle('hodd-img', (req) => {
     const filename = path.basename(decodeURIComponent(req.url.slice('hodd-img://'.length)));
-    const imagePath = path.join(app.getPath('userData'), 'images', filename);
+    const imagesDir = path.join(app.getPath('userData'), 'images');
+    const imagePath = path.join(imagesDir, filename);
+    if (!imagePath.startsWith(imagesDir + path.sep)) {
+      return new Response('Not Found', { status: 404 });
+    }
     return net.fetch(pathToFileURL(imagePath).toString());
   });
 
@@ -164,7 +168,11 @@ function registerIpc(): void {
   });
   ipcMain.handle('hodd:item:set-owned',    (_e, id: string, owned: boolean)                       => db.setUserItemOwned(id, owned));
   ipcMain.handle('hodd:item:update-fields',(_e, id: string, fields: Record<string, unknown>)      => db.updateUserItemFields(id, fields));
-  ipcMain.handle('hodd:setting:save',    (_e, key: string, value: string)                 => db.saveSetting(key, value));
+  const WRITABLE_SETTINGS = new Set(['user.name', 'user.joined', 'api.rawg', 'api.omdb', 'ollama.model', 'onboarded']);
+  ipcMain.handle('hodd:setting:save', (_e, key: string, value: string) => {
+    if (!WRITABLE_SETTINGS.has(key)) return;
+    db.saveSetting(key, value);
+  });
   ipcMain.handle('hodd:favorites',                                                          () => db.getFavorites());
   ipcMain.handle('hodd:favorite:add',    (_e, id: string)                                  => db.addFavorite(id));
   ipcMain.handle('hodd:favorite:remove', (_e, id: string)                                  => db.removeFavorite(id));
@@ -267,12 +275,15 @@ function registerIpc(): void {
 
     // Restore bundled images (v2 archives)
     const images = payload.images as Record<string, string> | undefined;
+    const ALLOWED_IMG_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic', '.avif']);
     if (images && typeof images === 'object') {
       const imagesDir = path.join(app.getPath('userData'), 'images');
       await fs.mkdir(imagesDir, { recursive: true });
       for (const [name, b64] of Object.entries(images)) {
+        if (typeof b64 !== 'string') continue;
+        const safeName = path.basename(name);
+        if (!ALLOWED_IMG_EXTS.has(path.extname(safeName).toLowerCase())) continue;
         try {
-          const safeName = path.basename(name);
           await fs.writeFile(path.join(imagesDir, safeName), Buffer.from(b64, 'base64'));
         } catch (_) {}
       }
@@ -378,10 +389,19 @@ function registerIpc(): void {
     }
   });
 
+  const VALID_MODEL = /^[a-zA-Z0-9._:/-]{1,200}$/;
   // Ollama
   ipcMain.handle('hodd:ollama:status', () => ollamaStatus());
-  ipcMain.handle('hodd:ollama:chat',   (_e, model: string, messages: { role: string; content: string }[]) => ollamaChat(model, messages));
-  ipcMain.handle('hodd:ollama:generate', (_e, model: string, prompt: string, system?: string) => ollamaGenerate(model, prompt, system));
+  ipcMain.handle('hodd:ollama:chat', (_e, model: string, messages: { role: string; content: string }[]) => {
+    if (!VALID_MODEL.test(model)) return '';
+    return ollamaChat(model, messages);
+  });
+  ipcMain.handle('hodd:ollama:generate', (_e, model: string, prompt: string, system?: string) => {
+    if (!VALID_MODEL.test(model)) return '';
+    if (typeof prompt === 'string' && prompt.length > 50_000) return '';
+    if (typeof system === 'string' && system.length > 10_000) return '';
+    return ollamaGenerate(model, prompt, system);
+  });
 
   ipcMain.handle('hodd:ollama:check-installed', () => {
     return new Promise<{ installed: boolean }>(resolve => {
@@ -479,6 +499,7 @@ function registerIpc(): void {
   });
 
   ipcMain.handle('hodd:ollama:pull', (event, model: string) => {
+    if (!VALID_MODEL.test(model)) return { ok: false, error: 'Invalid model name' };
     const win = BrowserWindow.fromWebContents(event.sender);
 
     return new Promise<{ ok: boolean; error?: string }>(resolve => {
@@ -591,7 +612,7 @@ function registerIpc(): void {
       }
       return null;
     } catch (e) {
-      console.warn('[HODD lookup]', type, (e as Error).message);
+      console.warn('[HODD lookup]', type, (e as Error).message?.replace(/((?:api)?key)=[^&\s]+/gi, '$1=REDACTED'));
       return null;
     }
   });

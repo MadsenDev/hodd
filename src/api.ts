@@ -220,7 +220,10 @@ export function addItem(collectionId, draft) {
   const rec = Object.assign({ id, collectionId, owned: true,
     color: draft.color || USER_HUES[list.length % USER_HUES.length] }, draft);
   list.push(rec);
-  const a = ipc(); if (a) a.addItem(collectionId, draft);
+  const a = ipc();
+  if (a) a.addItem(collectionId, draft).then(p => {
+    if (p && p.id && p.id !== rec.id) rec.id = p.id;
+  });
   return rec;
 }
 
