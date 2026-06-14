@@ -23,9 +23,18 @@ export function SearchView({ initial, ctx, ollamaModel }) {
   const [aiPending, setAiPending] = React.useState(false);
   const [ollamaOn, setOllamaOn] = React.useState(false);
   const [ollamaAvail, setOllamaAvail] = React.useState(false);
+  const [savedFilters, setSavedFilters] = React.useState([]);
+  const [savingFilter, setSavingFilter] = React.useState(false);
+  const [saveFilterName, setSaveFilterName] = React.useState("");
 
   React.useEffect(() => {
     OllamaClient.isRunning().then(r => setOllamaAvail(r));
+  }, []);
+
+  React.useEffect(() => {
+    const api = window.hoddDesktop?.api;
+    if (!api) return;
+    api.getSavedFilters().then(setSavedFilters).catch(() => {});
   }, []);
 
   async function run(q) {
@@ -83,6 +92,71 @@ export function SearchView({ initial, ctx, ollamaModel }) {
         <span className="add-examples-lbl">Try</span>
         {SEARCH_SAMPLES.map(s => <div key={s} className="chip" onClick={() => run(s)}>{s}</div>)}
       </div>
+
+      {value.trim() && (
+        <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          {!savingFilter ? (
+            <button className="btn" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => setSavingFilter(true)}>
+              <I.plus size={13} stroke={2} /> Save this search
+            </button>
+          ) : (
+            <>
+              <input
+                className="ai-input"
+                style={{ maxWidth: 200, fontSize: 13, padding: "6px 12px" }}
+                placeholder="Filter name…"
+                value={saveFilterName}
+                autoFocus
+                onChange={e => setSaveFilterName(e.target.value)}
+                onKeyDown={async e => {
+                  if (e.key === "Enter" && saveFilterName.trim()) {
+                    const api = window.hoddDesktop?.api;
+                    if (api) {
+                      const f = await api.saveFilter(saveFilterName.trim(), value);
+                      setSavedFilters(prev => [f, ...prev]);
+                    }
+                    setSavingFilter(false);
+                    setSaveFilterName("");
+                  }
+                  if (e.key === "Escape") { setSavingFilter(false); setSaveFilterName(""); }
+                }}
+              />
+              <button className="btn solid" style={{ fontSize: 12, padding: "4px 10px" }} onClick={async () => {
+                if (!saveFilterName.trim()) return;
+                const api = window.hoddDesktop?.api;
+                if (api) {
+                  const f = await api.saveFilter(saveFilterName.trim(), value);
+                  setSavedFilters(prev => [f, ...prev]);
+                }
+                setSavingFilter(false);
+                setSaveFilterName("");
+              }}>Save</button>
+              <button className="btn" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => { setSavingFilter(false); setSaveFilterName(""); }}>Cancel</button>
+            </>
+          )}
+        </div>
+      )}
+
+      {savedFilters.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <div className="add-examples-lbl" style={{ fontSize: 12, color: "var(--mute)", marginBottom: 6 }}>Saved searches</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {savedFilters.map(f => (
+              <div key={f.id} className="chip" style={{ display: "flex", alignItems: "center", gap: 6, paddingRight: 6 }}>
+                <span onClick={() => run(f.query)} style={{ cursor: "pointer" }}>{f.name}</span>
+                <button
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "var(--mute)", padding: 0, fontSize: 14, lineHeight: 1 }}
+                  onClick={async () => {
+                    const api = window.hoddDesktop?.api;
+                    if (api) await api.deleteFilter(f.id);
+                    setSavedFilters(prev => prev.filter(x => x.id !== f.id));
+                  }}
+                >×</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {out && (
         <div className="search-translate">

@@ -100,6 +100,11 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
     notes: item.notes || "",
     loan_from: item.loan_from || "",
     loan_date: item.loan_date || "",
+    purchase_price: item.purchase_price ? String(item.purchase_price) : "",
+    purchase_currency: item.purchase_currency || "USD",
+    current_value: item.current_value ? String(item.current_value) : "",
+    loan_to: item.loan_to || "",
+    loan_to_date: item.loan_to_date || "",
   };
   const initOwnership = item.ownership || (item.owned !== false ? "owned" : "wishlist");
   const [ownership, setOwnership] = React.useState(initOwnership);
@@ -212,6 +217,11 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
       notes: f.notes || null,
       loan_from: ownership === "borrowed" ? (f.loan_from || null) : null,
       loan_date: ownership === "borrowed" ? (f.loan_date || null) : null,
+      purchase_price: f.purchase_price ? parseFloat(f.purchase_price) || null : null,
+      purchase_currency: f.purchase_currency || "USD",
+      current_value: f.current_value ? parseFloat(f.current_value) || null : null,
+      loan_to: ownership === "owned" ? (f.loan_to || null) : null,
+      loan_to_date: ownership === "owned" ? (f.loan_to_date || null) : null,
     };
     if (etype === "game")  { holding.completeness = f.completeness || null; holding.completed = f.completed; }
     if (etype === "coin")  holding.grade = f.grade || null;
@@ -288,6 +298,9 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
             {etype === "book"  && <EFText label="Edition" value={f.edition} placeholder="e.g. First Edition" onChange={v => set("edition", v)} />}
             <EFSelect label="Condition" value={f.condition} options={CONDITION_OPTIONS} placeholder="Condition" onChange={v => set("condition", v)} />
             <EFText label="Acquired" value={f.acquired} placeholder="e.g. May 2024" onChange={v => set("acquired", v)} />
+            <EFText label="Purchase price" value={f.purchase_price} placeholder="e.g. 25.00" onChange={v => set("purchase_price", v)} />
+            <EFSelect label="Currency" value={f.purchase_currency} options={["USD", "EUR", "GBP", "CAD", "AUD", "JPY", "DKK", "SEK", "NOK", "CHF"]} placeholder={false} onChange={v => set("purchase_currency", v)} />
+            <EFText label="Current value" value={f.current_value} placeholder="Estimated market value" onChange={v => set("current_value", v)} />
             {etype === "movie" && <EFToggle label="Watched" value={f.watched} onChange={v => set("watched", v)} hint={["Yes", "Not yet"]} />}
             {etype === "book"  && <EFToggle label="Read" value={f.watched} onChange={v => set("watched", v)} hint={["Yes", "Not yet"]} />}
             {etype === "game"  && <EFToggle label="Completed" value={f.completed} onChange={v => set("completed", v)} hint={["Yes", "Not yet"]} />}
@@ -295,6 +308,12 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
               <>
                 <EFText label="Borrowed from" value={f.loan_from} placeholder="Name or place" onChange={v => set("loan_from", v)} />
                 <EFText label="Since" value={f.loan_date} placeholder="e.g. March 2024" onChange={v => set("loan_date", v)} />
+              </>
+            )}
+            {ownership === "owned" && (
+              <>
+                <EFText label="Lent to" value={f.loan_to} placeholder="Who has it?" onChange={v => set("loan_to", v)} />
+                <EFText label="Since (lent)" value={f.loan_to_date} placeholder="e.g. March 2024" onChange={v => set("loan_to_date", v)} />
               </>
             )}
             <EFText label="Notes" value={f.notes} placeholder="Quick note about this copy…" onChange={v => set("notes", v)} wide />
@@ -446,7 +465,7 @@ export function AddItemModal({ collection, onClose, onAdded }) {
   const subLabel = SUBLABELS[type] || "Detail";
   const [owned, setOwned] = React.useState(true);
   const [c, setC] = React.useState({ title: "", sub: "", year: "", series: "", region: "" });
-  const [f, setF] = React.useState({ format: "", completeness: "", grade: "", pressing: "", edition: "", condition: "", acquired: "", watched: false, completed: false });
+  const [f, setF] = React.useState({ format: "", completeness: "", grade: "", pressing: "", edition: "", condition: "", acquired: "", watched: false, completed: false, purchase_price: "", purchase_currency: "USD", current_value: "" });
   const [custom, setCustom] = React.useState((collection.template || []).map(l => ({ label: l, value: "" })));
   const setCan = (k, v) => setC(p => ({ ...p, [k]: v }));
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
@@ -473,6 +492,9 @@ export function AddItemModal({ collection, onClose, onAdded }) {
       draft.format = f.format || null;
       draft.condition = f.condition || null;
       draft.acquired = f.acquired || null;
+      draft.purchase_price = f.purchase_price ? parseFloat(f.purchase_price) || null : null;
+      draft.purchase_currency = f.purchase_currency || "USD";
+      draft.current_value = f.current_value ? parseFloat(f.current_value) || null : null;
       if (type === "game")  { draft.completeness = f.completeness || null; draft.completed = f.completed; }
       if (type === "coin")  draft.grade = f.grade || null;
       if (type === "vinyl") draft.pressing = f.pressing || null;
@@ -523,6 +545,9 @@ export function AddItemModal({ collection, onClose, onAdded }) {
                 {type === "book"  && <EFText label="Edition" value={f.edition} placeholder="e.g. First Edition" onChange={v => set("edition", v)} />}
                 <EFSelect label="Condition" value={f.condition} options={CONDITION_OPTIONS} placeholder="Condition" onChange={v => set("condition", v)} />
                 <EFText label="Acquired" value={f.acquired} placeholder="e.g. May 2024" onChange={v => set("acquired", v)} />
+                <EFText label="Purchase price" value={f.purchase_price || ""} placeholder="e.g. 25.00" onChange={v => set("purchase_price", v)} />
+                <EFSelect label="Currency" value={f.purchase_currency || "USD"} options={["USD", "EUR", "GBP", "CAD", "AUD", "JPY", "DKK", "SEK", "NOK", "CHF"]} placeholder={false} onChange={v => set("purchase_currency", v)} />
+                <EFText label="Current value" value={f.current_value || ""} placeholder="Estimated market value" onChange={v => set("current_value", v)} />
                 {type === "movie" && <EFToggle label="Watched" value={f.watched} onChange={v => set("watched", v)} hint={["Yes", "Not yet"]} />}
                 {type === "book"  && <EFToggle label="Read" value={f.watched} onChange={v => set("watched", v)} hint={["Yes", "Not yet"]} />}
                 {type === "game"  && <EFToggle label="Completed" value={f.completed} onChange={v => set("completed", v)} hint={["Yes", "Not yet"]} />}

@@ -329,6 +329,7 @@ export function Sidebar({ active, onNav, user, onSettings }) {
     ["collections", "Collections", I.grid],
     ["wishlist", "Wishlist", I.heart],
     ["favorites", "Favorites", I.heartFill],
+    ["loans", "Loans", I.download],
     ["timeline", "Timeline", I.clock],
     ["discover", "Discover", I.compass],
     ["series", "Series", I.layers],
@@ -360,6 +361,7 @@ export function Sidebar({ active, onNav, user, onSettings }) {
           <div className="nm">{nm}</div>
           <div className="sub">Settings</div>
         </div>
+        <ProfileSwitcher />
       </div>
     </aside>
   );
@@ -480,6 +482,86 @@ export function Async({ state, children, loadingLabel = undefined }) {
   if (state.loading) return <Loading label={loadingLabel} />;
   if (state.error) return <ErrorState error={state.error} onRetry={state.refetch} />;
   return children(state.data);
+}
+
+// ── Profile Switcher ──────────────────────────────────────────────────────────
+
+function ProfileSwitcher({ onSwitched }) {
+  const [profiles, setProfiles] = React.useState([]);
+  const [active, setActive] = React.useState('default');
+  const [open, setOpen] = React.useState(false);
+  const [creating, setCreating] = React.useState(false);
+  const [newName, setNewName] = React.useState('');
+  const [newColor, setNewColor] = React.useState('#6366f1');
+
+  React.useEffect(() => {
+    const api = window.hoddDesktop?.api;
+    if (!api) return;
+    Promise.all([api.getProfiles(), api.getActiveProfile()]).then(([p, a]) => {
+      setProfiles(p || []);
+      setActive(a || 'default');
+    });
+  }, []);
+
+  async function switchTo(id) {
+    const api = window.hoddDesktop?.api;
+    if (!api || id === active) { setOpen(false); return; }
+    await api.switchProfile(id);
+    setOpen(false);
+    if (onSwitched) onSwitched();
+    window.location.reload();
+  }
+
+  async function createProfile() {
+    const api = window.hoddDesktop?.api;
+    if (!api || !newName.trim()) return;
+    const p = await api.createProfile(newName.trim(), newColor);
+    await api.switchProfile(p.id);
+    window.location.reload();
+  }
+
+  const PROFILE_COLORS = ['#6366f1', '#5BA47A', '#5C8AD6', '#C9A24C', '#CF6B5A', '#9B7BD4'];
+  const activeProfile = profiles.find(p => p.id === active);
+
+  return (
+    <div className="profile-switcher">
+      <button className="profile-trigger" onClick={() => setOpen(o => !o)} title="Switch profile">
+        <span className="profile-avatar-sm" style={{ background: activeProfile?.color || '#6366f1' }}>
+          {(activeProfile?.name || 'C').slice(0, 1).toUpperCase()}
+        </span>
+      </button>
+      {open && (
+        <div className="profile-dropdown">
+          <div className="profile-dropdown-title">Switch profile</div>
+          {profiles.map(p => (
+            <button key={p.id} className={"profile-option" + (p.id === active ? " active" : "")} onClick={() => switchTo(p.id)}>
+              <span className="profile-avatar-sm" style={{ background: p.color }}>{p.name.slice(0, 1).toUpperCase()}</span>
+              <span>{p.name}</span>
+              {p.id === active && <span className="profile-check">✓</span>}
+            </button>
+          ))}
+          {!creating && (
+            <button className="profile-add" onClick={() => setCreating(true)}>+ New profile</button>
+          )}
+          {creating && (
+            <div className="profile-create-form">
+              <input className="ef-control" placeholder="Profile name" value={newName} onChange={e => setNewName(e.target.value)} autoFocus />
+              <div className="accent-swatches" style={{ marginTop: 6 }}>
+                {PROFILE_COLORS.map(c => (
+                  <button key={c} className={"swatch" + (newColor === c ? " on" : "")} style={{ background: c }}
+                    onClick={() => setNewColor(c)} />
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <button className="btn" style={{ fontSize: 12 }} onClick={() => setCreating(false)}>Cancel</button>
+                <button className="btn solid" style={{ fontSize: 12 }} disabled={!newName.trim()} onClick={createProfile}>Create</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Shelf building blocks (used by Home and Collections views) ─────────────────

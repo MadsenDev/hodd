@@ -171,6 +171,9 @@ export function CollectionDetail({ collId, ctx }) {
         </div>
         <div style={{ flex: 1 }} />
         <button className="btn solid add-item-btn" onClick={() => ctx.addToCollection(data)}><I.plus size={16} stroke={2} /> Add item</button>
+        <button className="btn" title="Print / Save PDF" onClick={() => window.hoddDesktop?.printToPdf?.(name)}>
+          <I.download size={15} /> Print
+        </button>
         {data.user && !confirmDelete && (
           <button className="btn" style={{ color: "var(--danger, #cf6b5a)" }} onClick={() => setConfirmDelete(true)}>
             <I.trash size={15} /> Delete

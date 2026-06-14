@@ -7,6 +7,36 @@ import { useSearchIndex } from '../hooks';
 import { OllamaSetupCard } from './OllamaSetupCard';
 import { toaster } from '../toaster';
 
+function CompanionSection() {
+  const [status, setStatus] = React.useState(null);
+  React.useEffect(() => {
+    window.hoddDesktop?.getCompanionStatus?.().then(setStatus).catch(() => {});
+  }, []);
+
+  if (!status) return null;
+
+  return (
+    <div className="panel settings-panel">
+      <div className="section-head" style={{ margin: "0 0 8px" }}>
+        <div className="eyebrow">Companion App</div>
+      </div>
+      <p className="settings-hint">
+        Access your collection from your phone on the same WiFi network.
+        Open the URL below in your phone's browser.
+      </p>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: "var(--surface, var(--panel-2))", borderRadius: 10, border: "1px solid var(--border-soft)", marginTop: 12 }}>
+        <code style={{ fontSize: 16, fontWeight: 600, flex: 1, wordBreak: "break-all" }}>{status.url}</code>
+        <button className="btn" style={{ fontSize: 13, padding: "6px 12px" }} onClick={() => navigator.clipboard.writeText(status.url)}>
+          Copy
+        </button>
+      </div>
+      <div style={{ fontSize: 12, color: "var(--mute)", marginTop: 8 }}>
+        Make sure your phone is on the same WiFi network as this computer.
+      </div>
+    </div>
+  );
+}
+
 export function Settings({ onSaved = undefined }) {
   const [loading, setLoading] = useState(true);
 
@@ -279,6 +309,8 @@ export function Settings({ onSaved = undefined }) {
             </div>
           </div>
         )}
+
+        <CompanionSection />
 
         <div className="settings-version">
           <span>HODD</span>

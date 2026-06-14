@@ -865,3 +865,42 @@ body {
   .statline { gap: 10px 14px; }
 }
 
+/* ── Loan View ─────────────────────────────────────────────────────────────── */
+.loan-view { padding: 0 0 48px; }
+.loan-section { margin-bottom: 40px; }
+.loan-heading { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 600; margin-bottom: 16px; }
+.loan-subhead { font-size: 13px; font-weight: 400; color: var(--mute); margin-left: auto; }
+.loan-list { display: flex; flex-direction: column; gap: 8px; }
+.loan-card { display: flex; align-items: stretch; border-radius: 10px; background: var(--panel); border: 1px solid var(--border-soft); overflow: hidden; }
+.loan-card.overdue { border-color: #ef4444; }
+.loan-card-color { width: 6px; flex: 0 0 auto; }
+.loan-card-body { padding: 14px 16px; flex: 1; }
+.loan-card-title { font-weight: 600; font-size: 15px; margin-bottom: 4px; }
+.loan-card-meta { font-size: 13px; color: var(--mute); }
+.overdue-text { color: #ef4444 !important; }
+.overdue-badge { display: inline-block; margin-left: 8px; font-size: 11px; font-weight: 700; background: #ef4444; color: #fff; border-radius: 4px; padding: 1px 6px; }
+
+/* ── Profile Switcher ─────────────────────────────────────────────────────── */
+.profile-switcher { position: relative; }
+.profile-trigger { background: none; border: none; cursor: pointer; padding: 0; display: flex; align-items: center; }
+.profile-avatar-sm { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; color: #fff; flex: 0 0 auto; }
+.profile-dropdown { position: absolute; bottom: calc(100% + 8px); left: 0; width: 220px; background: var(--panel); border: 1px solid var(--border-soft); border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); padding: 8px; z-index: 200; }
+.profile-dropdown-title { font-size: 11px; font-weight: 600; color: var(--mute); text-transform: uppercase; letter-spacing: .08em; padding: 6px 8px 4px; }
+.profile-option { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: none; border: none; padding: 8px; border-radius: 8px; cursor: pointer; font-size: 14px; color: var(--text); }
+.profile-option:hover { background: var(--panel-2); }
+.profile-option.active { background: var(--accent-wash); }
+.profile-check { margin-left: auto; color: var(--accent); font-weight: 700; }
+.profile-add { width: 100%; text-align: left; background: none; border: none; padding: 8px; border-radius: 8px; cursor: pointer; font-size: 14px; color: var(--accent); }
+.profile-add:hover { background: var(--panel-2); }
+.profile-create-form { padding: 4px 4px 8px; }
+
+/* ── Print / PDF ─────────────────────────────────────────────────────────── */
+@media print {
+  .sidebar, .mobile-tabs, .mobile-topbar, .topbar-bar, .tweaks-panel,
+  .btn:not(.print-btn), .icon-btn, .modal-scrim { display: none !important; }
+  .main { height: auto !important; overflow: visible !important; }
+  .canvas { padding: 0 !important; }
+  body { background: white !important; }
+  .item-card { break-inside: avoid; }
+}
+
