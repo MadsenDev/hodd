@@ -221,23 +221,6 @@ const EXTRA_CATALOG = [
   { id: "book-solaris",    collectionId: "books",  title: "Solaris",                    type: "book",  sub: "Stanisław Lem",      year: 1961, color: "#A9A8A2" },
 ];
 
-// Seed holdings for extra catalog items (partial, realistic coverage)
-const EXTRA_HOLDINGS: Record<string, Record<string, unknown>> = {
-  "movie-inter":    { format: "4K Blu-ray", watched: 1 },
-  "movie-drive":    { format: "Blu-ray",    watched: 0 },
-  "movie-dune21":   { format: "4K Blu-ray", watched: 0 },
-  "movie-enemy":    { format: "Blu-ray",    watched: 1 },
-  "game-metroid2":  { format: "Cartridge",  completeness: "Loose" },
-  "game-sml":       { format: "Cartridge",  completeness: "Complete in box" },
-  "coin-mercdime":  { grade: "MS-63" },
-  "coin-buffnick":  { grade: "MS-62" },
-  "comic-sandman1": { condition_val: "Very Fine" },
-  "comic-watchmen": { condition_val: "Near Mint" },
-  "vinyl-rumours":  { format: "Vinyl LP",   pressing: "180g" },
-  "vinyl-okcomputer":{ format: "Vinyl LP",  pressing: "Standard" },
-  "book-hyperion":  { format: "Paperback" },
-  "book-snowcrash": { format: "Hardcover" },
-};
 
 const BASE_COLLECTIONS = [
   { id: "pokemon", name: "Pokémon Games", type: "game",  accent: "#B23A36", display_order: 0 },
@@ -346,42 +329,6 @@ async function seedFromJson(): Promise<void> {
     ]);
   }
   insertCat.free();
-
-  // Seed holdings from holdings.json
-  const holdingsData = (await readDataJson('holdings.json') as { data: Record<string, Record<string, unknown>> }).data;
-  const insertHolding = db.prepare(
-    'INSERT OR IGNORE INTO holdings (item_id, format, completeness, grade, pressing, edition, condition_val, acquired, watched, custom) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  );
-  for (const [id, h] of Object.entries(holdingsData)) {
-    insertHolding.run([
-      id,
-      (h.format as string) ?? null,
-      (h.completeness as string) ?? null,
-      (h.grade as string) ?? null,
-      (h.pressing as string) ?? null,
-      (h.edition as string) ?? null,
-      (h.condition as string) ?? null,
-      (h.acquired as string) ?? null,
-      h.watched == null ? null : (h.watched ? 1 : 0),
-      h.custom ? JSON.stringify(h.custom) : null,
-    ]);
-  }
-  // Seed extra holdings
-  for (const [id, h] of Object.entries(EXTRA_HOLDINGS)) {
-    insertHolding.run([
-      id,
-      (h.format as string) ?? null,
-      (h.completeness as string) ?? null,
-      (h.grade as string) ?? null,
-      (h.pressing as string) ?? null,
-      (h.edition as string) ?? null,
-      (h.condition_val as string) ?? null,
-      (h.acquired as string) ?? null,
-      h.watched == null ? null : (h.watched ? 1 : 0),
-      h.custom ? JSON.stringify(h.custom) : null,
-    ]);
-  }
-  insertHolding.free();
 
   // Seed stories from stories.json
   try {
@@ -883,8 +830,9 @@ export function clearUserData(): void {
   db.run('DELETE FROM stories');
   db.run('DELETE FROM favorites');
   db.run('DELETE FROM favorites_v2');
-  // catalog and base_collections are seeded from bundled JSON — leave them intact
-  db.run("DELETE FROM meta WHERE key = 'onboarded'");
+  db.run('DELETE FROM saved_filters');
+  db.run('DELETE FROM profiles');
+  db.run('DELETE FROM settings');
   scheduleWrite();
 }
 
