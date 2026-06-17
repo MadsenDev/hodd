@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React from 'react';
 import { I } from '../icons';
-import { Cover, CompletionRing, Loading, ErrorState, EmptyState } from '../components';
+import { Cover, CompletionRing, Loading, ErrorState, EmptyState, StarRating } from '../components';
 import { useSearchIndex } from '../hooks';
 
 function SeriesStrip({ items, accent, onSelect }) {
@@ -101,7 +101,11 @@ export function SeriesView({ ctx }) {
     const total = items.length;
     const pct = total ? Math.round(owned / total * 100) : 0;
     const accent = items[0]?.color || "var(--accent)";
-    return { name, items, owned, total, pct, accent };
+    const ratedItems = items.filter(i => i.rating != null);
+    const avgRating = ratedItems.length
+      ? Math.round(ratedItems.reduce((s, i) => s + i.rating, 0) / ratedItems.length * 2) / 2
+      : null;
+    return { name, items, owned, total, pct, accent, avgRating };
   });
 
   const sorted = [...seriesList].sort((a, b) => {
@@ -131,6 +135,12 @@ export function SeriesView({ ctx }) {
             <div className="eyebrow" style={{ color: "var(--mute)" }}>Series</div>
             <h1>{series.name}</h1>
             <div className="sub">{series.owned} owned · {series.total - series.owned} missing · {series.pct}% complete</div>
+            {series.avgRating != null && (
+              <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 8 }}>
+                <StarRating value={series.avgRating} size={14} readonly />
+                <span style={{ fontSize: 12, color: "var(--mute)" }}>{series.avgRating}/5 avg</span>
+              </div>
+            )}
           </div>
         </div>
         <SeriesStrip
@@ -199,8 +209,13 @@ export function SeriesView({ ctx }) {
             style={{ cursor: "pointer", padding: "10px 0" }}>
             <CompletionRing pct={s.pct} size={36} stroke={3.5} color={s.accent} fontSize={10} />
             <div className="bar-row-name" style={{ flex: 1, fontWeight: 500 }}>{s.name}</div>
-            <div className="bar-row-count" style={{ color: "var(--dim)", fontSize: 12.5, marginRight: 8 }}>
-              {s.owned} / {s.total}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", marginRight: 8, gap: 2 }}>
+              <div className="bar-row-count" style={{ color: "var(--dim)", fontSize: 12.5 }}>
+                {s.owned} / {s.total}
+              </div>
+              {s.avgRating != null && (
+                <StarRating value={s.avgRating} size={9} readonly />
+              )}
             </div>
             <I.arrowRight size={14} style={{ color: "var(--mute)" }} />
           </div>
