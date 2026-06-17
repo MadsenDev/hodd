@@ -173,6 +173,8 @@ export function Cover({ item, h = 168, ghost = false, onClick = undefined, glyph
   const w = type === "coin" || type === "vinyl" ? h : Math.round(h * ratio);
   const color = item.color || "#7a6a4a";
   const cls = "cover" + (onClick ? " click" : "") + (ghost ? " ghost" : "");
+  const [imgError, setImgError] = React.useState(false);
+  React.useEffect(() => { setImgError(false); }, [item.cover_url]);
 
   if (ghost) {
     const Glyph = typeIcon(type, { size: Math.max(20, h * 0.16), stroke: 1.4 });
@@ -188,14 +190,15 @@ export function Cover({ item, h = 168, ghost = false, onClick = undefined, glyph
     );
   }
 
-  if (item.cover_url) {
+  if (item.cover_url && !imgError) {
     const br = type === "coin" ? "50%" : type === "book" ? "3px 6px 6px 3px" : 6;
     return (
       <div className={cls} style={{ width: w, height: h, borderRadius: br, overflow: "hidden",
         boxShadow: type === "book" ? `inset -8px 0 14px ${rgba("#000",0.28)}, 0 14px 26px -14px rgba(0,0,0,.85)` : undefined }}
         onClick={onClick}>
         <img src={item.cover_url.startsWith("http://") || item.cover_url.startsWith("https://") ? item.cover_url : `hodd-img://${item.cover_url}`} alt={item.title}
-          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          onError={() => setImgError(true)} />
       </div>
     );
   }
@@ -292,6 +295,65 @@ export function Cover({ item, h = 168, ghost = false, onClick = undefined, glyph
         <div style={{ fontFamily: "var(--serif)", fontWeight: 700, fontSize: h*0.108, color: "#fff", lineHeight: 1.06, textShadow: "0 2px 6px rgba(0,0,0,.5)", overflowWrap: "break-word", hyphens: "auto" }}>{item.title}</div>
         {item.sub && <div style={{ fontSize: h*0.05, letterSpacing: ".12em", textTransform: "uppercase", color: rgba("#fff",0.8), marginTop: 6, overflowWrap: "break-word" }}>{item.sub}</div>}
       </div>
+    </div>
+  );
+}
+
+// ── StarRating ────────────────────────────────────────────────────────────────
+
+export function StarRating({ value, onChange, size = 18, readonly = false }) {
+  const [hover, setHover] = React.useState(null);
+  const display = hover !== null ? hover : (value ?? 0);
+
+  return (
+    <div
+      style={{ display: "inline-flex", gap: 1 }}
+      onMouseLeave={() => { if (!readonly) setHover(null); }}
+    >
+      {[1, 2, 3, 4, 5].map(star => {
+        const full = display >= star;
+        const half = !full && display >= star - 0.5;
+        return (
+          <div
+            key={star}
+            style={{ position: "relative", width: size, height: size, flexShrink: 0 }}
+            onMouseMove={!readonly ? (e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              setHover(e.clientX - rect.left < rect.width / 2 ? star - 0.5 : star);
+            } : undefined}
+            onClick={!readonly && onChange ? () => {
+              onChange(hover === value ? null : hover);
+            } : undefined}
+          >
+            <svg width={size} height={size} viewBox="0 0 24 24" style={{ display: "block" }}>
+              <polygon
+                points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"
+                fill="none"
+                stroke="var(--border-strong, #444)"
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+              />
+            </svg>
+            {(full || half) && (
+              <div style={{
+                position: "absolute", top: 0, left: 0,
+                width: half ? "50%" : "100%",
+                overflow: "hidden", pointerEvents: "none",
+              }}>
+                <svg width={size} height={size} viewBox="0 0 24 24" style={{ display: "block" }}>
+                  <polygon
+                    points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"
+                    fill="#C9A24C"
+                    stroke="#C9A24C"
+                    strokeWidth="1.5"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
