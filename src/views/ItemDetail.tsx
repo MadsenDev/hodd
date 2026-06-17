@@ -1,9 +1,9 @@
 // @ts-nocheck
 import React from 'react';
 import { I } from '../icons';
-import { Cover, FluidCover, useNarrow } from '../components';
+import { Cover, FluidCover, useNarrow, StarRating } from '../components';
 import { useCollection, useStory } from '../hooks';
-import { saveCatalog, saveStory, saveHolding, removeHolding, removeItem, setItemOwned, toggleFavorite, OllamaClient } from '../api';
+import { saveCatalog, saveStory, saveHolding, removeHolding, removeItem, setItemOwned, toggleFavorite, OllamaClient, saveRating } from '../api';
 import { useFavorite } from '../hooks';
 import { ItemEditForm, SUBLABELS, OWNERSHIP_LABEL } from '../forms';
 
@@ -29,7 +29,16 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
   const isFav = !!favState.data;
   const [favOptimistic, setFavOptimistic] = React.useState(null);
   const fav = favOptimistic !== null ? favOptimistic : isFav;
-  React.useEffect(() => { setItem(initialItem); setEditing(false); setStoryOv(null); setConfirmDelete(false); setFavOptimistic(null); }, [initialItem]);
+  const [ratingOptimistic, setRatingOptimistic] = React.useState(null);
+  const rating = ratingOptimistic !== null ? ratingOptimistic : (item.rating ?? null);
+  React.useEffect(() => {
+    setItem(initialItem);
+    setEditing(false);
+    setStoryOv(null);
+    setConfirmDelete(false);
+    setFavOptimistic(null);
+    setRatingOptimistic(null);
+  }, [initialItem]);
   React.useEffect(() => {
     function onKey(e) {
       if (editing || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -271,6 +280,23 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
                   <div className={"fact" + (facts.length % 2 === 1 && i === facts.length - 1 ? " full" : "")} key={k}><div className="k">{k}</div><div className="v">{v}</div></div>
                 ))}
               </div>}
+
+          {owned && (
+            <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ fontSize: 13, color: "var(--mute)", minWidth: 80 }}>Rating</div>
+              <StarRating
+                value={rating}
+                size={20}
+                onChange={v => {
+                  setRatingOptimistic(v);
+                  saveRating(item.id, v);
+                }}
+              />
+              {rating && (
+                <span style={{ fontSize: 12, color: "var(--dim)" }}>{rating}/5</span>
+              )}
+            </div>
+          )}
 
           <div style={{ marginTop: 30, display: "flex", alignItems: "baseline", gap: 12 }}>
             <div className="eyebrow">The story</div>
