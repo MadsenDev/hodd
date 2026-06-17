@@ -682,7 +682,7 @@ function registerIpc(): void {
     }
   });
 
-  ipcMain.handle('hodd:reset-all', () => db.clearUserData());
+  ipcMain.handle('hodd:reset-all', (_e, keepApiKeys?: boolean) => db.clearUserData(keepApiKeys));
 
   // Score how closely a result title matches the search query (word overlap ratio)
   function titleSim(result: string, q: string): number {
@@ -771,8 +771,6 @@ function registerIpc(): void {
     type: string,
     ownedItems: { title: string; series?: string | null; sub?: string | null }[]
   ) => {
-    if (db.hasSuggestionsFor(collectionId)) return db.getSuggestedItems(collectionId);
-
     const settings = db.getSettings();
     const ownedTitles = new Set(ownedItems.map(i => (i.title ?? '').toLowerCase()));
 
@@ -783,9 +781,14 @@ function registerIpc(): void {
       if (q) queries.set(q.toLowerCase(), q);
     }
 
+    // Only fetch series/queries not already in the cache
+    const fetched = db.getFetchedQueriesFor(collectionId);
+    const pending = new Map([...queries].filter(([k]) => !fetched.has(k)));
+    if (!pending.size) return db.getSuggestedItems(collectionId);
+
     const results: { title: string; sub?: string | null; year?: number | null; cover_url?: string | null; series?: string | null; type?: string | null }[] = [];
 
-    for (const [, query] of queries) {
+    for (const [, query] of pending) {
       try {
         if (type === 'game' && settings['api.rawg']) {
           const res = await fetch(`https://api.rawg.io/api/games?search=${encodeURIComponent(query)}&page_size=12&key=${settings['api.rawg']}`);
@@ -825,7 +828,7 @@ function registerIpc(): void {
       }
     }
 
-    db.upsertSuggestedItems(collectionId, results.slice(0, 24));
+    db.upsertSuggestedItems(collectionId, results);
     return db.getSuggestedItems(collectionId);
   });
 

@@ -264,7 +264,7 @@ export function CollectionDetail({ collId, ctx }) {
           </div>
         )}
       </div>
-      {items.length === 0 && suggested.length === 0
+      {items.length === 0 && suggestions.length === 0
         ? <EmptyState title={`${name} is empty`} sub="Add your first item to start the collection." />
         : shown.length === 0 && !sq && filter === "all"
         ? null

@@ -353,6 +353,7 @@ body {
 .ef-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid var(--border-soft); }
 .ef-title { font-family: var(--display); font-size: 17px; font-weight: 700; color: var(--text); letter-spacing: -0.01em; }
 .ef-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+.ef-platform-picker { display: contents; }
 .ef-section { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--accent); font-weight: 700; margin: 22px 0 12px; }
 .ef-section:first-of-type { margin-top: 4px; }
 .ef-wide { grid-column: 1 / -1; }

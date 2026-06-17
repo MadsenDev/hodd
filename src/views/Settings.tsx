@@ -54,6 +54,7 @@ export function Settings({ onSaved = undefined }) {
   const [importDone, setImportDone] = useState(false);
   const [resetConfirm, setResetConfirm] = useState(false);
   const [resetInput, setResetInput] = useState("");
+  const [keepApiKeys, setKeepApiKeys] = useState(true);
 
   // Bulk series enrichment
   const searchIndexState = useSearchIndex();
@@ -342,6 +343,10 @@ export function Settings({ onSaved = undefined }) {
               <p style={{ margin: "0 0 16px", fontSize: 14, color: "var(--fg)", lineHeight: 1.6 }}>
                 This will permanently delete all your data. First, we'll export a backup.
               </p>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, color: "var(--fg)", marginBottom: 16, cursor: "pointer" }}>
+                <input type="checkbox" checked={keepApiKeys} onChange={e => setKeepApiKeys(e.target.checked)} />
+                Keep API keys (RAWG, OMDB)
+              </label>
               <input
                 className="ef-control"
                 type="text"
@@ -361,7 +366,7 @@ export function Settings({ onSaved = undefined }) {
                   onClick={async () => {
                     await handleExportJSON();
                     setTimeout(() => {
-                      (window as any).hoddDesktop?.api?.resetAll();
+                      (window as any).hoddDesktop?.api?.resetAll(keepApiKeys);
                       setTimeout(() => {
                         window.location.reload();
                       }, 300);

@@ -3,7 +3,7 @@ import React from 'react';
 import { I } from '../icons';
 import { Cover, FluidCover, useNarrow, StarRating } from '../components';
 import { useCollection, useStory } from '../hooks';
-import { saveCatalog, saveStory, saveHolding, removeHolding, removeItem, setItemOwned, toggleFavorite, OllamaClient, saveRating } from '../api';
+import { saveCatalog, saveStory, saveHolding, removeHolding, removeItem, setItemOwned, toggleFavorite, OllamaClient, saveRating, getCachedSuggestions } from '../api';
 import { useFavorite } from '../hooks';
 import { ItemEditForm, SUBLABELS, OWNERSHIP_LABEL } from '../forms';
 
@@ -31,6 +31,7 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
   const fav = favOptimistic !== null ? favOptimistic : isFav;
   const [ratingOptimistic, setRatingOptimistic] = React.useState(null);
   const rating = ratingOptimistic !== null ? ratingOptimistic : (item.rating ?? null);
+  const [itemSuggestions, setItemSuggestions] = React.useState([]);
   React.useEffect(() => {
     setItem(initialItem);
     setEditing(false);
@@ -38,7 +39,22 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
     setConfirmDelete(false);
     setFavOptimistic(null);
     setRatingOptimistic(null);
+    setItemSuggestions([]);
   }, [initialItem]);
+  React.useEffect(() => {
+    const collId = collection?.id || item.collectionId;
+    if (!collId) return;
+    getCachedSuggestions(collId).then(all => {
+      const series = item.series?.toLowerCase();
+      const titleWords = item.title?.toLowerCase().split(/\s+/).slice(0, 2).join(' ');
+      const owned = new Set([item.title?.toLowerCase()]);
+      const filtered = (all || []).filter(s => {
+        const sq = (s.series || '').toLowerCase();
+        return (series ? sq === series : sq === titleWords) && !owned.has((s.title || '').toLowerCase());
+      });
+      setItemSuggestions(filtered.slice(0, 8));
+    });
+  }, [item.id, collection?.id]);
   React.useEffect(() => {
     function onKey(e) {
       if (editing || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -323,6 +339,17 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }) 
               <div className="eyebrow">{collection ? `More in ${collection.name}` : "Related"}</div>
               <div className="related-strip" style={{ marginTop: 14 }}>
                 {related.map(r => <Cover key={r.id} item={{ ...r, type: relType }} h={130} ghost={r.owned === false} onClick={() => ctx.openItem({ ...r, type: relType }, collection)} />)}
+              </div>
+            </div>
+          )}
+
+          {itemSuggestions.length > 0 && (
+            <div style={{ marginTop: 30 }}>
+              <div className="eyebrow">You might also want</div>
+              <div className="related-strip" style={{ marginTop: 14 }}>
+                {itemSuggestions.map(s => (
+                  <Cover key={s.id} item={{ ...s, type: relType }} h={130} ghost onClick={() => ctx.addSuggested && ctx.addSuggested(s, collection?.id || item.collectionId)} />
+                ))}
               </div>
             </div>
           )}

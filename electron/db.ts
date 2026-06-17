@@ -237,13 +237,12 @@ const EXTRA_CATALOG = [
 
 
 const BASE_COLLECTIONS = [
-  { id: "pokemon", name: "Pokémon Games", type: "game",  accent: "#B23A36", display_order: 0 },
-  { id: "books",   name: "Books",         type: "book",  accent: "#5BA47A", display_order: 1 },
-  { id: "movies",  name: "Movies",        type: "movie", accent: "#5C8AD6", display_order: 2 },
-  { id: "games",   name: "Games",         type: "game",  accent: "#9B7BD4", display_order: 3 },
-  { id: "coins",   name: "Coins",         type: "coin",  accent: "#C9A24C", display_order: 4 },
-  { id: "comics",  name: "Comics",        type: "comic", accent: "#CF6B5A", display_order: 5 },
-  { id: "vinyl",   name: "Vinyl",         type: "vinyl", accent: "#7FB0C4", display_order: 6 },
+  { id: "books",   name: "Books",         type: "book",  accent: "#5BA47A", display_order: 0 },
+  { id: "movies",  name: "Movies",        type: "movie", accent: "#5C8AD6", display_order: 1 },
+  { id: "games",   name: "Games",         type: "game",  accent: "#9B7BD4", display_order: 2 },
+  { id: "coins",   name: "Coins",         type: "coin",  accent: "#C9A24C", display_order: 3 },
+  { id: "comics",  name: "Comics",        type: "comic", accent: "#CF6B5A", display_order: 4 },
+  { id: "vinyl",   name: "Vinyl",         type: "vinyl", accent: "#7FB0C4", display_order: 5 },
 ];
 
 export async function initDb(): Promise<void> {
@@ -841,7 +840,12 @@ export function getAllStories(): Record<string, string[]> {
   return map;
 }
 
-export function clearUserData(): void {
+export function clearUserData(keepApiKeys = false): void {
+  let savedKeys: [string, string][] = [];
+  if (keepApiKeys) {
+    const res = db.exec("SELECT key, value FROM settings WHERE key LIKE 'api.%'");
+    if (res.length) savedKeys = res[0].values as [string, string][];
+  }
   db.run('DELETE FROM user_items');
   db.run('DELETE FROM user_collections');
   db.run('DELETE FROM holdings');
@@ -852,6 +856,9 @@ export function clearUserData(): void {
   db.run('DELETE FROM saved_filters');
   db.run('DELETE FROM profiles');
   db.run('DELETE FROM settings');
+  for (const [k, v] of savedKeys) {
+    db.run('INSERT INTO settings (key, value) VALUES (?, ?)', [k, v]);
+  }
   scheduleWrite();
 }
 
@@ -966,6 +973,12 @@ export function getSuggestedItems(collectionId: string): Record<string, unknown>
 export function hasSuggestionsFor(collectionId: string): boolean {
   const res = db.exec('SELECT COUNT(*) FROM suggested_items WHERE collection_id = ?', [collectionId]);
   return !!(res.length && (res[0].values[0][0] as number) > 0);
+}
+
+export function getFetchedQueriesFor(collectionId: string): Set<string> {
+  const res = db.exec('SELECT DISTINCT series FROM suggested_items WHERE collection_id = ? AND series IS NOT NULL', [collectionId]);
+  if (!res.length) return new Set();
+  return new Set(res[0].values.map(row => (row[0] as string).toLowerCase()));
 }
 
 export function upsertSuggestedItems(

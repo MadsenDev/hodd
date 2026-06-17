@@ -4,7 +4,7 @@
 
 import { toaster } from './toaster';
 
-const COLL_NAME = { pokemon: "Pokémon Games", books: "Books", movies: "Movies", games: "Games", coins: "Coins", comics: "Comics", vinyl: "Vinyl" };
+const COLL_NAME = { books: "Books", movies: "Movies", games: "Games", coins: "Coins", comics: "Comics", vinyl: "Vinyl" };
 export const HOLDING_FIELDS = ["ownership", "notes", "loan_from", "loan_date", "loan_to", "loan_to_date", "format", "completeness", "grade", "pressing", "edition", "condition", "acquired", "watched", "custom", "purchase_price", "purchase_currency", "current_value"];
 const USER_HUES = ["#6366f1", "#5BA47A", "#5C8AD6", "#C9A24C", "#CF6B5A", "#7FB0C4", "#9B7BD4", "#C0392B"];
 
@@ -333,7 +333,7 @@ export async function getCollections() {
     const owned    = all.filter(i => i.owned !== false).length;
     const missing  = all.filter(i => i.owned === false).length;
     return Object.assign({}, coll, { owned, missing, pct: all.length ? Math.round(owned / all.length * 100) : 0 });
-  });
+  }).filter(c => c.owned > 0 || c.missing > 0);
 
   const made = (_userColls || []).map(rc => {
     const its     = (ui[rc.id] || []).map(applyEdits);
@@ -555,6 +555,12 @@ export async function getSearchIndex() {
   });
   _searchIndex = catIdx.concat(userIdx);
   return _searchIndex;
+}
+
+export async function getCachedSuggestions(collectionId: string): Promise<any[]> {
+  const api = (window as any).hoddDesktop?.api;
+  if (!api?.getSuggestions) return [];
+  try { return await api.getSuggestions(collectionId); } catch { return []; }
 }
 
 export async function fetchSuggestions(

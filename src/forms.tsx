@@ -23,26 +23,65 @@ export const OWNERSHIP_OPTIONS: [string, string][] = [
 export const OWNERSHIP_LABEL: Record<string, string> = Object.fromEntries(OWNERSHIP_OPTIONS);
 export const SUBLABELS = { book: "Author", game: "Platform", coin: "Mint", vinyl: "Artist", movie: "Director", comic: "Publisher", other: "Detail" };
 
-export const PLATFORM_OPTS = [
-  // Nintendo — home
-  "NES", "SNES", "Nintendo 64", "GameCube", "Wii", "Wii U", "Switch", "Nintendo Switch 2",
-  // Nintendo — handheld
-  "Game Boy", "Game Boy Color", "Game Boy Advance", "DS", "3DS", "Game & Watch",
-  // Sony — home
-  "PS1", "PS2", "PS3", "PS4", "PS5",
-  // Sony — handheld
-  "PSP", "PS Vita",
-  // Microsoft
-  "Xbox", "Xbox 360", "Xbox One", "Xbox Series X", "Xbox Series S",
-  // Sega — home
-  "Sega Master System", "Sega Genesis", "Sega Saturn", "Dreamcast",
-  // Sega — handheld
-  "Game Gear",
-  // Atari
-  "Atari 2600", "Atari 5200", "Atari 7800", "Atari Lynx", "Atari Jaguar",
-  // Other
-  "Neo Geo", "TurboGrafx-16", "Steam Deck", "PC", "Mac", "Arcade",
-];
+export const PLATFORMS_BY_MAKER: Record<string, string[]> = {
+  Nintendo: ["NES", "SNES", "Nintendo 64", "GameCube", "Wii", "Wii U", "Switch", "Nintendo Switch 2", "Game Boy", "Game Boy Color", "Game Boy Advance", "DS", "3DS", "Game & Watch"],
+  Sony:     ["PS1", "PS2", "PS3", "PS4", "PS5", "PSP", "PS Vita"],
+  Microsoft: ["Xbox", "Xbox 360", "Xbox One", "Xbox Series X", "Xbox Series S"],
+  Sega:     ["Sega Master System", "Sega Genesis", "Sega Saturn", "Dreamcast", "Game Gear"],
+  Atari:    ["Atari 2600", "Atari 5200", "Atari 7800", "Atari Lynx", "Atari Jaguar"],
+  Other:    ["Neo Geo", "TurboGrafx-16", "Steam Deck", "PC", "Mac", "Arcade"],
+};
+
+export const PLATFORM_OPTS = Object.values(PLATFORMS_BY_MAKER).flat();
+
+function makerFor(platform: string): string {
+  for (const [maker, consoles] of Object.entries(PLATFORMS_BY_MAKER)) {
+    if (consoles.includes(platform)) return maker;
+  }
+  return "";
+}
+
+export function PlatformPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const knownMaker = makerFor(value);
+  const [maker, setMaker] = React.useState(knownMaker);
+  const consoles = maker ? (PLATFORMS_BY_MAKER[maker] || []) : [];
+  const makerOptions = Object.keys(PLATFORMS_BY_MAKER);
+
+  function handleMaker(m: string) {
+    setMaker(m);
+    onChange("");
+  }
+
+  function handleConsole(c: string) {
+    onChange(c);
+  }
+
+  return (
+    <div className="ef-platform-picker">
+      <label className="ef-field">
+        <span className="ef-k">Maker</span>
+        <div className="ef-select-wrap">
+          <select className="ef-control" value={maker} onChange={e => handleMaker(e.target.value)}>
+            <option value="">—</option>
+            {makerOptions.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+          <span className="ef-chev">▾</span>
+        </div>
+      </label>
+      <label className="ef-field">
+        <span className="ef-k">Platform</span>
+        <div className="ef-select-wrap">
+          <select className="ef-control" value={value || ""} onChange={e => handleConsole(e.target.value)} disabled={!maker}>
+            <option value="">—</option>
+            {consoles.map(c => <option key={c} value={c}>{c}</option>)}
+            {value && !consoles.includes(value) && <option value={value}>{value}</option>}
+          </select>
+          <span className="ef-chev">▾</span>
+        </div>
+      </label>
+    </div>
+  );
+}
 
 export const ACCENT_SWATCHES = ["#6366f1", "#5BA47A", "#5C8AD6", "#C9A24C", "#CF6B5A", "#7FB0C4", "#9B7BD4", "#C0392B"];
 export const COVER_COLORS = [
@@ -344,7 +383,7 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
         <EFSelect label="Type" value={etype} pairs={TYPE_OPTIONS} placeholder={false} onChange={v => setCan("type", v)} />
         {!coverUrl && <ColorPicker value={color} onChange={setColor} />}
         {etype === "game"
-          ? <EFCombobox label={eSub} value={c.sub} options={PLATFORM_OPTS} placeholder="Platform" onChange={v => setCan("sub", v)} />
+          ? <PlatformPicker value={c.sub || ""} onChange={v => setCan("sub", v)} />
           : <EFText label={eSub} value={c.sub} placeholder={eSub} onChange={v => setCan("sub", v)} />}
         <EFText label="Year" value={c.year} placeholder="e.g. 1996" onChange={v => setCan("year", v)} />
         {yearError && <div className="ef-error">{yearError}</div>}
@@ -601,7 +640,7 @@ export function AddItemModal({ collection, onClose, onAdded, prefill = null }) {
           <div className="ef-grid">
             <EFText label="Title" value={c.title} placeholder="Item title" onChange={v => setCan("title", v)} wide />
             {type === "game"
-              ? <EFCombobox label={subLabel} value={c.sub} options={PLATFORM_OPTS} placeholder="Platform" onChange={v => setCan("sub", v)} />
+              ? <PlatformPicker value={c.sub || ""} onChange={v => setCan("sub", v)} />
               : <EFText label={subLabel} value={c.sub} placeholder={subLabel} onChange={v => setCan("sub", v)} />}
             <EFText label="Year" value={c.year} placeholder="e.g. 1996" onChange={v => setCan("year", v)} />
             {addYearError && <div className="ef-error">{addYearError}</div>}
