@@ -4,6 +4,71 @@ import { I } from '../icons';
 import { Cover, CompletionRing, Loading, ErrorState, EmptyState } from '../components';
 import { useSearchIndex } from '../hooks';
 
+function SeriesStrip({ items, accent, onSelect }) {
+  const numbered = items.filter(i => i.series_number != null);
+  if (!numbered.length) return null;
+
+  const min = Math.floor(Math.min(...numbered.map(i => i.series_number)));
+  const max = Math.ceil(Math.max(...numbered.map(i => i.series_number)));
+  const byNum = {};
+  items.forEach(i => { if (i.series_number != null) byNum[i.series_number] = i; });
+
+  const blocks = [];
+  for (let n = min; n <= max; n++) {
+    const whole = byNum[n];
+    const half  = byNum[n - 0.5];
+    if (half) {
+      const isOwned = half.owned !== false;
+      blocks.push(
+        <div
+          key={n - 0.5}
+          title={half.title}
+          onClick={() => onSelect(half)}
+          style={{
+            width: 16, height: 32, borderRadius: 3,
+            background: isOwned ? accent : "transparent",
+            border: isOwned ? "none" : `1.5px dashed ${accent}`,
+            opacity: isOwned ? 1 : 0.55,
+            cursor: "pointer", flexShrink: 0,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+        />
+      );
+    }
+    const isOwned = whole ? whole.owned !== false : false;
+    blocks.push(
+      <div
+        key={n}
+        title={whole ? whole.title : `#${n} — not tracked`}
+        onClick={whole ? () => onSelect(whole) : undefined}
+        style={{
+          width: 28, height: 36, borderRadius: 4,
+          background: isOwned ? accent : "transparent",
+          border: isOwned ? "none" : `1.5px dashed ${accent}`,
+          opacity: whole ? (isOwned ? 1 : 0.5) : 0.18,
+          cursor: whole ? "pointer" : "default", flexShrink: 0,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 9, fontWeight: 600,
+          color: isOwned ? "rgba(255,255,255,0.8)" : accent,
+        }}
+      >
+        {n}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--mute)", marginBottom: 10 }}>
+        Series map
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+        {blocks}
+      </div>
+    </div>
+  );
+}
+
 export function SeriesView({ ctx }) {
   const index = useSearchIndex();
   const [selected, setSelected] = React.useState(null);
@@ -48,8 +113,14 @@ export function SeriesView({ ctx }) {
   if (selected) {
     const series = sorted.find(s => s.name === selected);
     if (!series) { setSelected(null); return null; }
-    const owned = series.items.filter(i => i.owned !== false);
-    const missing = series.items.filter(i => i.owned === false);
+    const itemRefs = React.useRef({});
+    const sortedItems = [...series.items].sort((a, b) => {
+      const an = a.series_number ?? Infinity;
+      const bn = b.series_number ?? Infinity;
+      return an !== bn ? an - bn : (a.title || "").localeCompare(b.title || "");
+    });
+    const owned = sortedItems.filter(i => i.owned !== false);
+    const missing = sortedItems.filter(i => i.owned === false);
     return (
       <div className="view-enter">
         <div className="back" onClick={() => setSelected(null)}><I.arrowLeft size={16} /> All series</div>
@@ -61,12 +132,26 @@ export function SeriesView({ ctx }) {
             <div className="sub">{series.owned} owned · {series.total - series.owned} missing · {series.pct}% complete</div>
           </div>
         </div>
+        <SeriesStrip
+          items={series.items}
+          accent={series.accent}
+          onSelect={it => {
+            const el = itemRefs.current[it.id];
+            if (el) {
+              el.scrollIntoView({ behavior: "smooth", block: "center" });
+              el.style.outline = "2px solid " + series.accent;
+              setTimeout(() => { if (el) el.style.outline = ""; }, 1200);
+            }
+          }}
+        />
         {owned.length > 0 && (
           <>
             <div className="eyebrow" style={{ marginBottom: 12, color: "var(--mute)" }}>Owned <span style={{ opacity: 0.55, fontSize: 10 }}>· {owned.length}</span></div>
             <div className="items-grid" style={{ marginBottom: 32 }}>
               {owned.map(it => (
-                <div className="item-cell" key={it.id} onClick={() => ctx.openItem(it)}>
+                <div className="item-cell" key={it.id}
+                  ref={el => { itemRefs.current[it.id] = el; }}
+                  onClick={() => ctx.openItem(it)}>
                   <Cover item={it} h={200} />
                   <div className="nm">{it.title}</div>
                   <div className="yr">{it.sub || ""}{it.year ? ` · ${it.year}` : ""}</div>
@@ -81,7 +166,9 @@ export function SeriesView({ ctx }) {
             <div className="eyebrow" style={{ marginBottom: 12, color: "var(--mute)" }}>Still hunting <span style={{ opacity: 0.55, fontSize: 10 }}>· {missing.length}</span></div>
             <div className="items-grid">
               {missing.map(it => (
-                <div className="item-cell missing" key={it.id} onClick={() => ctx.openItem(it)}>
+                <div className="item-cell missing" key={it.id}
+                  ref={el => { itemRefs.current[it.id] = el; }}
+                  onClick={() => ctx.openItem(it)}>
                   <Cover item={it} h={200} ghost />
                   <div className="nm">{it.title}</div>
                   <div className="yr">{it.sub || ""}{it.year ? ` · ${it.year}` : ""}</div>
