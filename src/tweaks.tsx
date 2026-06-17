@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React from 'react';
 
 const STYLE = `
@@ -91,21 +90,28 @@ const STYLE = `
     filter:drop-shadow(0 1px 1px rgba(0,0,0,.3))}
 `;
 
-export function useTweaks(defaults) {
-  const [values, setValues] = React.useState(defaults);
-  const setTweak = React.useCallback((keyOrEdits, val) => {
-    const edits = typeof keyOrEdits === 'object' && keyOrEdits !== null
-      ? keyOrEdits : { [keyOrEdits]: val };
+export type TweakValues = Record<string, string>;
+
+type SetTweakFn = {
+  (key: string, val: string): void;
+  (edits: TweakValues): void;
+};
+
+export function useTweaks(defaults: TweakValues): [TweakValues, SetTweakFn] {
+  const [values, setValues] = React.useState<TweakValues>(defaults);
+  const setTweak = React.useCallback((keyOrEdits: string | TweakValues, val?: string) => {
+    const edits: TweakValues = typeof keyOrEdits === 'object' && keyOrEdits !== null
+      ? keyOrEdits : { [keyOrEdits as string]: val as string };
     setValues((prev) => ({ ...prev, ...edits }));
     window.parent.postMessage({ type: '__edit_mode_set_keys', edits }, '*');
     window.dispatchEvent(new CustomEvent('tweakchange', { detail: edits }));
-  }, []);
+  }, []) as SetTweakFn;
   return [values, setTweak];
 }
 
-export function TweaksPanel({ title = 'Tweaks', children }) {
+export function TweaksPanel({ title = 'Tweaks', children }: { title?: string; children: React.ReactNode }) {
   const [open, setOpen] = React.useState(false);
-  const dragRef = React.useRef(null);
+  const dragRef = React.useRef<HTMLDivElement>(null);
   const offsetRef = React.useRef({ x: 16, y: 16 });
   const PAD = 16;
 
@@ -136,10 +142,10 @@ export function TweaksPanel({ title = 'Tweaks', children }) {
   }, [open, clampToViewport]);
 
   React.useEffect(() => {
-    const onMsg = (e) => {
-      const t = e?.data?.type;
-      if (t === '__activate_edit_mode') setOpen(true);
-      else if (t === '__deactivate_edit_mode') setOpen(false);
+    const onMsg = (e: MessageEvent) => {
+      const msgType = e?.data?.type;
+      if (msgType === '__activate_edit_mode') setOpen(true);
+      else if (msgType === '__deactivate_edit_mode') setOpen(false);
     };
     window.addEventListener('message', onMsg);
     window.parent.postMessage({ type: '__edit_mode_available' }, '*');
@@ -151,14 +157,14 @@ export function TweaksPanel({ title = 'Tweaks', children }) {
     window.parent.postMessage({ type: '__edit_mode_dismissed' }, '*');
   };
 
-  const onDragStart = (e) => {
+  const onDragStart = (e: React.MouseEvent) => {
     const panel = dragRef.current;
     if (!panel) return;
     const r = panel.getBoundingClientRect();
     const sx = e.clientX, sy = e.clientY;
     const startRight = window.innerWidth - r.right;
     const startBottom = window.innerHeight - r.bottom;
-    const move = (ev) => {
+    const move = (ev: MouseEvent) => {
       offsetRef.current = { x: startRight - (ev.clientX - sx), y: startBottom - (ev.clientY - sy) };
       clampToViewport();
     };
@@ -184,7 +190,7 @@ export function TweaksPanel({ title = 'Tweaks', children }) {
   );
 }
 
-export function TweakSection({ label, children = undefined }) {
+export function TweakSection({ label, children = undefined }: { label: string; children?: React.ReactNode }) {
   return (
     <>
       <div className="twk-sect">{label}</div>
@@ -193,7 +199,12 @@ export function TweakSection({ label, children = undefined }) {
   );
 }
 
-export function TweakRow({ label, value = undefined, children, inline = false }) {
+export function TweakRow({ label, value = undefined, children, inline = false }: {
+  label: string;
+  value?: string | number;
+  children: React.ReactNode;
+  inline?: boolean;
+}) {
   return (
     <div className={inline ? 'twk-row twk-row-h' : 'twk-row'}>
       <div className="twk-lbl">
@@ -205,7 +216,15 @@ export function TweakRow({ label, value = undefined, children, inline = false })
   );
 }
 
-export function TweakSlider({ label, value, min = 0, max = 100, step = 1, unit = '', onChange }) {
+export function TweakSlider({ label, value, min = 0, max = 100, step = 1, unit = '', onChange }: {
+  label: string;
+  value: number;
+  min?: number;
+  max?: number;
+  step?: number;
+  unit?: string;
+  onChange: (v: number) => void;
+}) {
   return (
     <TweakRow label={label} value={`${value}${unit}`}>
       <input type="range" className="twk-slider" min={min} max={max} step={step}
@@ -214,7 +233,11 @@ export function TweakSlider({ label, value, min = 0, max = 100, step = 1, unit =
   );
 }
 
-export function TweakToggle({ label, value, onChange }) {
+export function TweakToggle({ label, value, onChange }: {
+  label: string;
+  value: boolean;
+  onChange: (v: boolean) => void;
+}) {
   return (
     <div className="twk-row twk-row-h">
       <div className="twk-lbl"><span>{label}</span></div>
@@ -224,17 +247,24 @@ export function TweakToggle({ label, value, onChange }) {
   );
 }
 
-export function TweakRadio({ label, value, options, onChange }) {
-  const trackRef = React.useRef(null);
+type RadioOption = string | { value: string; label: string };
+
+export function TweakRadio({ label, value, options, onChange }: {
+  label: string;
+  value: string;
+  options: RadioOption[];
+  onChange: (v: string) => void;
+}) {
+  const trackRef = React.useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = React.useState(false);
   const valueRef = React.useRef(value);
   valueRef.current = value;
 
-  const labelLen = (o) => String(typeof o === 'object' ? o.label : o).length;
+  const labelLen = (o: RadioOption) => String(typeof o === 'object' ? o.label : o).length;
   const maxLen = options.reduce((m, o) => Math.max(m, labelLen(o)), 0);
-  const fitsAsSegments = maxLen <= ({ 2: 16, 3: 10 }[options.length] ?? 0);
+  const fitsAsSegments = maxLen <= ({ 2: 16, 3: 10 } as Record<number, number>)[options.length] ?? 0;
   if (!fitsAsSegments) {
-    const resolve = (s) => {
+    const resolve = (s: string) => {
       const m = options.find((o) => String(typeof o === 'object' ? o.value : o) === s);
       return m === undefined ? s : typeof m === 'object' ? m.value : m;
     };
@@ -244,18 +274,18 @@ export function TweakRadio({ label, value, options, onChange }) {
   const idx = Math.max(0, opts.findIndex((o) => o.value === value));
   const n = opts.length;
 
-  const segAt = (clientX) => {
-    const r = trackRef.current.getBoundingClientRect();
+  const segAt = (clientX: number) => {
+    const r = trackRef.current!.getBoundingClientRect();
     const inner = r.width - 4;
     const i = Math.floor(((clientX - r.left - 2) / inner) * n);
     return opts[Math.max(0, Math.min(n - 1, i))].value;
   };
 
-  const onPointerDown = (e) => {
+  const onPointerDown = (e: React.PointerEvent) => {
     setDragging(true);
     const v0 = segAt(e.clientX);
     if (v0 !== valueRef.current) onChange(v0);
-    const move = (ev) => { if (!trackRef.current) return; const v = segAt(ev.clientX); if (v !== valueRef.current) onChange(v); };
+    const move = (ev: PointerEvent) => { if (!trackRef.current) return; const v = segAt(ev.clientX); if (v !== valueRef.current) onChange(v); };
     const up = () => { setDragging(false); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
@@ -275,7 +305,12 @@ export function TweakRadio({ label, value, options, onChange }) {
   );
 }
 
-export function TweakSelect({ label, value, options, onChange }) {
+export function TweakSelect({ label, value, options, onChange }: {
+  label: string;
+  value: string;
+  options: RadioOption[];
+  onChange: (v: string) => void;
+}) {
   return (
     <TweakRow label={label}>
       <select className="twk-field" value={value} onChange={(e) => onChange(e.target.value)}>
@@ -289,7 +324,12 @@ export function TweakSelect({ label, value, options, onChange }) {
   );
 }
 
-export function TweakText({ label, value, placeholder = undefined, onChange }) {
+export function TweakText({ label, value, placeholder = undefined, onChange }: {
+  label: string;
+  value: string;
+  placeholder?: string;
+  onChange: (v: string) => void;
+}) {
   return (
     <TweakRow label={label}>
       <input className="twk-field" type="text" value={value} placeholder={placeholder}
@@ -298,18 +338,26 @@ export function TweakText({ label, value, placeholder = undefined, onChange }) {
   );
 }
 
-export function TweakNumber({ label, value, min = undefined, max = undefined, step = 1, unit = '', onChange }) {
-  const clamp = (n) => {
+export function TweakNumber({ label, value, min = undefined, max = undefined, step = 1, unit = '', onChange }: {
+  label: string;
+  value: number;
+  min?: number;
+  max?: number;
+  step?: number;
+  unit?: string;
+  onChange: (v: number) => void;
+}) {
+  const clamp = (n: number) => {
     if (min != null && n < min) return min;
     if (max != null && n > max) return max;
     return n;
   };
   const startRef = React.useRef({ x: 0, val: 0 });
-  const onScrubStart = (e) => {
+  const onScrubStart = (e: React.PointerEvent) => {
     e.preventDefault();
     startRef.current = { x: e.clientX, val: value };
     const decimals = (String(step).split('.')[1] || '').length;
-    const move = (ev) => {
+    const move = (ev: PointerEvent) => {
       const dx = ev.clientX - startRef.current.x;
       const raw = startRef.current.val + dx * step;
       const snapped = Math.round(raw / step) * step;
@@ -329,7 +377,7 @@ export function TweakNumber({ label, value, min = undefined, max = undefined, st
   );
 }
 
-function isLight(hex) {
+function isLight(hex: string): boolean {
   const h = String(hex).replace('#', '');
   const x = h.length === 3 ? h.replace(/./g, (c) => c + c) : h.padEnd(6, '0');
   const n = parseInt(x.slice(0, 6), 16);
@@ -338,7 +386,7 @@ function isLight(hex) {
   return r * 299 + g * 587 + b * 114 > 148000;
 }
 
-const Check = ({ light }) => (
+const Check = ({ light }: { light: boolean }) => (
   <svg viewBox="0 0 14 14" aria-hidden="true">
     <path d="M3 7.2 5.8 10 11 4.2" fill="none" strokeWidth="2.2"
           strokeLinecap="round" strokeLinejoin="round"
@@ -346,7 +394,12 @@ const Check = ({ light }) => (
   </svg>
 );
 
-export function TweakColor({ label, value, options = undefined, onChange }) {
+export function TweakColor({ label, value, options = undefined, onChange }: {
+  label: string;
+  value: string;
+  options?: (string | string[])[];
+  onChange: (v: string | string[]) => void;
+}) {
   if (!options || !options.length) {
     return (
       <div className="twk-row twk-row-h">
@@ -355,7 +408,7 @@ export function TweakColor({ label, value, options = undefined, onChange }) {
       </div>
     );
   }
-  const key = (o) => String(JSON.stringify(o)).toLowerCase();
+  const key = (o: string | string[]) => String(JSON.stringify(o)).toLowerCase();
   const cur = key(value);
   return (
     <TweakRow label={label}>
@@ -380,7 +433,11 @@ export function TweakColor({ label, value, options = undefined, onChange }) {
   );
 }
 
-export function TweakButton({ label, onClick, secondary = false }) {
+export function TweakButton({ label, onClick, secondary = false }: {
+  label: string;
+  onClick: () => void;
+  secondary?: boolean;
+}) {
   return (
     <button type="button" className={secondary ? 'twk-btn secondary' : 'twk-btn'} onClick={onClick}>{label}</button>
   );
