@@ -1,9 +1,8 @@
-// @ts-nocheck
 // Heuristic on-device search + shorthand parser. Pure functions, no network.
 
 // ── Type vocabulary ──────────────────────────────────────────────────────────
 
-export const TYPE_KW = {
+export const TYPE_KW: Record<string, string[]> = {
   game:  ["game", "games", "gameboy", "game boy", "gba", "snes", "nes", "n64", "nintendo", "cart", "cartridge", "cib", "pokemon", "pokémon", "zelda", "mario", "metroid", "kirby", "wario"],
   book:  ["book", "books", "novel", "hardcover", "paperback", "hardback", "tolkien", "hobbit", "dune", "foundation", "asimov", "author", "first edition"],
   movie: ["movie", "movies", "film", "blu-ray", "bluray", "blu ray", "4k", "uhd", "dvd", "criterion", "steelbook"],
@@ -11,13 +10,24 @@ export const TYPE_KW = {
   comic: ["comic", "comics", "issue", "floppy", "trade paperback", "tpb", "omnibus"],
   vinyl: ["vinyl", "record", "records", "lp", "180g", "180 gram", "45rpm", "album pressing"],
 };
-export const TYPE_LABEL = { game: "Game", book: "Book", movie: "Movie", coin: "Coin", comic: "Comic", vinyl: "Vinyl" };
-export const TYPE_COLL  = { game: "Games", book: "Books", movie: "Movies", coin: "Coins", comic: "Comics", vinyl: "Vinyl" };
-export const TYPE_COLOR = { game: "#9B7BD4", book: "#5BA47A", movie: "#5C8AD6", coin: "#C9A24C", comic: "#CF6B5A", vinyl: "#7FB0C4" };
+export const TYPE_LABEL: Record<string, string> = { game: "Game", book: "Book", movie: "Movie", coin: "Coin", comic: "Comic", vinyl: "Vinyl" };
+export const TYPE_COLL: Record<string, string>  = { game: "Games", book: "Books", movie: "Movies", coin: "Coins", comic: "Comics", vinyl: "Vinyl" };
+export const TYPE_COLOR: Record<string, string> = { game: "#9B7BD4", book: "#5BA47A", movie: "#5C8AD6", coin: "#C9A24C", comic: "#CF6B5A", vinyl: "#7FB0C4" };
 
 // ── Known titles (drives confident enrichment) ────────────────────────────────
 
-const KNOWN_TITLES = [
+interface KnownTitle {
+  kw: string[];
+  title: string;
+  type: string;
+  year?: number;
+  color?: string;
+  platform?: string;
+  author?: string;
+  artist?: string;
+}
+
+const KNOWN_TITLES: KnownTitle[] = [
   { kw: ["pokemon red", "pokémon red"],         title: "Pokémon Red",      type: "game", platform: "Game Boy",         year: 1996, color: "#C0392B" },
   { kw: ["pokemon blue", "pokémon blue"],       title: "Pokémon Blue",     type: "game", platform: "Game Boy",         year: 1996, color: "#2C6FB0" },
   { kw: ["pokemon yellow", "pokémon yellow"],   title: "Pokémon Yellow",   type: "game", platform: "Game Boy",         year: 1998, color: "#D4A02A" },
@@ -41,7 +51,13 @@ const KNOWN_TITLES = [
 
 // ── Format / edition detection ────────────────────────────────────────────────
 
-const FORMATS = [
+interface Format {
+  re: RegExp;
+  label: string | ((m: RegExpMatchArray) => string);
+  types: string[];
+}
+
+const FORMATS: Format[] = [
   { re: /\bcib\b|complete in box/i,                 label: "Complete In Box",   types: ["game"] },
   { re: /\bsealed\b|brand new|\bnib\b/i,            label: "Sealed",            types: ["game", "movie", "vinyl"] },
   { re: /\bloose\b|cart only|\bcart\b|cartridge/i,  label: "Cartridge only",    types: ["game"] },
@@ -60,14 +76,14 @@ const FORMATS = [
   { re: /\bpf-?\s?(\d{2})\b|proof/i,               label: "Proof",             types: ["coin"] },
 ];
 
-const MINTS = { O: "New Orleans", S: "San Francisco", D: "Denver", CC: "Carson City", P: "Philadelphia" };
+const MINTS: Record<string, string> = { O: "New Orleans", S: "San Francisco", D: "Denver", CC: "Carson City", P: "Philadelphia" };
 
 // ── Parser ────────────────────────────────────────────────────────────────────
 
 const PLATFORM_RE = /\b(game\s?boy(\s?(color|colour|advance|sp))?|gba|gbc|nes|snes|n64|gamecube|wii\s?u?|switch|ps\s?[1-5]|playstation\s?[1-5]|xbox(\s?(360|one|series\s?[xs]))?|sega\s?(genesis|saturn|dreamcast|mega\s?drive)|\b3?ds\b|psp|vita|pc|steam)\b/gi;
 
-function cleanTitle(line) {
-  let t = line
+function cleanTitle(line: string): string {
+  let s = line
     .replace(/\bcib\b|complete in box|sealed|loose|cart only|cartridge|hardcover|hardback|paperback|first edition|1st ed|blu-?\s?ray|\b4k\b|uhd|dvd|criterion|steelbook|180\s?g(ram)?|\blp\b|\bms-?\s?\d{2}\b|\bpf-?\s?\d{2}\b|proof|graded|signed/gi, "")
     .replace(PLATFORM_RE, "")
     .replace(/\b(1[6-9]\d{2}|20\d{2})\b/g, "")
@@ -75,12 +91,17 @@ function cleanTitle(line) {
     .replace(/\s{2,}/g, " ")
     .replace(/[,;]+\s*$/, "")
     .trim();
-  if (!t) return line.trim();
-  return t.replace(/\b([a-z])([a-z']+)/g, (_, a, b) => a.toUpperCase() + b);
+  if (!s) return line.trim();
+  return s.replace(/\b([a-z])([a-z']+)/g, (_, a, b) => a.toUpperCase() + b);
 }
 
-export function detectType(lower) {
-  let best = null, bestScore = 0;
+export interface DetectTypeResult {
+  type: string;
+  strong: boolean;
+}
+
+export function detectType(lower: string): DetectTypeResult {
+  let best: string | null = null, bestScore = 0;
   for (const [type, kws] of Object.entries(TYPE_KW)) {
     let score = 0;
     for (const k of kws) if (lower.includes(k)) score += (k.length > 4 ? 2 : 1);
@@ -89,7 +110,24 @@ export function detectType(lower) {
   return { type: best || "game", strong: bestScore >= 2 };
 }
 
-export function parseOne(line) {
+export interface ParsedField {
+  k: string;
+  v: string | number;
+  c: "high" | "ask";
+}
+
+export interface ParsedItem {
+  id: string;
+  raw: string;
+  title: string;
+  type: string;
+  color: string;
+  collection: string;
+  fields: ParsedField[];
+  askCount: number;
+}
+
+export function parseOne(line: string): ParsedItem {
   const lower = line.toLowerCase();
   const known = KNOWN_TITLES.find(k => k.kw.some(kw => lower.includes(kw)));
   const det = detectType(lower);
@@ -98,20 +136,20 @@ export function parseOne(line) {
   const yrMatch = line.match(/\b(1[6-9]\d{2}|20\d{2})\b/);
   const year = yrMatch ? +yrMatch[0] : (known && known.year) || null;
 
-  let edition = null;
+  let edition: string | null = null;
   for (const f of FORMATS) {
     const m = lower.match(f.re) || line.match(f.re);
     if (m && (!f.types || f.types.includes(type))) { edition = typeof f.label === "function" ? f.label(m) : f.label; break; }
   }
 
-  let mint = null;
+  let mint: string | null = null;
   const mm = line.match(/-(O|S|D|CC|P)\b/i);
   if (type === "coin" && mm) mint = `${MINTS[mm[1].toUpperCase()]} (${mm[1].toUpperCase()})`;
 
   const title = known ? known.title : cleanTitle(line);
-  const color = known ? known.color : TYPE_COLOR[type];
+  const color = (known && known.color) ? known.color : TYPE_COLOR[type];
 
-  const fields = [];
+  const fields: ParsedField[] = [];
   fields.push({ k: "Title", v: title, c: "high" });
   fields.push({ k: "Type", v: TYPE_LABEL[type], c: known || det.strong ? "high" : "ask" });
   if (type === "game") fields.push({ k: "Platform", v: (known && known.platform) || "Confirm platform", c: known && known.platform ? "high" : "ask" });
@@ -131,13 +169,13 @@ export function parseOne(line) {
   };
 }
 
-export function parseHoardLines(text) {
+export function parseHoardLines(text: string): ParsedItem[] {
   return text.split(/\n|·|•/).map(s => s.replace(/^\s*[-*]\s*/, "").trim()).filter(Boolean).slice(0, 20).map(parseOne);
 }
 
 // ── Search engine ─────────────────────────────────────────────────────────────
 
-function norm(s) {
+function norm(s: string | null | undefined): string {
   return (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
 
@@ -205,14 +243,27 @@ const REGION_KW: [string, string][] = [
   ["pal", "PAL"], ["uk", "UK"], ["german", "Germany"], ["french", "France"],
 ];
 
-export function searchHoard(query, idx) {
+export interface SearchToken {
+  0: string;
+  1: string;
+  length: 2;
+}
+
+export interface SearchResult {
+  tokens: [string, string][];
+  results: any[];
+  total: number;
+  summary: string;
+}
+
+export function searchHoard(query: string, idx: any[]): SearchResult {
   const q = norm(query);
   idx = idx || [];
-  const tokens = [];
+  const tokens: [string, string][] = [];
   let res = idx.slice();
 
   // ── 1. Type detection ──────────────────────────────────────────────────────
-  let typeHit = null;
+  let typeHit: string | null = null;
   for (const [type, kws] of Object.entries(TYPE_KW)) {
     if (kws.some(k => q.includes(norm(k)))) { typeHit = type; break; }
   }
@@ -222,7 +273,7 @@ export function searchHoard(query, idx) {
   }
 
   // ── 2. Platform ────────────────────────────────────────────────────────────
-  let platformHit = null;
+  let platformHit: string | null = null;
   for (const [kw, label] of PLATFORM_KW) {
     if (q.includes(kw)) { platformHit = label; break; }
   }
@@ -237,7 +288,7 @@ export function searchHoard(query, idx) {
   }
 
   // ── 3. Publisher (comics/books) ────────────────────────────────────────────
-  let publisherHit = null;
+  let publisherHit: string | null = null;
   for (const [kw, label] of PUBLISHER_KW) {
     if (q.includes(kw)) { publisherHit = label; break; }
   }
@@ -252,6 +303,9 @@ export function searchHoard(query, idx) {
   const between = q.match(/between\s+((?:19|20)\d{2})\s+and\s+((?:19|20)\d{2})/);
   const before  = q.match(/before\s+((?:19|20)\d{2})|pre[- ]((?:19|20)\d{2})/);
   const after   = q.match(/after\s+((?:19|20)\d{2})|since\s+((?:19|20)\d{2})/);
+  // First pattern captures full 4-digit decade start (e.g. "1990" from "1990s").
+  // Second pattern captures 3-digit prefix (e.g. "199" from "199" — not reachable
+  // because the pattern requires digits+0+s, so both patterns yield 4 or 3 chars).
   const decade  = q.match(/\b((19|20)\d0)s\b/) || q.match(/\b((?:19|20)\d)0s\b/);
   const exactYr = !between && !before && !after && !decade
     ? q.match(/\b(1[6-9]\d{2}|20\d{2})\b/) : null;
@@ -269,8 +323,11 @@ export function searchHoard(query, idx) {
     tokens.push(["Year", `after ${y}`]);
     res = res.filter(i => i.year && i.year > y);
   } else if (decade) {
+    // Fix 9: decade[1] is always 4 chars (first regex) or undefined when second
+    // regex matches and decade[2] is 3 chars. The "19" + raw + "0" branch in the
+    // original code was unreachable — raw is always length 3 or 4.
     const raw = decade[1] || decade[2];
-    const start = raw.length === 4 ? +raw : +(raw.length === 3 ? raw + "0" : "19" + raw + "0");
+    const start = raw.length === 4 ? +raw : +(raw + "0");
     tokens.push(["Decade", `${start}s`]);
     res = res.filter(i => i.year >= start && i.year < start + 10);
   } else if (exactYr) {
@@ -279,7 +336,7 @@ export function searchHoard(query, idx) {
   }
 
   // ── 5. Ownership / status ──────────────────────────────────────────────────
-  let intent = null;
+  let intent: string | null = null;
   if (/missing|don'?t have|haven'?t got|still need|looking for|want to (get|buy|find)/.test(q)) {
     intent = "missing"; tokens.push(["Status", "Missing"]);
     res = res.filter(i => i.owned === false);
@@ -331,7 +388,7 @@ export function searchHoard(query, idx) {
   }
 
   // ── 7. Format / completeness ───────────────────────────────────────────────
-  let formatHit = null;
+  let formatHit: string | null = null;
   for (const [kw, label] of FORMAT_KW) {
     if (q.includes(kw)) { formatHit = label; break; }
   }
@@ -368,7 +425,7 @@ export function searchHoard(query, idx) {
   }
 
   // ── 10. Region ─────────────────────────────────────────────────────────────
-  let regionHit = null;
+  let regionHit: string | null = null;
   for (const [kw, label] of REGION_KW) {
     if (q.includes(kw)) { regionHit = label; break; }
   }
@@ -381,7 +438,7 @@ export function searchHoard(query, idx) {
   // ── 11. Series explicit ────────────────────────────────────────────────────
   // "zelda series", "the mario franchise" etc. — handled via keyword below,
   // but label it properly when series field matches
-  let seriesHit = null;
+  let seriesHit: string | null = null;
 
   // ── 12. Keyword matching (accent-normalised, scored) ──────────────────────
   const STOP = new Set([
@@ -440,10 +497,18 @@ export function searchHoard(query, idx) {
   return { tokens, results: res.slice(0, 24), total: res.length, summary };
 }
 
-function writeAnswer(query, res, ctx) {
+interface WriteAnswerCtx {
+  typeHit: string | null;
+  intent: string | null;
+  platformHit: string | null;
+  publisherHit: string | null;
+  seriesHit: string | null;
+}
+
+function writeAnswer(query: string, res: any[], ctx: WriteAnswerCtx): string {
   const n = res.length;
   const s = n === 1 ? "" : "s";
-  const list = (arr, max = 5) =>
+  const list = (arr: any[], max = 5) =>
     arr.slice(0, max).map(i => i.title).join(", ") + (arr.length > max ? ` and ${arr.length - max} more` : "");
 
   if (n === 0) {
