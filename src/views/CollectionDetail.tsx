@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React from 'react';
 import { I } from '../icons';
 import { Cover, CompletionRing, Loading, ErrorState, EmptyState, StarRating } from '../components';
@@ -6,27 +5,57 @@ import { useCollection } from '../hooks';
 import { deleteCollection, saveCatalog, saveHolding, setItemOwned, removeItem, fetchSuggestions } from '../api';
 
 const CONDITIONS = ["Mint", "Near Mint", "Very Good", "Good", "Fair", "Poor"];
-const STATUSES = [["owned", "Owned"], ["wishlist", "Wishlist"], ["borrowed", "Borrowed"], ["subscription", "Subscription"]];
+const STATUSES: [string, string][] = [["owned", "Owned"], ["wishlist", "Wishlist"], ["borrowed", "Borrowed"], ["subscription", "Subscription"]];
 
-export function CollectionDetail({ collId, ctx }) {
-  const { data, loading, error, refetch } = useCollection(collId);
-  const [filter, setFilter] = React.useState("all");
-  const [statusFilter, setStatusFilter] = React.useState("all");
-  const [sort, setSort] = React.useState("default");
-  const [search, setSearch] = React.useState("");
-  const [confirmDelete, setConfirmDelete] = React.useState(false);
-  const searchRef = React.useRef(null);
+interface CollectionData {
+  id?: string;
+  name?: string;
+  type?: string;
+  accent?: string;
+  owned?: number;
+  missing?: number;
+  pct?: number;
+  sub?: string;
+  user?: boolean;
+  items?: any[];
+  template?: string[];
+}
+
+interface CollectionDetailProps {
+  collId: string;
+  ctx: {
+    back: () => void;
+    addToCollection: (data: any, item?: any) => void;
+    openItem: (item: any, collection: any) => void;
+  };
+}
+
+export function CollectionDetail({ collId, ctx }: CollectionDetailProps) {
+  const { data: rawData, loading, error, refetch } = useCollection(collId);
+  const data = rawData as CollectionData | null;
+  const [filter, setFilter] = React.useState<string>("all");
+  const [statusFilter, setStatusFilter] = React.useState<string>("all");
+  const [sort, setSort] = React.useState<string>("default");
+  const [search, setSearch] = React.useState<string>("");
+  const [confirmDelete, setConfirmDelete] = React.useState<boolean>(false);
+  const searchRef = React.useRef<HTMLInputElement>(null);
 
   // Multi-select state
-  const [selectMode, setSelectMode] = React.useState(false);
-  const [selected, setSelected] = React.useState(new Set());
-  const [activeAction, setActiveAction] = React.useState(null); // 'series'|'condition'|'status'|'remove'
-  const [seriesValue, setSeriesValue] = React.useState("");
-  const [conditionValue, setConditionValue] = React.useState(CONDITIONS[0]);
-  const [statusValue, setStatusValue] = React.useState("owned");
+  const [selectMode, setSelectMode] = React.useState<boolean>(false);
+  const [selected, setSelected] = React.useState<Set<string>>(new Set());
+  const [activeAction, setActiveAction] = React.useState<string | null>(null); // 'series'|'condition'|'status'|'remove'
+  const [seriesValue, setSeriesValue] = React.useState<string>("");
+  const [conditionValue, setConditionValue] = React.useState<string>(CONDITIONS[0]);
+  const [statusValue, setStatusValue] = React.useState<string>("owned");
 
   const [suggestions, setSuggestions] = React.useState<any[]>([]);
-  const [suggestionsLoading, setSuggestionsLoading] = React.useState(false);
+  const [suggestionsLoading, setSuggestionsLoading] = React.useState<boolean>(false);
+
+  // Fix 3: Memoize ownedCount so it can be used as a stable useEffect dependency
+  const ownedCount = React.useMemo(
+    () => (data?.items || []).filter((i: any) => i.owned !== false).length,
+    [data?.items]
+  );
 
   // Fetch suggestions in background once collection data is loaded
   React.useEffect(() => {
@@ -35,7 +64,7 @@ export function CollectionDetail({ collId, ctx }) {
     if (!owned.length) return;
     let cancelled = false;
     setSuggestionsLoading(true);
-    fetchSuggestions(collId, data.type, owned.map((i: any) => ({ title: i.title, series: i.series, sub: i.sub }))).then(results => {
+    fetchSuggestions(collId, data.type, owned.map((i: any) => ({ title: i.title, series: i.series, sub: i.sub }))).then((results: any[]) => {
       if (!cancelled) {
         const ownedTitles = new Set((data.items || []).map((i: any) => (i.title || '').toLowerCase()));
         setSuggestions((results || []).filter((s: any) => !ownedTitles.has((s.title || '').toLowerCase())));
@@ -43,19 +72,19 @@ export function CollectionDetail({ collId, ctx }) {
       }
     });
     return () => { cancelled = true; };
-  }, [collId, data?.type, (data?.items || []).filter((i: any) => i.owned !== false).length]);
+  }, [collId, data?.type, ownedCount]);
 
   // Remove newly-added items from suggestions list
   React.useEffect(() => {
     if (!data?.items?.length || !suggestions.length) return;
     const ownedTitles = new Set((data.items || []).map((i: any) => (i.title || '').toLowerCase()));
-    setSuggestions(prev => prev.filter((s: any) => !ownedTitles.has((s.title || '').toLowerCase())));
+    setSuggestions((prev: any[]) => prev.filter((s: any) => !ownedTitles.has((s.title || '').toLowerCase())));
   }, [data?.items]);
 
   const hasSearch = data && data.items && data.items.length > 12;
   React.useEffect(() => {
     if (!hasSearch) return;
-    function onKey(e) {
+    function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === "f") {
         e.preventDefault();
         searchRef.current && searchRef.current.focus();
@@ -67,7 +96,7 @@ export function CollectionDetail({ collId, ctx }) {
 
   // Escape key exits select mode
   React.useEffect(() => {
-    function onKey(e) {
+    function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
         if (activeAction) { setActiveAction(null); return; }
         if (selectMode) { exitSelectMode(); }
@@ -83,7 +112,7 @@ export function CollectionDetail({ collId, ctx }) {
     setActiveAction(null);
   }
 
-  function toggleSelect(id) {
+  function toggleSelect(id: string) {
     setSelected(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
@@ -91,7 +120,7 @@ export function CollectionDetail({ collId, ctx }) {
     });
   }
 
-  function selectAll(ids) {
+  function selectAll(ids: string[]) {
     setSelected(new Set(ids));
   }
 
@@ -112,7 +141,7 @@ export function CollectionDetail({ collId, ctx }) {
   async function applySetCondition() {
     // Only apply to owned items
     for (const id of selected) {
-      const item = data.items.find(i => i.id === id);
+      const item = data?.items?.find((i: any) => i.id === id);
       if (item && item.owned !== false) {
         saveHolding(id, { condition: conditionValue });
       }
@@ -149,43 +178,76 @@ export function CollectionDetail({ collId, ctx }) {
   if (error) return <ErrorState error={error} onRetry={refetch} />;
   if (!data) return <EmptyState title="Collection not found" />;
 
-  const { name, sub, accent, owned, missing, pct, type, items } = data;
-  const ownedCount = items.filter(i => i.owned !== false).length;
-  const missingCount = items.filter(i => i.owned === false).length;
+  const { name, sub, accent, owned, missing, pct, type } = data;
+  const items = data.items ?? [];
+  const ownedItemCount = items.filter((i: any) => i.owned !== false).length;
+  const missingCount = items.filter((i: any) => i.owned === false).length;
 
-  const progressLabel = type === "game" ? "Played" : type === "book" ? "Read" : type === "movie" ? "Watched" : null;
-  const progressField = type === "game" ? "completed" : (type === "movie" || type === "book") ? "watched" : null;
-  const progressDoneLabel = type === "game" ? "Completed" : type === "book" ? "Read" : type === "movie" ? "Watched" : null;
-  const progressNotDoneLabel = type === "game" ? "Not completed" : type === "book" ? "Unread" : type === "movie" ? "Unwatched" : null;
-  const progressCount = progressField ? items.filter(i => i.owned !== false && i[progressField]).length : 0;
-  const progressNotDoneCount = progressField ? items.filter(i => i.owned !== false && !i[progressField]).length : 0;
+  // Fix 5: Memoize expensive filter/sort/progress calculations
+  const progressLabel = React.useMemo(
+    () => type === "game" ? "Played" : type === "book" ? "Read" : type === "movie" ? "Watched" : null,
+    [type]
+  );
+  const progressField = React.useMemo(
+    () => type === "game" ? "completed" : (type === "movie" || type === "book") ? "watched" : null,
+    [type]
+  );
+  const progressDoneLabel = React.useMemo(
+    () => type === "game" ? "Completed" : type === "book" ? "Read" : type === "movie" ? "Watched" : null,
+    [type]
+  );
+  const progressNotDoneLabel = React.useMemo(
+    () => type === "game" ? "Not completed" : type === "book" ? "Unread" : type === "movie" ? "Unwatched" : null,
+    [type]
+  );
+  const progressCount = React.useMemo(
+    () => progressField ? items.filter((i: any) => i.owned !== false && i[progressField]).length : 0,
+    [progressField, items]
+  );
+  const progressNotDoneCount = React.useMemo(
+    () => progressField ? items.filter((i: any) => i.owned !== false && !i[progressField]).length : 0,
+    [progressField, items]
+  );
 
   const sq = search.trim().toLowerCase();
-  const filtered = items.filter(i => {
-    if (filter !== "all" && (filter === "owned" ? !i.owned : i.owned)) return false;
-    if (progressField && statusFilter !== "all") {
-      if (i.owned === false) return false;
-      if (statusFilter === "done" && !i[progressField]) return false;
-      if (statusFilter === "notdone" && i[progressField]) return false;
-    }
-    if (sq && !(i.title || "").toLowerCase().includes(sq) && !(i.sub || "").toLowerCase().includes(sq)) return false;
-    return true;
-  });
-  const shown = [...filtered].sort((a, b) => {
-    if (sort === "title") return (a.title || "").localeCompare(b.title || "");
-    if (sort === "year")  return (a.year || 9999) - (b.year || 9999);
-    if (sort === "status") return (b.owned ? 1 : 0) - (a.owned ? 1 : 0);
-    if (sort === "rating") return (b.rating ?? -1) - (a.rating ?? -1);
-    if (sort === "progress") {
-      const aP = type === "game" ? (a.completed ? 1 : 0) : (a.watched ? 1 : 0);
-      const bP = type === "game" ? (b.completed ? 1 : 0) : (b.watched ? 1 : 0);
-      return bP - aP;
-    }
-    return 0;
-  });
 
-  const shownIds = shown.map(i => i.id);
-  const allShownSelected = shownIds.length > 0 && shownIds.every(id => selected.has(id));
+  // Fix 4: Truncate long search strings in EmptyState title
+  const displaySearch = search.length > 60 ? search.slice(0, 60) + '…' : search;
+
+  const { filtered, shown } = React.useMemo(() => {
+    const filtered = items.filter((i: any) => {
+      // Fix 2: Normalize i.owned — undefined and true both mean owned
+      const isOwned = i.owned !== false;
+      if (filter !== "all" && (filter === "owned" ? !isOwned : isOwned)) return false;
+      if (progressField && statusFilter !== "all") {
+        if (i.owned === false) return false;
+        if (statusFilter === "done" && !i[progressField]) return false;
+        if (statusFilter === "notdone" && i[progressField]) return false;
+      }
+      if (sq && !(i.title || "").toLowerCase().includes(sq) && !(i.sub || "").toLowerCase().includes(sq)) return false;
+      return true;
+    });
+    const shown = [...filtered].sort((a: any, b: any) => {
+      if (sort === "title") return (a.title || "").localeCompare(b.title || "");
+      if (sort === "year")  return (a.year || 9999) - (b.year || 9999);
+      if (sort === "status") {
+        const aOwned = a.owned !== false ? 1 : 0;
+        const bOwned = b.owned !== false ? 1 : 0;
+        return bOwned - aOwned;
+      }
+      if (sort === "rating") return (b.rating ?? -1) - (a.rating ?? -1);
+      if (sort === "progress") {
+        const aP = type === "game" ? (a.completed ? 1 : 0) : (a.watched ? 1 : 0);
+        const bP = type === "game" ? (b.completed ? 1 : 0) : (b.watched ? 1 : 0);
+        return bP - aP;
+      }
+      return 0;
+    });
+    return { filtered, shown };
+  }, [items, filter, statusFilter, sort, sq, progressField, type]);
+
+  const shownIds = shown.map((i: any) => i.id);
+  const allShownSelected = shownIds.length > 0 && shownIds.every((id: string) => selected.has(id));
 
   return (
     <div className="view-enter">
@@ -199,7 +261,7 @@ export function CollectionDetail({ collId, ctx }) {
         </div>
         <div style={{ flex: 1 }} />
         <button className="btn solid add-item-btn" onClick={() => ctx.addToCollection(data)}><I.plus size={16} stroke={2} /> Add item</button>
-        <button className="btn" title="Print / Save PDF" onClick={() => window.hoddDesktop?.printToPdf?.(name)}>
+        <button className="btn" title="Print / Save PDF" onClick={() => (window as any).hoddDesktop?.printToPdf?.(name)}>
           <I.download size={15} /> Print
         </button>
         {data.user && !confirmDelete && (
@@ -219,7 +281,7 @@ export function CollectionDetail({ collId, ctx }) {
       </div>
       <div className="detail-toolbar">
         <div className="seg">
-          {[["all", "All", items.length], ["owned", "Owned", ownedCount], ["missing", "Missing", missingCount]].map(([v, l, n]) => (
+          {([["all", "All", items.length], ["owned", "Owned", ownedItemCount], ["missing", "Missing", missingCount]] as [string, string, number][]).map(([v, l, n]) => (
             <button key={v} className={filter === v ? "on" : ""} onClick={() => setFilter(v)}>
               {l} <span style={{ opacity: 0.55, fontSize: 11, fontWeight: 500 }}>{n}</span>
             </button>
@@ -227,7 +289,7 @@ export function CollectionDetail({ collId, ctx }) {
         </div>
         {progressField && (
           <div className="seg">
-            {[["all", "Any status"], ["done", progressDoneLabel, progressCount], ["notdone", progressNotDoneLabel, progressNotDoneCount]].map(([v, l, n]) => (
+            {([["all", "Any status", null], ["done", progressDoneLabel, progressCount], ["notdone", progressNotDoneLabel, progressNotDoneCount]] as [string, string | null, number | null][]).map(([v, l, n]) => (
               <button key={v} className={statusFilter === v ? "on" : ""} onClick={() => setStatusFilter(v)}>
                 {l}{n != null ? <span style={{ opacity: 0.55, fontSize: 11, fontWeight: 500 }}> {n}</span> : null}
               </button>
@@ -235,7 +297,7 @@ export function CollectionDetail({ collId, ctx }) {
           </div>
         )}
         <div className="seg">
-          {[["default", "Default"], ["title", "A–Z"], ["year", "Year"], ["status", "Status"], ...(progressLabel ? [["progress", progressLabel]] : []), ["rating", "Rating"]].map(([v, l]) => (
+          {([["default", "Default"], ["title", "A–Z"], ["year", "Year"], ["status", "Status"], ...(progressLabel ? [["progress", progressLabel]] : []), ["rating", "Rating"]] as [string, string][]).map(([v, l]) => (
             <button key={v} className={sort === v ? "on" : ""} onClick={() => setSort(v)}>{l}</button>
           ))}
         </div>
@@ -269,11 +331,11 @@ export function CollectionDetail({ collId, ctx }) {
         : shown.length === 0 && !sq && filter === "all"
         ? null
         : shown.length === 0
-        ? <EmptyState title={sq ? `No matches for "${search}"` : `No ${filter} items`} sub={sq ? "Try a different search term." : "Try a different filter."} />
+        ? <EmptyState title={sq ? `No matches for "${displaySearch}"` : `No ${filter} items`} sub={sq ? "Try a different search term." : "Try a different filter."} />
         : <div className="items-grid">
-            {shown.map(it => (
+            {shown.map((it: any) => (
               <div
-                className={"item-cell" + (it.owned ? "" : " missing")}
+                className={"item-cell" + (it.owned !== false ? "" : " missing")}
                 key={it.id}
                 style={selectMode && selected.has(it.id) ? { outline: "2px solid var(--accent)", borderRadius: 8, position: "relative" } : selectMode ? { position: "relative", cursor: "pointer" } : {}}
                 onClick={() => {
@@ -304,7 +366,7 @@ export function CollectionDetail({ collId, ctx }) {
                     )}
                   </div>
                 )}
-                <Cover item={{ ...it, type }} h={210} ghost={!it.owned} />
+                <Cover item={{ ...it, type }} h={210} ghost={it.owned === false} />
                 <div className="nm">{it.title}</div>
                 <div className="yr">{it.sub || ""}{it.year ? ` · ${it.year}` : ""}</div>
                 {it.rating != null && (
@@ -312,7 +374,7 @@ export function CollectionDetail({ collId, ctx }) {
                     <StarRating value={it.rating} size={10} readonly />
                   </div>
                 )}
-                {it.owned
+                {it.owned !== false
                   ? <div className="badge badge-owned"><I.check size={12} stroke={2.2} /> {
                       (type === "game" && it.completed) ? "Played" :
                       (type === "movie" && it.watched) ? "Watched" :
@@ -333,7 +395,7 @@ export function CollectionDetail({ collId, ctx }) {
           {suggestionsLoading
             ? <div className="suggested-loading"><span className="spinner-dot" /><span className="spinner-dot" /><span className="spinner-dot" /></div>
             : <div className="items-grid suggested-grid">
-                {suggestions.map(it => (
+                {suggestions.map((it: any) => (
                   <div
                     className="item-cell missing suggested-item"
                     key={it.id}

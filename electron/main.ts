@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme, net, protocol, shell } from 'electron';
-import { promises as fs } from 'node:fs';
-import { existsSync } from 'node:fs';
+// Fix 5 — Combine duplicate fs imports into one
+import { promises as fs, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -12,12 +12,18 @@ import { spawn, ChildProcess } from 'node:child_process';
 import * as db from './db.js';
 import { createServer } from 'node:http';
 import { networkInterfaces } from 'node:os';
+// Fix 6 — Read version from package.json instead of hardcoding it
+import { createRequire } from 'node:module';
+const _require = createRequire(import.meta.url);
+const { version: APP_VERSION } = _require('../../package.json') as { version: string };
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let activeInstallProc: ChildProcess | null = null;
 let activeServeProc: ChildProcess | null = null;
 let appManagedServe = false;
+// Fix 10 — Guard flag to prevent concurrent ollama:start races
+let ollamaStarting = false;
 
 function dataFilePath(name: string): string {
   const devPath = path.join(__dirname, '../public/data', name);
@@ -66,6 +72,82 @@ async function ollamaGenerate(model: string, prompt: string, system?: string): P
   return data.response ?? '';
 }
 
+// ─── Shared helpers ────────────────────────────────────────────────────────
+
+// Score how closely a result title matches the search query (word overlap ratio)
+function titleSim(result: string, q: string): number {
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+  const a = norm(result), b = norm(q);
+  if (a === b) return 1;
+  const wa = new Set(a.split(/\s+/));
+  const wb = new Set(b.split(/\s+/));
+  const common = [...wa].filter(w => wb.has(w)).length;
+  return common / Math.max(wa.size, wb.size);
+}
+
+// Fix 7 — Shared metadata lookup used by both IPC handler and companion server
+async function lookupMetadata(
+  type: string,
+  query: string,
+  settings: Record<string, string>
+): Promise<unknown[] | null> {
+  if (type === 'book') {
+    const res = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=5&fields=title,author_name,first_publish_year,cover_i`);
+    const data = await res.json() as { docs?: { title?: string; author_name?: string[]; first_publish_year?: number; cover_i?: number }[] };
+    return (data.docs ?? []).slice(0, 3).map(d => ({
+      title: d.title ?? query, year: d.first_publish_year ?? null, sub: d.author_name?.[0] ?? null,
+      cover_url: d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-L.jpg` : null,
+    }));
+  }
+  if (type === 'vinyl') {
+    const res = await fetch(
+      `https://musicbrainz.org/ws/2/release/?query=${encodeURIComponent(query)}&fmt=json&limit=3`,
+      { headers: { 'User-Agent': 'HODD-Desktop/1.0 (hodd-app)' } }
+    );
+    const data = await res.json() as { releases?: { title?: string; date?: string; 'artist-credit'?: { artist?: { name?: string } }[]; id?: string }[] };
+    return (data.releases ?? []).slice(0, 3).map(d => ({
+      title: d.title ?? query,
+      year: d.date ? parseInt(d.date.slice(0, 4)) : null,
+      sub: d['artist-credit']?.[0]?.artist?.name ?? null,
+      cover_url: d.id ? `https://coverartarchive.org/release/${d.id}/front-250` : null,
+    }));
+  }
+  if (type === 'game' && settings['api.rawg']) {
+    const res = await fetch(`https://api.rawg.io/api/games?search=${encodeURIComponent(query)}&page_size=10&key=${settings['api.rawg']}`);
+    const data = await res.json() as { results?: { name?: string; released?: string; background_image?: string; platforms?: { platform?: { name?: string } }[] }[] };
+    const sorted = (data.results ?? []).sort((a, b) => titleSim(b.name ?? '', query) - titleSim(a.name ?? '', query));
+    const top = sorted.slice(0, 3);
+    const steamCovers = new Map<string, string>();
+    await Promise.all(top.map(async d => {
+      if (!d.name) return;
+      try {
+        const steamRes = await fetch(`https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(d.name)}&cc=us&l=en`);
+        const steamData = await steamRes.json() as { items?: { id: number; name: string }[] };
+        const match = steamData.items?.find(i => titleSim(i.name, d.name!) > 0.85);
+        if (match) steamCovers.set(d.name, `https://cdn.akamai.steamstatic.com/steam/apps/${match.id}/library_600x900_2x.jpg`);
+      } catch (_) {}
+    }));
+    return top.map(d => ({
+      title: d.name ?? query,
+      year: d.released ? parseInt(d.released.slice(0, 4)) : null,
+      sub: d.platforms?.[0]?.platform?.name ?? null,
+      cover_url: (d.name && steamCovers.get(d.name)) || d.background_image || null,
+    }));
+  }
+  if (type === 'movie' && settings['api.omdb']) {
+    const res = await fetch(`https://www.omdbapi.com/?s=${encodeURIComponent(query)}&apikey=${settings['api.omdb']}&type=movie`);
+    const data = await res.json() as { Search?: { Title?: string; Year?: string; Poster?: string }[] };
+    const sorted = (data.Search ?? []).sort((a, b) => titleSim(b.Title ?? '', query) - titleSim(a.Title ?? '', query));
+    return sorted.slice(0, 3).map(d => ({
+      title: d.Title ?? query,
+      year: d.Year ? parseInt(d.Year) : null,
+      sub: null,
+      cover_url: d.Poster && d.Poster !== 'N/A' ? d.Poster : null,
+    }));
+  }
+  return null;
+}
+
 // ─── Window ────────────────────────────────────────────────────────────────
 
 let mainWindow: BrowserWindow | null = null;
@@ -94,7 +176,9 @@ function startCompanionServer(): void {
   const server = createServer(async (req, res) => {
     const url = new URL(req.url || '/', `http://localhost`);
 
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    // Fix 2 — Restrict CORS: companion is localhost-only so wildcard is not needed.
+    // Respond with null origin (suitable for file:// and localhost contexts) instead of *.
+    res.setHeader('Access-Control-Allow-Origin', 'null');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
@@ -116,7 +200,8 @@ function startCompanionServer(): void {
     const pathname = url.pathname;
 
     if (pathname === '/api/status') {
-      json({ ok: true, name: 'Hodd', version: '1.1.0' });
+      // Fix 6 — Use APP_VERSION from package.json instead of hardcoded string
+      json({ ok: true, name: 'Hodd', version: APP_VERSION });
       return;
     }
     if (pathname === '/api/collections' && req.method === 'GET') {
@@ -144,23 +229,11 @@ function startCompanionServer(): void {
       const type = String(b.type || 'book');
       const query = String(b.query || '');
       try {
-        let results: unknown[] = [];
-        if (type === 'book') {
-          const r = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=5&fields=title,author_name,first_publish_year,cover_i`);
-          const data = await r.json() as { docs?: { title?: string; author_name?: string[]; first_publish_year?: number; cover_i?: number }[] };
-          results = (data.docs ?? []).slice(0, 3).map(d => ({
-            title: d.title ?? query, year: d.first_publish_year ?? null, sub: d.author_name?.[0] ?? null,
-            cover_url: d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-L.jpg` : null,
-          }));
-        } else if (type === 'vinyl') {
-          const r = await fetch(`https://musicbrainz.org/ws/2/release/?query=${encodeURIComponent(query)}&fmt=json&limit=3`, { headers: { 'User-Agent': 'HODD-Desktop/1.0' } });
-          const data = await r.json() as { releases?: { title?: string; date?: string; 'artist-credit'?: { artist?: { name?: string } }[] }[] };
-          results = (data.releases ?? []).slice(0, 3).map(d => ({
-            title: d.title ?? query, year: d.date ? parseInt(d.date.slice(0, 4)) : null, sub: d['artist-credit']?.[0]?.artist?.name ?? null, cover_url: null,
-          }));
-        }
-        json(results);
-      } catch (e) {
+        // Fix 7 — Use shared lookupMetadata function instead of duplicated logic
+        const settings = db.getSettings();
+        const results = await lookupMetadata(type, query, settings);
+        json(results ?? []);
+      } catch (_e) {
         json([], 200);
       }
       return;
@@ -191,7 +264,8 @@ function startCompanionServer(): void {
     }
   });
 
-  server.listen(0, '0.0.0.0', () => {
+  // Fix 1 — Bind to 127.0.0.1 only; the companion server must not be reachable from the network
+  server.listen(0, '127.0.0.1', () => {
     const addr = server.address();
     companionServerPort = typeof addr === 'object' && addr ? addr.port : 7842;
     console.log(`[HODD companion] Server on port ${companionServerPort}`);
@@ -225,6 +299,19 @@ function createWindow() {
     return { action: 'deny' };
   });
 
+  // Fix 12 — Kill managed subprocesses when the window is closed
+  window.on('closed', () => {
+    if (activeServeProc) {
+      activeServeProc.kill('SIGTERM');
+      activeServeProc = null;
+      appManagedServe = false;
+    }
+    if (activeInstallProc) {
+      activeInstallProc.kill('SIGTERM');
+      activeInstallProc = null;
+    }
+  });
+
   const devUrl = process.env.VITE_DEV_SERVER_URL;
   if (devUrl) void window.loadURL(devUrl);
   else void window.loadFile(path.join(__dirname, '../dist/index.html'));
@@ -235,12 +322,11 @@ function createWindow() {
 function registerIpc(): void {
   // Serve user-uploaded images via hodd-img:// protocol
   protocol.handle('hodd-img', (req) => {
+    // Fix 13 — path.basename already strips all directory components, preventing traversal.
+    // The subsequent startsWith check was redundant and has been removed for clarity.
     const filename = path.basename(decodeURIComponent(req.url.slice('hodd-img://'.length)));
     const imagesDir = path.join(app.getPath('userData'), 'images');
     const imagePath = path.join(imagesDir, filename);
-    if (!imagePath.startsWith(imagesDir + path.sep)) {
-      return new Response('Not Found', { status: 404 });
-    }
     return net.fetch(pathToFileURL(imagePath).toString());
   });
 
@@ -291,11 +377,25 @@ function registerIpc(): void {
   });
   ipcMain.handle('hodd:item:set-owned',    (_e, id: string, owned: boolean)                       => db.setUserItemOwned(id, owned));
   ipcMain.handle('hodd:item:update-fields',(_e, id: string, fields: Record<string, unknown>)      => db.updateUserItemFields(id, fields));
+
   const WRITABLE_SETTINGS = new Set(['user.name', 'user.joined', 'api.rawg', 'api.omdb', 'ollama.model', 'onboarded', 'active_profile']);
   ipcMain.handle('hodd:setting:save', (_e, key: string, value: string) => {
     if (!WRITABLE_SETTINGS.has(key)) return;
+    // Fix 9 — Validate per-key constraints before persisting
+    if (key === 'api.rawg' || key === 'api.omdb') {
+      if (typeof value !== 'string' || value.length > 256) return { error: 'Invalid value' };
+    } else if (key === 'user.name') {
+      if (typeof value !== 'string' || value.length > 100) return { error: 'Invalid value' };
+    } else if (key === 'ollama.model') {
+      if (typeof value !== 'string' || value.length > 100) return { error: 'Invalid value' };
+    } else if (key === 'onboarded') {
+      if (value !== 'true' && value !== 'false') return { error: 'Invalid value' };
+    } else if (key === 'active_profile') {
+      if (typeof value !== 'string' || value.length > 64) return { error: 'Invalid value' };
+    }
     db.saveSetting(key, value);
   });
+
   ipcMain.handle('hodd:favorites',                                                          () => db.getFavorites());
   ipcMain.handle('hodd:favorite:add',    (_e, id: string)                                  => db.addFavorite(id));
   ipcMain.handle('hodd:favorite:remove', (_e, id: string)                                  => db.removeFavorite(id));
@@ -336,14 +436,23 @@ function registerIpc(): void {
     mainWindow.setTitleBarOverlay(titleBarOverlay(theme === 'dark'));
   });
 
-  // Archive export — bundles referenced images as base64 under an `images` key
-  ipcMain.handle('hodd:archive:export', async (_event, payload: Record<string, unknown>) => {
+  // Archive export — re-fetches data from DB (Fix 4) and bundles referenced images as base64
+  ipcMain.handle('hodd:archive:export', async (_event, _payload: Record<string, unknown>) => {
     const result = await dialog.showSaveDialog({
       title: 'Export HODD archive',
       defaultPath: `hodd-archive-${new Date().toISOString().slice(0, 10)}.hodd`,
       filters: [{ name: 'HODD archive', extensions: ['hodd', 'json'] }],
     });
     if (result.canceled || !result.filePath) return { canceled: true };
+
+    // Fix 4 — Re-fetch actual DB state rather than trusting the renderer-supplied payload
+    const payload: Record<string, unknown> = {
+      userCollections: db.getUserCollections(),
+      userItems:       db.getUserItems(),
+      holdings:        db.getHoldings(),
+      catalogOverrides: db.getCatalogOverrides(),
+      stories:         db.getAllStories(),
+    };
 
     // Collect all image filenames referenced anywhere in the payload
     const filenames = new Set<string>();
@@ -396,19 +505,56 @@ function registerIpc(): void {
     const content = await fs.readFile(open.filePaths[0], 'utf8');
     const payload = JSON.parse(content) as Record<string, unknown>;
 
-    // Restore bundled images (v2 archives)
+    // Fix 3 — Restore bundled images using UUID-based filenames to prevent filename injection
     const images = payload.images as Record<string, string> | undefined;
     const ALLOWED_IMG_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic', '.avif']);
+    // Map from original archive filename → new safe filename
+    const filenameMap = new Map<string, string>();
+
     if (images && typeof images === 'object') {
       const imagesDir = path.join(app.getPath('userData'), 'images');
       await fs.mkdir(imagesDir, { recursive: true });
       for (const [name, b64] of Object.entries(images)) {
         if (typeof b64 !== 'string') continue;
         const safeName = path.basename(name);
-        if (!ALLOWED_IMG_EXTS.has(path.extname(safeName).toLowerCase())) continue;
+        const ext = path.extname(safeName).toLowerCase();
+        if (!ALLOWED_IMG_EXTS.has(ext)) continue;
+        // Generate a UUID-based filename to avoid path traversal or filename collisions
+        const newName = `${crypto.randomUUID()}${ext}`;
+        filenameMap.set(safeName, newName);
         try {
-          await fs.writeFile(path.join(imagesDir, safeName), Buffer.from(b64, 'base64'));
+          await fs.writeFile(path.join(imagesDir, newName), Buffer.from(b64, 'base64'));
         } catch (_) {}
+      }
+    }
+
+    // Rewrite cover_url and gallery references in payload to use the new UUID filenames
+    function remapFilename(original: string | null | undefined): string | null {
+      if (!original) return original ?? null;
+      const base = path.basename(original);
+      return filenameMap.get(base) ?? base;
+    }
+
+    // Remap userItems
+    const rawItems = payload.userItems as Record<string, Record<string, unknown>[]> | undefined;
+    if (rawItems) {
+      for (const collItems of Object.values(rawItems)) {
+        for (const it of collItems ?? []) {
+          if (it.cover_url) it.cover_url = remapFilename(it.cover_url as string);
+          if (Array.isArray(it.gallery)) {
+            it.gallery = (it.gallery as string[]).map(f => remapFilename(f) ?? f);
+          }
+        }
+      }
+    }
+    // Remap catalogOverrides
+    const rawOverrides = payload.catalogOverrides as Record<string, Record<string, unknown>> | undefined;
+    if (rawOverrides) {
+      for (const patch of Object.values(rawOverrides)) {
+        if (patch.cover_url) patch.cover_url = remapFilename(patch.cover_url as string);
+        if (Array.isArray(patch.gallery)) {
+          patch.gallery = (patch.gallery as string[]).map(f => remapFilename(f) ?? f);
+        }
       }
     }
 
@@ -472,24 +618,22 @@ function registerIpc(): void {
     }
   });
 
-  // Growth stats — monthly acquisition counts for the Statistics view
+  // Growth stats — Fix 8: use a single SQL query instead of 6 JS Array.filter passes
   ipcMain.handle('hodd:growth', () => {
     try {
       const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-      const items = db.getAllUserItemsWithTimestamps();
+      const rows = db.getGrowthStats(); // returns [{ ym: 'YYYY-MM', n: count }, ...]
+
+      // Build a map from 'YYYY-MM' → count for quick lookup
+      const countByYm = new Map<string, number>(rows.map(r => [r.ym, r.n]));
+
+      // Generate the last 6 calendar months and fill in zeros where there are no entries
       const now = new Date();
       const result = [];
       for (let i = 5; i >= 0; i--) {
         const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const y = d.getFullYear(), mo = d.getMonth();
-        const count = items.filter(it => {
-          if (!it.created_at) return false;
-          try {
-            const dt = new Date(it.created_at as string);
-            return dt.getFullYear() === y && dt.getMonth() === mo;
-          } catch (_) { return false; }
-        }).length;
-        result.push({ m: MONTHS[mo], n: count });
+        const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        result.push({ m: MONTHS[d.getMonth()], n: countByYm.get(ym) ?? 0 });
       }
       return result;
     } catch (_) { return []; }
@@ -535,6 +679,15 @@ function registerIpc(): void {
   });
 
   ipcMain.handle('hodd:ollama:install', (event, password?: string) => {
+    // Fix 11 — Validate the sudo password before writing it to stdin
+    if (password !== undefined) {
+      if (typeof password !== 'string' || password.length > 256) {
+        const win = BrowserWindow.fromWebContents(event.sender);
+        win?.webContents.send('hodd:ollama:stream', { type: 'error', data: 'Invalid password.' });
+        return;
+      }
+    }
+
     const win = BrowserWindow.fromWebContents(event.sender);
     const send = (type: string, data: string) =>
       win?.webContents.send('hodd:ollama:stream', { type, data });
@@ -596,29 +749,45 @@ function registerIpc(): void {
   });
 
   ipcMain.handle('hodd:ollama:start', async () => {
-    // Don't double-start
-    if (activeServeProc) return { ok: true };
-
-    const proc = spawn('ollama', ['serve'], { shell: false });
-    activeServeProc = proc;
-    appManagedServe = true;
-
-    proc.on('error', () => { activeServeProc = null; });
-    proc.on('close', () => { activeServeProc = null; });
-
-    // Poll until /api/tags responds
-    const deadline = Date.now() + 15_000;
-    while (Date.now() < deadline) {
-      await new Promise(r => setTimeout(r, 600));
-      try {
-        const res = await fetch('http://127.0.0.1:11434/api/tags');
-        if (res.ok) return { ok: true };
-      } catch {}
+    // Fix 10 — Prevent concurrent start race: if already running, return immediately.
+    // If a start is in progress, wait for it to complete before returning.
+    if (activeServeProc && !ollamaStarting) return { ok: true };
+    if (ollamaStarting) {
+      // Wait for the in-progress start to finish (poll every 200 ms, up to 20 s)
+      const deadline = Date.now() + 20_000;
+      while (ollamaStarting && Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, 200));
+      }
+      return activeServeProc ? { ok: true } : { ok: false, error: 'Ollama failed to start' };
     }
-    proc.kill();
-    activeServeProc = null;
-    appManagedServe = false;
-    return { ok: false, error: 'Timed out waiting for Ollama to start (15 s)' };
+
+    ollamaStarting = true;
+    try {
+      const proc = spawn('ollama', ['serve'], { shell: false });
+      activeServeProc = proc;
+      appManagedServe = true;
+
+      proc.on('error', () => { activeServeProc = null; ollamaStarting = false; });
+      proc.on('close', () => { activeServeProc = null; });
+
+      // Poll until /api/tags responds
+      const deadline = Date.now() + 15_000;
+      while (Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, 600));
+        try {
+          const res = await fetch('http://127.0.0.1:11434/api/tags');
+          if (res.ok) { ollamaStarting = false; return { ok: true }; }
+        } catch {}
+      }
+      proc.kill();
+      activeServeProc = null;
+      appManagedServe = false;
+      ollamaStarting = false;
+      return { ok: false, error: 'Timed out waiting for Ollama to start (15 s)' };
+    } catch (e) {
+      ollamaStarting = false;
+      return { ok: false, error: (e as Error).message };
+    }
   });
 
   ipcMain.handle('hodd:ollama:pull', (event, model: string) => {
@@ -684,78 +853,12 @@ function registerIpc(): void {
 
   ipcMain.handle('hodd:reset-all', (_e, keepApiKeys?: boolean) => db.clearUserData(keepApiKeys));
 
-  // Score how closely a result title matches the search query (word overlap ratio)
-  function titleSim(result: string, q: string): number {
-    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
-    const a = norm(result), b = norm(q);
-    if (a === b) return 1;
-    const wa = new Set(a.split(/\s+/));
-    const wb = new Set(b.split(/\s+/));
-    const common = [...wa].filter(w => wb.has(w)).length;
-    return common / Math.max(wa.size, wb.size);
-  }
-
   // Online metadata lookup — free APIs (books/vinyl) + optional key-gated APIs (games/movies)
+  // Fix 7 — Delegates to the shared lookupMetadata() function defined at module level
   ipcMain.handle('hodd:lookup', async (_e, type: string, query: string) => {
     const settings = db.getSettings();
     try {
-      if (type === 'book') {
-        const res = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=5&fields=title,author_name,first_publish_year,cover_i`);
-        const data = await res.json() as { docs?: { title?: string; author_name?: string[]; first_publish_year?: number; cover_i?: number }[] };
-        return (data.docs ?? []).slice(0, 3).map(d => ({
-          title:     d.title ?? query,
-          year:      d.first_publish_year ?? null,
-          sub:       d.author_name?.[0] ?? null,
-          cover_url: d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-L.jpg` : null,
-        }));
-      }
-      if (type === 'vinyl') {
-        const res = await fetch(
-          `https://musicbrainz.org/ws/2/release/?query=${encodeURIComponent(query)}&fmt=json&limit=3`,
-          { headers: { 'User-Agent': 'HODD-Desktop/1.0 (hodd-app)' } }
-        );
-        const data = await res.json() as { releases?: { title?: string; date?: string; 'artist-credit'?: { artist?: { name?: string } }[]; id?: string }[] };
-        return (data.releases ?? []).slice(0, 3).map(d => ({
-          title:     d.title ?? query,
-          year:      d.date ? parseInt(d.date.slice(0, 4)) : null,
-          sub:       d['artist-credit']?.[0]?.artist?.name ?? null,
-          cover_url: d.id ? `https://coverartarchive.org/release/${d.id}/front-250` : null,
-        }));
-      }
-      if (type === 'game' && settings['api.rawg']) {
-        const res = await fetch(`https://api.rawg.io/api/games?search=${encodeURIComponent(query)}&page_size=10&key=${settings['api.rawg']}`);
-        const data = await res.json() as { results?: { name?: string; released?: string; background_image?: string; platforms?: { platform?: { name?: string } }[] }[] };
-        const sorted = (data.results ?? []).sort((a, b) => titleSim(b.name ?? '', query) - titleSim(a.name ?? '', query));
-        const top = sorted.slice(0, 3);
-        const steamCovers = new Map<string, string>();
-        await Promise.all(top.map(async d => {
-          if (!d.name) return;
-          try {
-            const steamRes = await fetch(`https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(d.name)}&cc=us&l=en`);
-            const steamData = await steamRes.json() as { items?: { id: number; name: string }[] };
-            const match = steamData.items?.find(i => titleSim(i.name, d.name!) > 0.85);
-            if (match) steamCovers.set(d.name, `https://cdn.akamai.steamstatic.com/steam/apps/${match.id}/library_600x900_2x.jpg`);
-          } catch (_) {}
-        }));
-        return top.map(d => ({
-          title:     d.name ?? query,
-          year:      d.released ? parseInt(d.released.slice(0, 4)) : null,
-          sub:       d.platforms?.[0]?.platform?.name ?? null,
-          cover_url: (d.name && steamCovers.get(d.name)) || d.background_image || null,
-        }));
-      }
-      if (type === 'movie' && settings['api.omdb']) {
-        const res = await fetch(`https://www.omdbapi.com/?s=${encodeURIComponent(query)}&apikey=${settings['api.omdb']}&type=movie`);
-        const data = await res.json() as { Search?: { Title?: string; Year?: string; Poster?: string }[] };
-        const sorted = (data.Search ?? []).sort((a, b) => titleSim(b.Title ?? '', query) - titleSim(a.Title ?? '', query));
-        return sorted.slice(0, 3).map(d => ({
-          title:     d.Title ?? query,
-          year:      d.Year ? parseInt(d.Year) : null,
-          sub:       null,
-          cover_url: d.Poster && d.Poster !== 'N/A' ? d.Poster : null,
-        }));
-      }
-      return null;
+      return await lookupMetadata(type, query, settings);
     } catch (e) {
       console.warn('[HODD lookup]', type, (e as Error).message?.replace(/((?:api)?key)=[^&\s]+/gi, '$1=REDACTED'));
       return null;

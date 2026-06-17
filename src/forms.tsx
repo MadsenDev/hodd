@@ -1,9 +1,86 @@
-// @ts-nocheck
 import React from 'react';
 import { I, typeIcon } from './icons';
 import { createCollection, addItem } from './api';
 
-export const FORMAT_OPTIONS = {
+// ── TypeScript interfaces ─────────────────────────────────────────────────────
+
+interface CollectionRecord {
+  id: string;
+  name: string;
+  type: string;
+  accent: string;
+  template?: string[];
+  [key: string]: unknown;
+}
+
+export interface ItemRecord {
+  id?: string;
+  title?: string | null;
+  sub?: string | null;
+  year?: number | null;
+  type?: string | null;
+  series?: string | null;
+  series_number?: number | null;
+  region?: string | null;
+  cover_url?: string | null;
+  gallery?: string[] | null;
+  color?: string | null;
+  format?: string | null;
+  condition?: string | null;
+  acquired?: string | null;
+  completeness?: string | null;
+  grade?: string | null;
+  pressing?: string | null;
+  edition?: string | null;
+  notes?: string | null;
+  loan_from?: string | null;
+  loan_date?: string | null;
+  purchase_price?: number | null;
+  purchase_currency?: string | null;
+  current_value?: number | null;
+  loan_to?: string | null;
+  loan_to_date?: string | null;
+  watched?: boolean | null;
+  completed?: boolean | null;
+  owned?: boolean | null;
+  ownership?: string | null;
+  custom?: Array<{ label: string; value: string }> | null;
+  [key: string]: unknown;
+}
+
+interface ItemEditFormProps {
+  item: ItemRecord;
+  type?: string;
+  subLabel?: string;
+  story?: string[];
+  onCancel: () => void;
+  onSave: (data: {
+    owned: boolean;
+    holding?: Record<string, unknown>;
+    canonical: Record<string, unknown>;
+    story: string[];
+  }) => void;
+}
+
+interface AddItemModalProps {
+  collection: CollectionRecord;
+  onClose: () => void;
+  onAdded: (rec: ItemRecord) => void;
+  prefill?: Partial<ItemRecord> | null;
+}
+
+interface CreateCollectionModalProps {
+  onClose: () => void;
+  onCreated: (rec: CollectionRecord) => void;
+}
+
+interface CustomRow {
+  id: string;
+  label: string;
+  value: string;
+}
+
+export const FORMAT_OPTIONS: Record<string, string[]> = {
   game:  ["Cartridge", "Disc", "Steam", "Epic Games", "GOG", "Xbox Game Pass", "PS Plus", "Nintendo eShop", "Battle.net", "Ubisoft Connect", "EA App", "itch.io", "Local file (ROM/ISO)"],
   book:  ["Hardcover", "Paperback", "Mass market", "Kindle", "Kobo", "Apple Books", "Google Play Books", "Local file (EPUB/PDF)"],
   movie: ["4K Blu-ray", "Blu-ray", "DVD", "VHS", "Apple TV+", "Amazon", "Disney+", "Vudu", "Google Play", "Local file (MKV/MP4)"],
@@ -21,7 +98,7 @@ export const OWNERSHIP_OPTIONS: [string, string][] = [
   ["wishlist",     "Wishlist"],
 ];
 export const OWNERSHIP_LABEL: Record<string, string> = Object.fromEntries(OWNERSHIP_OPTIONS);
-export const SUBLABELS = { book: "Author", game: "Platform", coin: "Mint", vinyl: "Artist", movie: "Director", comic: "Publisher", other: "Detail" };
+export const SUBLABELS: Record<string, string> = { book: "Author", game: "Platform", coin: "Mint", vinyl: "Artist", movie: "Director", comic: "Publisher", other: "Detail" };
 
 export const PLATFORMS_BY_MAKER: Record<string, string[]> = {
   Nintendo: ["NES", "SNES", "Nintendo 64", "GameCube", "Wii", "Wii U", "Switch", "Nintendo Switch 2", "Game Boy", "Game Boy Color", "Game Boy Advance", "DS", "3DS", "Game & Watch"],
@@ -90,26 +167,35 @@ export const COVER_COLORS = [
   "#92400E", "#1E3A5F", "#7B2D8B", "#C0392B", "#2D5016",
 ];
 
-function withCurrent(options, current) {
+function withCurrent(options: string[] = [], current: string): string[] {
   if (current && options.indexOf(current) === -1) return [current].concat(options);
   return options;
 }
 
-function parseSeriesNumber(title) {
+function parseSeriesNumber(title: string): number | null {
   if (!title) return null;
   const m =
     title.match(/\s#\s*(\d+(?:\.\d+)?)/i) ||
     title.match(/\s(?:vol\.?|volume)\s*(\d+(?:\.\d+)?)/i) ||
     title.match(/\s(?:book|part|ep\.?|episode|chapter)\s+(\d+(?:\.\d+)?)/i);
   if (m) return parseFloat(m[1]);
-  const ROMAN = { I:1,II:2,III:3,IV:4,V:5,VI:6,VII:7,VIII:8,IX:9,X:10,XI:11,XII:12,XIII:13,XIV:14,XV:15,XVI:16,XVII:17,XVIII:18,XIX:19,XX:20 };
+  const ROMAN: Record<string, number> = { I:1,II:2,III:3,IV:4,V:5,VI:6,VII:7,VIII:8,IX:9,X:10,XI:11,XII:12,XIII:13,XIV:14,XV:15,XVI:16,XVII:17,XVIII:18,XIX:19,XX:20 };
   const rm = title.match(/\s+((?:X{0,2})(?:IX|IV|V?I{0,3}))\s*$/i);
   if (rm && ROMAN[rm[1].toUpperCase()]) return ROMAN[rm[1].toUpperCase()];
   return null;
 }
 
-export function EFSelect({ label, value, options, pairs, placeholder, onChange }) {
-  const opts = pairs || withCurrent(options, value).map(o => [o, o]);
+interface EFSelectProps {
+  label: string;
+  value: string;
+  options?: string[];
+  pairs?: [string, string][];
+  placeholder?: string | false;
+  onChange: (v: string) => void;
+}
+
+export function EFSelect({ label, value, options, pairs, placeholder, onChange }: EFSelectProps) {
+  const opts = pairs || withCurrent(options ?? [], value).map(o => [o, o] as [string, string]);
   return (
     <label className="ef-field">
       <span className="ef-k">{label}</span>
@@ -124,7 +210,15 @@ export function EFSelect({ label, value, options, pairs, placeholder, onChange }
   );
 }
 
-export function EFText({ label, value, placeholder, onChange, wide }) {
+interface EFTextProps {
+  label: string;
+  value: string;
+  placeholder?: string;
+  onChange: (v: string) => void;
+  wide?: boolean;
+}
+
+export function EFText({ label, value, placeholder, onChange, wide }: EFTextProps) {
   return (
     <label className={"ef-field" + (wide ? " ef-wide" : "")}>
       <span className="ef-k">{label}</span>
@@ -134,7 +228,15 @@ export function EFText({ label, value, placeholder, onChange, wide }) {
   );
 }
 
-export function EFCombobox({ label, value, options, placeholder, onChange }) {
+interface EFComboboxProps {
+  label: string;
+  value: string;
+  options: string[];
+  placeholder?: string;
+  onChange: (v: string) => void;
+}
+
+export function EFCombobox({ label, value, options, placeholder, onChange }: EFComboboxProps) {
   const listId = "dl-" + (label || "").toLowerCase().replace(/\s+/g, "-");
   return (
     <label className="ef-field">
@@ -154,7 +256,14 @@ export function EFCombobox({ label, value, options, placeholder, onChange }) {
   );
 }
 
-export function EFTextarea({ label, value, placeholder, onChange }) {
+interface EFTextareaProps {
+  label: string;
+  value: string;
+  placeholder?: string;
+  onChange: (v: string) => void;
+}
+
+export function EFTextarea({ label, value, placeholder, onChange }: EFTextareaProps) {
   return (
     <label className="ef-field ef-wide">
       <span className="ef-k">{label}</span>
@@ -165,7 +274,14 @@ export function EFTextarea({ label, value, placeholder, onChange }) {
   );
 }
 
-export function EFToggle({ label, value, onChange, hint }) {
+interface EFToggleProps {
+  label: string;
+  value: boolean;
+  onChange: (v: boolean) => void;
+  hint?: [string, string];
+}
+
+export function EFToggle({ label, value, onChange, hint }: EFToggleProps) {
   return (
     <div className="ef-field">
       <span className="ef-k">{label}</span>
@@ -179,7 +295,7 @@ export function EFToggle({ label, value, onChange, hint }) {
 
 const ipc = () => (window as any).hoddDesktop?.api;
 
-export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) {
+export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }: ItemEditFormProps) {
   const init = {
     format: item.format && item.format !== "—" && item.format !== "Owned" ? item.format : "",
     completeness: item.completeness || "",
@@ -211,26 +327,31 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
     region: item.region || "",
     series_number: item.series_number != null ? String(item.series_number) : "",
   });
-  const [custom, setCustom] = React.useState(
+  const [custom, setCustom] = React.useState<CustomRow[]>(
     Array.isArray(item.custom) && item.custom.length
-      ? item.custom.map(x => ({ label: x.label || "", value: x.value || "" }))
+      ? item.custom.map(x => ({ id: crypto.randomUUID(), label: x.label || "", value: x.value || "" }))
       : []
   );
   const [storyText, setStoryText] = React.useState((story || []).join("\n\n"));
   const [color, setColor] = React.useState(item.color || COVER_COLORS[0]);
+  const [titleEmpty, setTitleEmpty] = React.useState(false);
 
   // Photo state
   const originalGallery = React.useRef(Array.isArray(item.gallery) ? item.gallery : []);
   const [coverUrl, setCoverUrl] = React.useState(item.cover_url || null);
   const [gallery, setGallery] = React.useState(Array.isArray(item.gallery) ? item.gallery : []);
 
-  const set = (k, v) => setF(prev => ({ ...prev, [k]: v }));
-  const setCan = (k, v) => setC(prev => ({ ...prev, [k]: v }));
-  const setRow = (i, k, v) => setCustom(p => p.map((r, idx) => idx === i ? { ...r, [k]: v } : r));
-  const addRow = () => setCustom(p => [...p, { label: "", value: "" }]);
-  const delRow = (i) => setCustom(p => p.filter((_, idx) => idx !== i));
+  // Track if user explicitly cleared the series_number field
+  const userClearedSeriesRef = React.useRef(false);
+
+  const set = (k: string, v: unknown) => setF(prev => ({ ...prev, [k]: v }));
+  const setCan = (k: string, v: unknown) => setC(prev => ({ ...prev, [k]: v as string }));
+  const setRow = (id: string, k: string, v: string) => setCustom(p => p.map(r => r.id === id ? { ...r, [k]: v } : r));
+  const addRow = () => setCustom(p => [...p, { id: crypto.randomUUID(), label: "", value: "" }]);
+  const delRow = (id: string) => setCustom(p => p.filter(r => r.id !== id));
 
   React.useEffect(() => {
+    if (userClearedSeriesRef.current) return; // don't override user's intent
     if (c.series.trim() && !c.series_number) {
       const n = parseSeriesNumber(c.title);
       if (n !== null) setCan("series_number", String(n));
@@ -243,21 +364,21 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
     if (result?.canceled || !result?.files?.length) return;
     const filename = result.files[0];
     setCoverUrl(filename);
-    setGallery(g => g.includes(filename) ? g : [filename, ...g]);
+    setGallery((g: string[]) => g.includes(filename) ? g : [filename, ...g]);
   }
 
   async function addGalleryPhotos() {
     const a = ipc(); if (!a) return;
     const result = await a.pickImage(true);
     if (result?.canceled || !result?.files?.length) return;
-    setGallery(g => {
+    setGallery((g: string[]) => {
       const existing = new Set(g);
-      return [...g, ...result.files.filter(f => !existing.has(f))];
+      return [...g, ...result.files.filter((f: string) => !existing.has(f))];
     });
   }
 
-  function removeGalleryPhoto(filename) {
-    setGallery(g => g.filter(f => f !== filename));
+  function removeGalleryPhoto(filename: string) {
+    setGallery((g: string[]) => g.filter(f => f !== filename));
     if (coverUrl === filename) setCoverUrl(null);
   }
 
@@ -266,7 +387,7 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
     const a = ipc();
     if (a) {
       const orig = new Set(originalGallery.current);
-      gallery.filter(f => !orig.has(f)).forEach(f => a.deleteImage(f));
+      gallery.filter((f: string) => !orig.has(f)).forEach((f: string) => a.deleteImage(f));
       if (coverUrl && !orig.has(coverUrl) && !gallery.includes(coverUrl)) a.deleteImage(coverUrl);
     }
     onCancel();
@@ -277,12 +398,17 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
 
   const yearRaw = c.year.trim();
   const yearNum = yearRaw ? parseInt(yearRaw, 10) : null;
-  const yearError = yearRaw && (!Number.isFinite(yearNum) || yearNum < 1000 || yearNum > 2099)
+  const yearError = yearRaw && (!Number.isFinite(yearNum) || yearNum! < 1000 || yearNum! > 2099)
     ? "Year must be a number between 1000 and 2099"
     : null;
   const titleError = c.title.trim().length > 300 ? "Title is too long (max 300 characters)" : null;
 
   function handleSave() {
+    if (!c.title.trim()) {
+      setTitleEmpty(true);
+      return;
+    }
+    setTitleEmpty(false);
     if (yearError || titleError) return;
     const canonical = {
       title: c.title.trim() || item.title,
@@ -303,14 +429,11 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
     // Delete images that were removed during this edit session
     const a = ipc();
     if (a) {
-      const orig = new Set(originalGallery.current);
       const next = new Set(gallery);
-      originalGallery.current.filter(f => !next.has(f)).forEach(f => a.deleteImage(f));
-      // If original cover was replaced by a new pick (not in original gallery), old cover stays in
-      // original gallery tracking so it's handled above; new cover is already in next gallery
+      originalGallery.current.filter((f: string) => !next.has(f)).forEach((f: string) => a.deleteImage(f));
     }
     if (ownership === "wishlist") { onSave({ owned: false, canonical, story: paragraphs }); return; }
-    const holding = {
+    const holding: Record<string, unknown> = {
       ownership,
       format: f.format || null,
       condition: f.condition || null,
@@ -353,7 +476,7 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
       </div>
       {gallery.length > 0 ? (
         <div className="ef-gallery">
-          {gallery.map(filename => (
+          {gallery.map((filename: string) => (
             <div key={filename} className={"ef-gallery-thumb" + (filename === coverUrl ? " is-cover" : "")}>
               <img src={`hodd-img://${filename}`} alt="" />
               {filename !== coverUrl && (
@@ -378,9 +501,10 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
 
       <div className="ef-section">Item details</div>
       <div className="ef-grid">
-        <EFText label="Title" value={c.title} placeholder="Item title" onChange={v => setCan("title", v)} wide />
+        <EFText label="Title" value={c.title} placeholder="Item title" onChange={v => { setCan("title", v); if (v.trim()) setTitleEmpty(false); }} wide />
+        {titleEmpty && <div className="ef-error">Title is required</div>}
         {titleError && <div className="ef-error">{titleError}</div>}
-        <EFSelect label="Type" value={etype} pairs={TYPE_OPTIONS} placeholder={false} onChange={v => setCan("type", v)} />
+        <EFSelect label="Type" value={etype} pairs={TYPE_OPTIONS as [string, string][]} placeholder={false} onChange={v => setCan("type", v)} />
         {!coverUrl && <ColorPicker value={color} onChange={setColor} />}
         {etype === "game"
           ? <PlatformPicker value={c.sub || ""} onChange={v => setCan("sub", v)} />
@@ -388,7 +512,17 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
         <EFText label="Year" value={c.year} placeholder="e.g. 1996" onChange={v => setCan("year", v)} />
         {yearError && <div className="ef-error">{yearError}</div>}
         <EFText label="Series" value={c.series} placeholder="e.g. Dune, Pokémon" onChange={v => setCan("series", v)} />
-        <EFText label="# in series" value={c.series_number} placeholder="e.g. 4 or 4.5" onChange={v => setCan("series_number", v)} />
+        <EFText
+          label="# in series"
+          value={c.series_number}
+          placeholder="e.g. 4 or 4.5"
+          onChange={v => {
+            if (!v.trim()) {
+              userClearedSeriesRef.current = true;
+            }
+            setCan("series_number", v);
+          }}
+        />
         {etype === "game" && <EFText label="Region" value={c.region} placeholder="e.g. NTSC, PAL, JPN" onChange={v => setCan("region", v)} />}
       </div>
 
@@ -396,7 +530,7 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
         <>
           <div className="ef-section">Your copy</div>
           <div className="ef-grid">
-            <EFSelect label="Format" value={f.format} options={FORMAT_OPTIONS[etype] || []} placeholder="Medium" onChange={v => set("format", v)} />
+            <EFSelect label="Format" value={f.format} options={FORMAT_OPTIONS[etype] ?? []} placeholder="Medium" onChange={v => set("format", v)} />
             {etype === "game"  && <EFSelect label="Completeness" value={f.completeness} options={COMPLETENESS_OPTIONS} placeholder="How complete" onChange={v => set("completeness", v)} />}
             {etype === "coin"  && <EFText label="Grade" value={f.grade} placeholder="e.g. MS-63" onChange={v => set("grade", v)} />}
             {etype === "vinyl" && <EFText label="Pressing" value={f.pressing} placeholder="e.g. 180g" onChange={v => set("pressing", v)} />}
@@ -431,11 +565,11 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
           {custom.length === 0
             ? <div className="ef-empty">Collecting something unusual? Add your own fields — Movement, Reference, Colorway, Size, anything.</div>
             : <div className="ef-custom">
-                {custom.map((r, i) => (
-                  <div className="ef-custom-row" key={i}>
-                    <input className="ef-control" placeholder="Field name" value={r.label} onChange={e => setRow(i, "label", e.target.value)} />
-                    <input className="ef-control" placeholder="Value" value={r.value} onChange={e => setRow(i, "value", e.target.value)} />
-                    <button type="button" className="ef-del" onClick={() => delRow(i)} title="Remove field"><I.trash size={16} /></button>
+                {custom.map((r) => (
+                  <div className="ef-custom-row" key={r.id}>
+                    <input className="ef-control" placeholder="Field name" value={r.label} onChange={e => setRow(r.id, "label", e.target.value)} />
+                    <input className="ef-control" placeholder="Value" value={r.value} onChange={e => setRow(r.id, "value", e.target.value)} />
+                    <button type="button" className="ef-del" onClick={() => delRow(r.id)} title="Remove field"><I.trash size={16} /></button>
                   </div>
                 ))}
               </div>}
@@ -457,7 +591,12 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
   );
 }
 
-export function ColorPicker({ value, onChange }) {
+interface ColorPickerProps {
+  value: string;
+  onChange: (v: string) => void;
+}
+
+export function ColorPicker({ value, onChange }: ColorPickerProps) {
   return (
     <div className="ef-field">
       <span className="ef-k">Cover color</span>
@@ -473,7 +612,12 @@ export function ColorPicker({ value, onChange }) {
   );
 }
 
-export function AccentPicker({ value, onChange }) {
+interface AccentPickerProps {
+  value: string;
+  onChange: (v: string) => void;
+}
+
+export function AccentPicker({ value, onChange }: AccentPickerProps) {
   return (
     <div className="ef-field">
       <span className="ef-k">Accent</span>
@@ -489,10 +633,15 @@ export function AccentPicker({ value, onChange }) {
   );
 }
 
-export function TemplateEditor({ rows, setRows }) {
-  const setRow = (i, v) => setRows(rows.map((r, idx) => idx === i ? v : r));
+interface TemplateEditorProps {
+  rows: string[];
+  setRows: (rows: string[]) => void;
+}
+
+export function TemplateEditor({ rows, setRows }: TemplateEditorProps) {
+  const setRow = (i: number, v: string) => setRows(rows.map((r, idx) => idx === i ? v : r));
   const add = () => setRows([...rows, ""]);
-  const del = (i) => setRows(rows.filter((_, idx) => idx !== i));
+  const del = (i: number) => setRows(rows.filter((_, idx) => idx !== i));
   return (
     <div>
       <div className="ef-section ef-section-row" style={{ marginTop: 4 }}>
@@ -514,11 +663,11 @@ export function TemplateEditor({ rows, setRows }) {
   );
 }
 
-export function CreateCollectionModal({ onClose, onCreated }) {
+export function CreateCollectionModal({ onClose, onCreated }: CreateCollectionModalProps) {
   const [name, setName] = React.useState("");
   const [type, setType] = React.useState("other");
   const [accent, setAccent] = React.useState(ACCENT_SWATCHES[0]);
-  const [tmpl, setTmpl] = React.useState(["", ""]);
+  const [tmpl, setTmpl] = React.useState<string[]>([]);
 
   function create() {
     if (!name.trim()) return;
@@ -526,7 +675,7 @@ export function CreateCollectionModal({ onClose, onCreated }) {
       name, type, accent,
       template: tmpl.map(s => s.trim()).filter(Boolean),
     });
-    onCreated(rec);
+    onCreated(rec as CollectionRecord);
   }
 
   return (
@@ -548,7 +697,7 @@ export function CreateCollectionModal({ onClose, onCreated }) {
         <div className="modal-body">
           <div className="ef-grid">
             <EFText label="Name" value={name} placeholder="e.g. Wristwatches" onChange={setName} wide />
-            <EFSelect label="Type" value={type} pairs={TYPE_OPTIONS} placeholder={false} onChange={setType} />
+            <EFSelect label="Type" value={type} pairs={TYPE_OPTIONS as [string, string][]} placeholder={false} onChange={setType} />
             <AccentPicker value={accent} onChange={setAccent} />
           </div>
           <TemplateEditor rows={tmpl} setRows={setTmpl} />
@@ -565,7 +714,7 @@ export function CreateCollectionModal({ onClose, onCreated }) {
   );
 }
 
-export function AddItemModal({ collection, onClose, onAdded, prefill = null }) {
+export function AddItemModal({ collection, onClose, onAdded, prefill = null }: AddItemModalProps) {
   const type = collection.type || "other";
   const subLabel = SUBLABELS[type] || "Detail";
   const [owned, setOwned] = React.useState(true);
@@ -577,23 +726,24 @@ export function AddItemModal({ collection, onClose, onAdded, prefill = null }) {
     region: "",
   });
   const [f, setF] = React.useState({ format: "", completeness: "", grade: "", pressing: "", edition: "", condition: "", acquired: "", watched: false, completed: false, purchase_price: "", purchase_currency: "USD", current_value: "" });
-  const [custom, setCustom] = React.useState((collection.template || []).map(l => ({ label: l, value: "" })));
-  const setCan = (k, v) => setC(p => ({ ...p, [k]: v }));
-  const set = (k, v) => setF(p => ({ ...p, [k]: v }));
-  const setRow = (i, k, v) => setCustom(p => p.map((r, idx) => idx === i ? { ...r, [k]: v } : r));
-  const addRow = () => setCustom(p => [...p, { label: "", value: "" }]);
-  const delRow = (i) => setCustom(p => p.filter((_, idx) => idx !== i));
+  const [custom, setCustom] = React.useState<CustomRow[]>((collection.template || []).map(l => ({ id: crypto.randomUUID(), label: l, value: "" })));
+  const [addError, setAddError] = React.useState<string | null>(null);
+  const setCan = (k: string, v: string) => setC(p => ({ ...p, [k]: v }));
+  const set = (k: string, v: unknown) => setF(p => ({ ...p, [k]: v }));
+  const setRow = (id: string, k: string, v: string) => setCustom(p => p.map(r => r.id === id ? { ...r, [k]: v } : r));
+  const addRow = () => setCustom(p => [...p, { id: crypto.randomUUID(), label: "", value: "" }]);
+  const delRow = (id: string) => setCustom(p => p.filter(r => r.id !== id));
 
   const addYearRaw = c.year.trim();
   const addYearNum = addYearRaw ? parseInt(addYearRaw, 10) : null;
-  const addYearError = addYearRaw && (!Number.isFinite(addYearNum) || addYearNum < 1000 || addYearNum > 2099)
+  const addYearError = addYearRaw && (!Number.isFinite(addYearNum) || addYearNum! < 1000 || addYearNum! > 2099)
     ? "Year must be a number between 1000 and 2099"
     : null;
 
   function add() {
     if (!c.title.trim() || addYearError) return;
     const customClean = custom.map(r => ({ label: r.label.trim(), value: r.value.trim() })).filter(r => r.label && r.value);
-    const draft = {
+    const draft: Record<string, unknown> = {
       title: c.title.trim(), sub: c.sub.trim() || null, type,
       year: Number.isFinite(addYearNum) ? addYearNum : null, owned,
       ...(c.series.trim() ? { series: c.series.trim() } : {}),
@@ -614,8 +764,13 @@ export function AddItemModal({ collection, onClose, onAdded, prefill = null }) {
       if (type === "movie") draft.watched = f.watched;
       if (customClean.length) draft.custom = customClean;
     }
-    const rec = addItem(collection.id, draft);
-    onAdded(rec);
+    try {
+      const rec = addItem(collection.id, draft);
+      onAdded(rec as ItemRecord);
+    } catch (err) {
+      console.error('[AddItemModal] addItem failed:', err);
+      setAddError('Failed to add item. Please try again.');
+    }
   }
 
   return (
@@ -637,6 +792,9 @@ export function AddItemModal({ collection, onClose, onAdded, prefill = null }) {
             <div className="ef-title">Item details</div>
             <EFToggle label="In collection" value={owned} onChange={setOwned} hint={["Owned", "Wishlist"]} />
           </div>
+          {addError && (
+            <div className="ef-error" style={{ marginBottom: 12 }}>{addError}</div>
+          )}
           <div className="ef-grid">
             <EFText label="Title" value={c.title} placeholder="Item title" onChange={v => setCan("title", v)} wide />
             {type === "game"
@@ -652,7 +810,7 @@ export function AddItemModal({ collection, onClose, onAdded, prefill = null }) {
             <>
               <div className="ef-section">Your copy</div>
               <div className="ef-grid">
-                <EFSelect label="Format" value={f.format} options={FORMAT_OPTIONS[type] || []} placeholder="Medium" onChange={v => set("format", v)} />
+                <EFSelect label="Format" value={f.format} options={FORMAT_OPTIONS[type] ?? []} placeholder="Medium" onChange={v => set("format", v)} />
                 {type === "game"  && <EFSelect label="Completeness" value={f.completeness} options={COMPLETENESS_OPTIONS} placeholder="How complete" onChange={v => set("completeness", v)} />}
                 {type === "coin"  && <EFText label="Grade" value={f.grade} placeholder="e.g. MS-63" onChange={v => set("grade", v)} />}
                 {type === "vinyl" && <EFText label="Pressing" value={f.pressing} placeholder="e.g. 180g" onChange={v => set("pressing", v)} />}
@@ -674,11 +832,11 @@ export function AddItemModal({ collection, onClose, onAdded, prefill = null }) {
               {custom.length === 0
                 ? <div className="ef-empty">Add your own fields for anything specific to this piece.</div>
                 : <div className="ef-custom">
-                    {custom.map((r, i) => (
-                      <div className="ef-custom-row" key={i}>
-                        <input className="ef-control" placeholder="Field name" value={r.label} onChange={e => setRow(i, "label", e.target.value)} />
-                        <input className="ef-control" placeholder="Value" value={r.value} onChange={e => setRow(i, "value", e.target.value)} />
-                        <button type="button" className="ef-del" onClick={() => delRow(i)} title="Remove field"><I.trash size={16} /></button>
+                    {custom.map((r) => (
+                      <div className="ef-custom-row" key={r.id}>
+                        <input className="ef-control" placeholder="Field name" value={r.label} onChange={e => setRow(r.id, "label", e.target.value)} />
+                        <input className="ef-control" placeholder="Value" value={r.value} onChange={e => setRow(r.id, "value", e.target.value)} />
+                        <button type="button" className="ef-del" onClick={() => delRow(r.id)} title="Remove field"><I.trash size={16} /></button>
                       </div>
                     ))}
                   </div>}

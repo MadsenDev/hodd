@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, { useState, useEffect } from 'react';
 import { I } from '../icons';
 import { Loading } from '../components';
@@ -8,9 +7,9 @@ import { OllamaSetupCard } from './OllamaSetupCard';
 import { toaster } from '../toaster';
 
 function CompanionSection() {
-  const [status, setStatus] = React.useState(null);
+  const [status, setStatus] = React.useState<{ url: string } | null>(null);
   React.useEffect(() => {
-    window.hoddDesktop?.getCompanionStatus?.().then(setStatus).catch(() => {});
+    (window as any).hoddDesktop?.getCompanionStatus?.().then(setStatus).catch(() => {});
   }, []);
 
   if (!status) return null;
@@ -37,29 +36,33 @@ function CompanionSection() {
   );
 }
 
-export function Settings({ onSaved = undefined }) {
-  const [loading, setLoading] = useState(true);
+interface SettingsProps {
+  onSaved?: () => void;
+}
 
-  const [name, setName] = useState("");
-  const [joined, setJoined] = useState("");
-  const [joinedInput, setJoinedInput] = useState("");
-  const [rawgKey, setRawgKey] = useState("");
-  const [omdbKey, setOmdbKey] = useState("");
+export function Settings({ onSaved = undefined }: SettingsProps) {
+  const [loading, setLoading] = useState<boolean>(true);
 
-  const [saved, setSaved] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [exporting, setExporting] = useState(false);
-  const [exportDone, setExportDone] = useState(false);
-  const [importing, setImporting] = useState(false);
-  const [importDone, setImportDone] = useState(false);
-  const [resetConfirm, setResetConfirm] = useState(false);
-  const [resetInput, setResetInput] = useState("");
-  const [keepApiKeys, setKeepApiKeys] = useState(true);
+  const [name, setName] = useState<string>("");
+  const [joined, setJoined] = useState<string>("");
+  const [joinedInput, setJoinedInput] = useState<string>("");
+  const [rawgKey, setRawgKey] = useState<string>("");
+  const [omdbKey, setOmdbKey] = useState<string>("");
+
+  const [saved, setSaved] = useState<boolean>(false);
+  const [saving, setSaving] = useState<boolean>(false);
+  const [exporting, setExporting] = useState<boolean>(false);
+  const [exportDone, setExportDone] = useState<boolean>(false);
+  const [importing, setImporting] = useState<boolean>(false);
+  const [importDone, setImportDone] = useState<boolean>(false);
+  const [resetConfirm, setResetConfirm] = useState<boolean>(false);
+  const [resetInput, setResetInput] = useState<string>("");
+  const [keepApiKeys, setKeepApiKeys] = useState<boolean>(true);
 
   // Bulk series enrichment
   const searchIndexState = useSearchIndex();
-  const allItems = searchIndexState.data || [];
-  const [ollamaRunning, setOllamaRunning] = useState(false);
+  const allItems: any[] = searchIndexState.data || [];
+  const [ollamaRunning, setOllamaRunning] = useState<boolean>(false);
   const [enrichProgress, setEnrichProgress] = useState<string | null>(null);
 
   useEffect(() => {
@@ -67,7 +70,7 @@ export function Settings({ onSaved = undefined }) {
   }, []);
 
   useEffect(() => {
-    getSettings().then(s => {
+    getSettings().then((s: Record<string, string>) => {
       setName(s["user.name"] || "");
       const j = s["user.joined"] || "";
       setJoined(j);
@@ -78,24 +81,32 @@ export function Settings({ onSaved = undefined }) {
     }).catch(() => setLoading(false));
   }, []);
 
-  function save() {
+  // Fix 7: async save() with real feedback based on actual save calls
+  // Note: saveSetting() is synchronous (fire-and-forget IPC), so we wrap
+  // in try/catch to catch any synchronous errors it might throw.
+  async function save() {
     setSaving(true);
-    saveSetting("user.name", name.trim() || "Collector");
-    saveSetting("user.joined", joinedInput.trim());
-    saveSetting("api.rawg", rawgKey.trim());
-    saveSetting("api.omdb", omdbKey.trim());
-    setTimeout(() => {
-      setSaving(false);
+    try {
+      saveSetting('user.name', name.trim() || 'Collector');
+      saveSetting('user.joined', joinedInput.trim());
+      saveSetting('api.rawg', rawgKey.trim());
+      saveSetting('api.omdb', omdbKey.trim());
       setSaved(true);
       if (onSaved) onSaved();
-      setTimeout(() => setSaved(false), 2500);
-    }, 300);
+      // Reset saved indicator after 2s
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      console.error('[Settings] save failed:', err);
+      toaster.error('Settings could not be saved. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleImport() {
     setImporting(true);
     try {
-      const result = await importData();
+      const result = await importData() as { canceled?: boolean } | null;
       if (result && !result.canceled) {
         setImportDone(true);
         if (onSaved) onSaved();
@@ -112,7 +123,7 @@ export function Settings({ onSaved = undefined }) {
   async function handleExport() {
     setExporting(true);
     try {
-      const result = await exportData();
+      const result = await exportData() as { canceled?: boolean } | null;
       if (result && !result.canceled) {
         setExportDone(true);
         toaster.success("Archive exported successfully.");
@@ -134,14 +145,14 @@ export function Settings({ onSaved = undefined }) {
   }
 
   async function handleExportCSV() {
-    const items = await getSearchIndex();
+    const items: any[] = await getSearchIndex();
     const headers = "title,type,year,platform,series,format,completeness,condition,grade,pressing,edition,ownership,acquired,notes,favorite";
     const escape = (v: any) => {
       if (v == null) return "";
       const s = String(v);
       return s.includes(",") || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
     };
-    const rows = items.map(i => [
+    const rows = items.map((i: any) => [
       i.title, i.type, i.year, i.sub, i.series, i.format,
       i.completeness, i.condition, i.grade, i.pressing, i.edition,
       i.owned !== false ? (i.ownership || "owned") : "wishlist", i.acquired, i.notes, i.favorite ? "true" : "",
@@ -150,14 +161,14 @@ export function Settings({ onSaved = undefined }) {
   }
 
   async function handleExportJSON() {
-    const items = await getSearchIndex();
+    const items: any[] = await getSearchIndex();
     triggerDownload(JSON.stringify(items, null, 2), "hoard.json", "application/json");
   }
 
   async function handleBulkEnrichSeries() {
-    const items = (await getSearchIndex()).filter(i => i.owned !== false && !i.series);
+    const items: any[] = (await getSearchIndex()).filter((i: any) => i.owned !== false && !i.series);
     if (!items.length) { toaster.success("All owned items already have a series set."); return; }
-    const model = await OllamaClient.getModels().then(m => m[0]).catch(() => null);
+    const model: string | null = await OllamaClient.getModels().then((m: string[]) => m[0]).catch(() => null);
     if (!model) { toaster.error("No Ollama model found. Please pull a model first."); return; }
     let detected = 0;
     const total = items.length;
@@ -165,7 +176,7 @@ export function Settings({ onSaved = undefined }) {
     for (let i = 0; i < items.length; i += batchSize) {
       setEnrichProgress(`Enriching ${Math.min(i + batchSize, total)} of ${total}…`);
       const batch = items.slice(i, i + batchSize);
-      await Promise.all(batch.map(async item => {
+      await Promise.all(batch.map(async (item: any) => {
         const text = item.title + (item.sub ? ' ' + item.sub : '');
         const result = await OllamaClient.enrichItem(text, item.type, model).catch(() => null);
         if (result && result.series) {
@@ -298,9 +309,9 @@ export function Settings({ onSaved = undefined }) {
             <div style={{ marginTop: 16, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
               <button className="btn" disabled={!!enrichProgress} onClick={handleBulkEnrichSeries}>
                 <I.sparkle size={16} /> Detect series for items missing one
-                {allItems.filter(i => i.owned !== false && !i.series).length > 0 && (
+                {allItems.filter((i: any) => i.owned !== false && !i.series).length > 0 && (
                   <span style={{ marginLeft: 6, fontSize: 11, color: "var(--mute)", fontWeight: 400 }}>
-                    ({allItems.filter(i => i.owned !== false && !i.series).length} items)
+                    ({allItems.filter((i: any) => i.owned !== false && !i.series).length} items)
                   </span>
                 )}
               </button>
@@ -318,6 +329,7 @@ export function Settings({ onSaved = undefined }) {
           <span className="settings-version-num">v1.1.0</span>
         </div>
 
+        {/* Fix 8: Two-step reset confirmation — user must type DELETE before reset fires */}
         <div className="panel settings-panel" style={{ borderColor: "rgba(207,107,90,0.3)" }}>
           {!resetConfirm ? (
             <>
@@ -364,13 +376,12 @@ export function Settings({ onSaved = undefined }) {
                   style={{ color: "#cf6b5a", borderColor: "rgba(207,107,90,0.4)", background: "rgba(207,107,90,0.07)", opacity: resetInput === "DELETE" ? 1 : 0.4 }}
                   disabled={resetInput !== "DELETE"}
                   onClick={async () => {
+                    // Export a backup first, then reset only after export completes
                     await handleExportJSON();
+                    (window as any).hoddDesktop?.api?.resetAll(keepApiKeys);
                     setTimeout(() => {
-                      (window as any).hoddDesktop?.api?.resetAll(keepApiKeys);
-                      setTimeout(() => {
-                        window.location.reload();
-                      }, 300);
-                    }, 500);
+                      window.location.reload();
+                    }, 300);
                   }}
                 >
                   Reset everything

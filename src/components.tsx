@@ -1,16 +1,145 @@
-// @ts-nocheck
 import React from 'react';
 import { HoddMark, Icon, I, typeIcon } from './icons';
 import { toaster } from './toaster';
+import type { Toast } from './toaster';
+
+// ── TypeScript interfaces ─────────────────────────────────────────────────────
+
+interface UserInfo {
+  name?: string;
+}
+
+interface SidebarProps {
+  active: string | null;
+  onNav: (view: string) => void;
+  user?: UserInfo | null;
+  onSettings: () => void;
+}
+
+interface TopbarProps {
+  title?: string;
+  subtitle?: string | null;
+  bare?: boolean;
+  onSearch?: () => void;
+  onAdd?: () => void;
+  searchValue?: string;
+  onSearchChange?: (v: string) => void;
+  onSearchSubmit?: (v: string) => void;
+}
+
+interface MobileTopBarProps {
+  onAdd?: () => void;
+}
+
+interface MobileTabsProps {
+  active: string | null;
+  onNav: (view: string) => void;
+}
+
+interface LoadingProps {
+  label?: string;
+}
+
+interface ErrorStateProps {
+  error?: { message?: string } | null;
+  onRetry?: () => void;
+  label?: string;
+}
+
+interface EmptyStateProps {
+  title?: string;
+  sub?: string;
+  children?: React.ReactNode;
+}
+
+interface AsyncState<T = unknown> {
+  loading: boolean;
+  error?: { message?: string } | null;
+  data?: T;
+  refetch?: () => void;
+}
+
+interface AsyncProps<T = unknown> {
+  state: AsyncState<T>;
+  children: (data: T) => React.ReactNode;
+  loadingLabel?: string;
+}
+
+interface CompletionRingProps {
+  pct?: number;
+  size?: number;
+  stroke?: number;
+  color?: string;
+  track?: string;
+  showPct?: boolean;
+  fontSize?: number;
+}
+
+interface CoverItem {
+  type?: string;
+  coverType?: string;
+  color?: string | null;
+  cover_url?: string | null;
+  title?: string | null;
+  sub?: string | null;
+  year?: number | string | null;
+  author?: string | null;
+  format?: string | null;
+  gallery?: string[] | null;
+  [key: string]: unknown;
+}
+
+interface CoverProps {
+  item: CoverItem;
+  h?: number;
+  ghost?: boolean;
+  onClick?: () => void;
+  glyph?: boolean;
+}
+
+interface FluidCoverProps {
+  item: CoverItem;
+  ghost?: boolean;
+  onClick?: () => void;
+  glyph?: boolean;
+  maxWidth?: number;
+}
+
+interface SpineMosaicProps {
+  accent: string;
+  pct?: number;
+  count?: number;
+  height?: number;
+}
+
+interface CoverShelfProps {
+  items?: CoverItem[];
+  accent: string;
+  height?: number;
+  coverH?: number;
+  maxOwned?: number;
+  ghosts?: number;
+}
+
+interface StarRatingProps {
+  value?: number | null;
+  onChange?: (v: number | null) => void;
+  size?: number;
+  readonly?: boolean;
+}
+
+interface ProfileSwitcherProps {
+  onSwitched?: () => void;
+}
 
 // ── Color utilities ───────────────────────────────────────────────────────────
 
-export function rgba(hex, a) {
+export function rgba(hex: string, a: number): string {
   const h = hex.replace("#", "");
   const n = parseInt(h.length === 3 ? h.split("").map(x => x + x).join("") : h, 16);
   return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;
 }
-export function shade(hex, amt) {
+export function shade(hex: string, amt: number): string {
   const h = hex.replace("#", ""); const n = parseInt(h, 16);
   let r = (n>>16)&255, g = (n>>8)&255, b = n&255;
   r = Math.max(0, Math.min(255, r + amt));
@@ -19,17 +148,17 @@ export function shade(hex, amt) {
   return `rgb(${r},${g},${b})`;
 }
 
-export const COVER_RATIOS = { game: 0.72, book: 0.68, movie: 0.67, comic: 0.66, coin: 1, vinyl: 1, other: 0.74 };
+export const COVER_RATIOS: Record<string, number> = { game: 0.72, book: 0.68, movie: 0.67, comic: 0.66, coin: 1, vinyl: 1, other: 0.74 };
 
 // ── CompletionRing ────────────────────────────────────────────────────────────
 
-export function CompletionRing({ pct = 0, size = 54, stroke = 5, color = "var(--gold)", track = "var(--panel-3)", showPct = true, fontSize = undefined }) {
+export function CompletionRing({ pct = 0, size = 54, stroke = 5, color = "var(--gold)", track = "var(--panel-3)", showPct = true, fontSize = undefined }: CompletionRingProps) {
   const uid = React.useId().replace(/:/g, "");
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const val = Math.round(Math.max(0, Math.min(100, pct)));
   const off = c * (1 - val / 100);
-  const map = { "var(--gold)": "var(--accent)", "var(--accent)": "var(--accent)" };
+  const map: Record<string, string> = { "var(--gold)": "var(--accent)", "var(--accent)": "var(--accent)" };
   const base = map[color] || color;
   const numSize = fontSize || Math.round(size * 0.30);
   return (
@@ -55,7 +184,7 @@ export function CompletionRing({ pct = 0, size = 54, stroke = 5, color = "var(--
 
 // ── Game cover helper ─────────────────────────────────────────────────────────
 
-function gameCoverBody(platform: string, color: string, h: number, item: any) {
+function gameCoverBody(platform: string, color: string, h: number, item: CoverItem) {
   const label = item.sub || "";
   const title = item.title || "";
 
@@ -167,7 +296,7 @@ function gameCoverBody(platform: string, color: string, h: number, item: any) {
 
 // ── Cover ─────────────────────────────────────────────────────────────────────
 
-export function Cover({ item, h = 168, ghost = false, onClick = undefined, glyph = true }) {
+export function Cover({ item, h = 168, ghost = false, onClick = undefined, glyph = true }: CoverProps) {
   const type = item.type || item.coverType || "game";
   const ratio = COVER_RATIOS[type] || 0.7;
   const w = type === "coin" || type === "vinyl" ? h : Math.round(h * ratio);
@@ -196,7 +325,7 @@ export function Cover({ item, h = 168, ghost = false, onClick = undefined, glyph
       <div className={cls} style={{ width: w, height: h, borderRadius: br, overflow: "hidden",
         boxShadow: type === "book" ? `inset -8px 0 14px ${rgba("#000",0.28)}, 0 14px 26px -14px rgba(0,0,0,.85)` : undefined }}
         onClick={onClick}>
-        <img src={item.cover_url.startsWith("http://") || item.cover_url.startsWith("https://") ? item.cover_url : `hodd-img://${item.cover_url}`} alt={item.title}
+        <img src={item.cover_url.startsWith("http://") || item.cover_url.startsWith("https://") ? item.cover_url : `hodd-img://${item.cover_url}`} alt={item.title ?? ""}
           style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
           onError={() => setImgError(true)} />
       </div>
@@ -301,8 +430,8 @@ export function Cover({ item, h = 168, ghost = false, onClick = undefined, glyph
 
 // ── StarRating ────────────────────────────────────────────────────────────────
 
-export function StarRating({ value, onChange, size = 18, readonly = false }) {
-  const [hover, setHover] = React.useState(null);
+export function StarRating({ value, onChange, size = 18, readonly = false }: StarRatingProps) {
+  const [hover, setHover] = React.useState<number | null>(null);
   const display = hover !== null ? hover : (value ?? 0);
 
   return (
@@ -359,8 +488,8 @@ export function StarRating({ value, onChange, size = 18, readonly = false }) {
 }
 
 // Fills container width and derives height from the cover type's aspect ratio.
-export function FluidCover({ item, ghost = false, onClick = undefined, glyph = true, maxWidth = 999 }) {
-  const ref = React.useRef(null);
+export function FluidCover({ item, ghost = false, onClick = undefined, glyph = true, maxWidth = 999 }: FluidCoverProps) {
+  const ref = React.useRef<HTMLDivElement>(null);
   const [w, setW] = React.useState(0);
   React.useLayoutEffect(() => {
     const el = ref.current;
@@ -383,10 +512,10 @@ export function FluidCover({ item, ghost = false, onClick = undefined, glyph = t
 
 // ── Navigation ────────────────────────────────────────────────────────────────
 
-export function Sidebar({ active, onNav, user, onSettings }) {
+export function Sidebar({ active, onNav, user, onSettings }: SidebarProps) {
   const nm = (user && user.name) ? user.name : "Collector";
   const initial = nm.trim()[0]?.toUpperCase() || "C";
-  const items = [
+  const items: [string, string, React.ComponentType<{ size: number; stroke: number }>][] = [
     ["home", "Home", I.home],
     ["collections", "Collections", I.grid],
     ["wishlist", "Wishlist", I.heart],
@@ -400,38 +529,55 @@ export function Sidebar({ active, onNav, user, onSettings }) {
   ];
   return (
     <aside className="sidebar">
-      <div className="brand" onClick={() => onNav("home")} style={{ cursor: "pointer" }}>
+      <button
+        type="button"
+        className="brand"
+        onClick={() => onNav("home")}
+        style={{ cursor: "pointer", background: "none", border: "none", padding: 0, textAlign: "left", width: "100%" }}
+      >
         <HoddMark size={34} color="var(--gold)" />
         <div className="wordmark">HODD</div>
         <div className="tagline">Your hoard. Your story.</div>
-      </div>
+      </button>
       <nav className="nav">
         {items.map(([id, label, Ic]) => (
-          <div key={id} className={"nav-item" + (active === id ? " active" : "")} onClick={() => onNav(id)}>
+          <button
+            key={id}
+            type="button"
+            className={"nav-item" + (active === id ? " active" : "")}
+            onClick={() => onNav(id)}
+            aria-current={active === id ? "page" : undefined}
+            style={{ background: "none", border: "none", cursor: "pointer", width: "100%", textAlign: "left", padding: 0 }}
+          >
             <Ic size={20} stroke={1.7} />
             <span>{label}</span>
-          </div>
+          </button>
         ))}
       </nav>
       <div className="spacer" />
-      <div className="nav-item" onClick={() => onNav("settings")}>
+      <button
+        type="button"
+        className="nav-item"
+        onClick={() => onNav("settings")}
+        style={{ background: "none", border: "none", cursor: "pointer", width: "100%", textAlign: "left", padding: 0 }}
+      >
         <I.settings size={20} stroke={1.6} /><span>Settings</span>
-      </div>
+      </button>
       <div className="user" style={{ cursor: "pointer" }} onClick={onSettings}>
         <div className="avatar avatar-initials" aria-label={nm}>{initial}</div>
         <div className="meta">
           <div className="nm">{nm}</div>
           <div className="sub">Settings</div>
         </div>
-        <ProfileSwitcher />
+        <ProfileSwitcher onSwitched={onSettings} />
       </div>
     </aside>
   );
 }
 
-export function Topbar({ title, subtitle, bare, onSearch, onAdd, searchValue, onSearchChange, onSearchSubmit }) {
+export function Topbar({ title, subtitle, bare, onSearch, onAdd, searchValue, onSearchChange, onSearchSubmit }: TopbarProps) {
   return (
-    <div className="topbar" style={bare ? { marginBottom: 6 } : null}>
+    <div className="topbar" style={bare ? { marginBottom: 6 } : undefined}>
       {!bare && (
         <div className="greet">
           <h1>{title}</h1>
@@ -439,12 +585,12 @@ export function Topbar({ title, subtitle, bare, onSearch, onAdd, searchValue, on
         </div>
       )}
       {bare && <div style={{ flex: 1 }} />}
-      <div className="topbar-actions" style={bare ? { paddingTop: 0 } : null}>
-        <div className="search-bar" onClick={onSearch}>
+      <div className="topbar-actions" style={bare ? { paddingTop: 0 } : undefined}>
+        <div className="search-bar">
           <I.search size={18} stroke={1.7} />
           <input placeholder="Search your collection…" value={searchValue || ""}
             onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && onSearchSubmit) onSearchSubmit(e.target.value); }}
+            onKeyDown={(e) => { if (e.key === "Enter" && onSearchSubmit) onSearchSubmit((e.target as HTMLInputElement).value); }}
             onFocus={onSearch} />
         </div>
         <button className="add-btn" onClick={onAdd} title="Add item"><I.plus size={22} stroke={2} /></button>
@@ -453,7 +599,7 @@ export function Topbar({ title, subtitle, bare, onSearch, onAdd, searchValue, on
   );
 }
 
-export function MobileTopBar({ onAdd }) {
+export function MobileTopBar({ onAdd }: MobileTopBarProps) {
   return (
     <div className="mobile-topbar">
       <div className="mt-brand">
@@ -467,8 +613,8 @@ export function MobileTopBar({ onAdd }) {
   );
 }
 
-export function MobileTabs({ active, onNav }) {
-  const tabs = [
+export function MobileTabs({ active, onNav }: MobileTabsProps) {
+  const tabs: [string, string, React.ComponentType<{ size: number; stroke: number }>][] = [
     ["home",        "Home",      I.home],
     ["collections", "Library",   I.grid],
     ["search",      "Search",    I.search],
@@ -501,9 +647,9 @@ export function useNarrow(bp = 760) {
 
 // ── Async view states ─────────────────────────────────────────────────────────
 
-export function Loading({ label = "Loading your hoard…" }) {
+export function Loading({ label = "Loading your hoard…" }: LoadingProps) {
   return (
-    <div className="view-state view-enter">
+    <div className="view-state view-enter" role="status" aria-live="polite" aria-label="Loading">
       <svg className="loading-mark" width="48" height="48" viewBox="0 0 100 100" fill="none" aria-hidden="true">
         <g fill="currentColor">
           <rect x="22" y="24" width="9" height="52" rx="4" />
@@ -518,10 +664,10 @@ export function Loading({ label = "Loading your hoard…" }) {
   );
 }
 
-export function ErrorState({ error, onRetry, label = "We couldn't load this" }) {
+export function ErrorState({ error, onRetry, label = "We couldn't load this" }: ErrorStateProps) {
   return (
-    <div className="view-state view-enter" role="alert">
-      <div className="view-state-ic err"><I.alert size={26} stroke={1.7} /></div>
+    <div className="view-state view-enter" role="status" aria-live="polite">
+      <div className="view-state-ic err" style={{ color: "var(--danger)" }}><I.alert size={26} stroke={1.7} /></div>
       <div className="em">{label}</div>
       <div className="view-state-sub">{(error && error.message) || "Something went wrong reaching your hoard."}</div>
       {onRetry && <button className="btn" onClick={onRetry} style={{ marginTop: 16 }}><I.refresh size={15} /> Try again</button>}
@@ -529,9 +675,9 @@ export function ErrorState({ error, onRetry, label = "We couldn't load this" }) 
   );
 }
 
-export function EmptyState({ title = "Nothing here yet", sub = undefined, children = undefined }) {
+export function EmptyState({ title = "Nothing here yet", sub = undefined, children = undefined }: EmptyStateProps) {
   return (
-    <div className="view-state view-enter">
+    <div className="view-state view-enter" role="status" aria-live="polite">
       <div className="view-state-ic"><HoddMark size={40} color="var(--gold-deep)" style={{ opacity: .5 }} /></div>
       <div className="em">{title}</div>
       {sub && <div className="view-state-sub">{sub}</div>}
@@ -540,16 +686,22 @@ export function EmptyState({ title = "Nothing here yet", sub = undefined, childr
   );
 }
 
-export function Async({ state, children, loadingLabel = undefined }) {
+export function Async<T = unknown>({ state, children, loadingLabel = undefined }: AsyncProps<T>) {
   if (state.loading) return <Loading label={loadingLabel} />;
   if (state.error) return <ErrorState error={state.error} onRetry={state.refetch} />;
-  return children(state.data);
+  return <>{children(state.data as T)}</>;
 }
 
 // ── Profile Switcher ──────────────────────────────────────────────────────────
 
-function ProfileSwitcher({ onSwitched }) {
-  const [profiles, setProfiles] = React.useState([]);
+interface Profile {
+  id: string;
+  name: string;
+  color: string;
+}
+
+function ProfileSwitcher({ onSwitched }: ProfileSwitcherProps) {
+  const [profiles, setProfiles] = React.useState<Profile[]>([]);
   const [active, setActive] = React.useState('default');
   const [open, setOpen] = React.useState(false);
   const [creating, setCreating] = React.useState(false);
@@ -557,16 +709,16 @@ function ProfileSwitcher({ onSwitched }) {
   const [newColor, setNewColor] = React.useState('#6366f1');
 
   React.useEffect(() => {
-    const api = window.hoddDesktop?.api;
+    const api = (window as any).hoddDesktop?.api;
     if (!api) return;
-    Promise.all([api.getProfiles(), api.getActiveProfile()]).then(([p, a]) => {
+    Promise.all([api.getProfiles(), api.getActiveProfile()]).then(([p, a]: [Profile[], string]) => {
       setProfiles(p || []);
       setActive(a || 'default');
     });
   }, []);
 
-  async function switchTo(id) {
-    const api = window.hoddDesktop?.api;
+  async function switchTo(id: string) {
+    const api = (window as any).hoddDesktop?.api;
     if (!api || id === active) { setOpen(false); return; }
     await api.switchProfile(id);
     setOpen(false);
@@ -575,7 +727,7 @@ function ProfileSwitcher({ onSwitched }) {
   }
 
   async function createProfile() {
-    const api = window.hoddDesktop?.api;
+    const api = (window as any).hoddDesktop?.api;
     if (!api || !newName.trim()) return;
     const p = await api.createProfile(newName.trim(), newColor);
     await api.switchProfile(p.id);
@@ -628,13 +780,13 @@ function ProfileSwitcher({ onSwitched }) {
 
 // ── Shelf building blocks (used by Home and Collections views) ─────────────────
 
-function shelfRng(seed) {
+function shelfRng(seed: string) {
   let s = 2166136261;
   for (const ch of String(seed)) { s ^= ch.charCodeAt(0); s = Math.imul(s, 16777619) >>> 0; }
   return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; };
 }
 
-export function SpineMosaic({ accent, pct = 0, count = 14, height = 150 }) {
+export function SpineMosaic({ accent, pct = 0, count = 14, height = 150 }: SpineMosaicProps) {
   const r = shelfRng(accent + "·" + count);
   const filled = Math.round((count * Math.max(0, Math.min(100, pct))) / 100);
   const spines = Array.from({ length: count }, (_, i) => {
@@ -657,10 +809,10 @@ export function SpineMosaic({ accent, pct = 0, count = 14, height = 150 }) {
 // ── Toast notifications ───────────────────────────────────────────────────────
 
 export function Toaster() {
-  const [toasts, setToasts] = React.useState([]);
+  const [toasts, setToasts] = React.useState<Toast[]>([]);
 
   React.useEffect(() => {
-    return toaster.on(t => {
+    return toaster.on((t: Toast) => {
       setToasts(prev => [...prev, t]);
       setTimeout(() => setToasts(prev => prev.filter(x => x.id !== t.id)), 5000);
     });
@@ -673,7 +825,7 @@ export function Toaster() {
       {toasts.map(t => (
         <div key={t.id} style={{
           display: "flex", alignItems: "flex-start", gap: 10, padding: "12px 16px",
-          background: t.kind === "error" ? "var(--danger, #cf6b5a)" : t.kind === "success" ? "#5ba47a" : "var(--panel-2)",
+          background: t.kind === "error" ? "var(--danger)" : t.kind === "success" ? "#5ba47a" : "var(--panel-2)",
           color: t.kind === "info" ? "var(--text)" : "#fff",
           borderRadius: 10, boxShadow: "0 4px 16px rgba(0,0,0,.18)",
           fontSize: 13.5, fontWeight: 500, lineHeight: 1.4,
@@ -692,7 +844,7 @@ export function Toaster() {
   );
 }
 
-export function CoverShelf({ items = [], accent, height = 140, coverH = 96, maxOwned = 5, ghosts = 1 }) {
+export function CoverShelf({ items = [], accent, height = 140, coverH = 96, maxOwned = 5, ghosts = 1 }: CoverShelfProps) {
   const owned = items.filter(i => i.owned);
   const missing = items.filter(i => !i.owned);
   const seq = [
@@ -704,7 +856,7 @@ export function CoverShelf({ items = [], accent, height = 140, coverH = 96, maxO
     <div className="cshelf" style={{ height, background: `linear-gradient(180deg, ${rgba(accent, 0.16)}, ${rgba(accent, 0.03)})` }}>
       <div className="crate">
         {seq.map((s, i) => (
-          <div className="crate-cover" key={s.it.id || i} style={{ marginLeft: i ? -overlap : 0, zIndex: seq.length - i }}>
+          <div className="crate-cover" key={(s.it as any).id || i} style={{ marginLeft: i ? -overlap : 0, zIndex: seq.length - i }}>
             <Cover item={s.it} h={coverH} ghost={s.ghost} glyph={coverH > 110} />
           </div>
         ))}

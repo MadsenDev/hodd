@@ -32,10 +32,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Security audit
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Run tests
+        run: npm test
+
       - name: Build and package
         run: npm run package
         env:
-          # Prevents electron-builder from trying to publish during the build step
+          # GH_TOKEN: prevents electron-builder from attempting to publish during the build step
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload release assets
@@ -43,4 +53,5 @@ jobs:
         with:
           files: ${{ matrix.artifact_glob }}
         env:
+          # GITHUB_TOKEN: used by softprops/action-gh-release to upload assets to the release
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
