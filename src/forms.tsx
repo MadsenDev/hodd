@@ -23,6 +23,27 @@ export const OWNERSHIP_OPTIONS: [string, string][] = [
 export const OWNERSHIP_LABEL: Record<string, string> = Object.fromEntries(OWNERSHIP_OPTIONS);
 export const SUBLABELS = { book: "Author", game: "Platform", coin: "Mint", vinyl: "Artist", movie: "Director", comic: "Publisher", other: "Detail" };
 
+export const PLATFORM_OPTS = [
+  // Nintendo — home
+  "NES", "SNES", "Nintendo 64", "GameCube", "Wii", "Wii U", "Switch", "Nintendo Switch 2",
+  // Nintendo — handheld
+  "Game Boy", "Game Boy Color", "Game Boy Advance", "DS", "3DS", "Game & Watch",
+  // Sony — home
+  "PS1", "PS2", "PS3", "PS4", "PS5",
+  // Sony — handheld
+  "PSP", "PS Vita",
+  // Microsoft
+  "Xbox", "Xbox 360", "Xbox One", "Xbox Series X", "Xbox Series S",
+  // Sega — home
+  "Sega Master System", "Sega Genesis", "Sega Saturn", "Dreamcast",
+  // Sega — handheld
+  "Game Gear",
+  // Atari
+  "Atari 2600", "Atari 5200", "Atari 7800", "Atari Lynx", "Atari Jaguar",
+  // Other
+  "Neo Geo", "TurboGrafx-16", "Steam Deck", "PC", "Mac", "Arcade",
+];
+
 export const ACCENT_SWATCHES = ["#6366f1", "#5BA47A", "#5C8AD6", "#C9A24C", "#CF6B5A", "#7FB0C4", "#9B7BD4", "#C0392B"];
 export const COVER_COLORS = [
   "#6366f1", "#8B5CF6", "#EC4899", "#EF4444", "#F97316",
@@ -33,6 +54,19 @@ export const COVER_COLORS = [
 function withCurrent(options, current) {
   if (current && options.indexOf(current) === -1) return [current].concat(options);
   return options;
+}
+
+function parseSeriesNumber(title) {
+  if (!title) return null;
+  const m =
+    title.match(/\s#\s*(\d+(?:\.\d+)?)/i) ||
+    title.match(/\s(?:vol\.?|volume)\s*(\d+(?:\.\d+)?)/i) ||
+    title.match(/\s(?:book|part|ep\.?|episode|chapter)\s+(\d+(?:\.\d+)?)/i);
+  if (m) return parseFloat(m[1]);
+  const ROMAN = { I:1,II:2,III:3,IV:4,V:5,VI:6,VII:7,VIII:8,IX:9,X:10,XI:11,XII:12,XIII:13,XIV:14,XV:15,XVI:16,XVII:17,XVIII:18,XIX:19,XX:20 };
+  const rm = title.match(/\s+((?:X{0,2})(?:IX|IV|V?I{0,3}))\s*$/i);
+  if (rm && ROMAN[rm[1].toUpperCase()]) return ROMAN[rm[1].toUpperCase()];
+  return null;
 }
 
 export function EFSelect({ label, value, options, pairs, placeholder, onChange }) {
@@ -57,6 +91,26 @@ export function EFText({ label, value, placeholder, onChange, wide }) {
       <span className="ef-k">{label}</span>
       <input className="ef-control" type="text" value={value || ""} placeholder={placeholder || ""}
         onChange={e => onChange(e.target.value)} />
+    </label>
+  );
+}
+
+export function EFCombobox({ label, value, options, placeholder, onChange }) {
+  const listId = "dl-" + (label || "").toLowerCase().replace(/\s+/g, "-");
+  return (
+    <label className="ef-field">
+      <span className="ef-k">{label}</span>
+      <input
+        className="ef-control"
+        list={listId}
+        value={value || ""}
+        placeholder={placeholder || ""}
+        onChange={e => onChange(e.target.value)}
+        autoComplete="off"
+      />
+      <datalist id={listId}>
+        {options.map(o => <option key={o} value={o} />)}
+      </datalist>
     </label>
   );
 }
@@ -116,6 +170,7 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
     type: item.type || type || "other",
     series: item.series || "",
     region: item.region || "",
+    series_number: item.series_number != null ? String(item.series_number) : "",
   });
   const [custom, setCustom] = React.useState(
     Array.isArray(item.custom) && item.custom.length
@@ -135,6 +190,13 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
   const setRow = (i, k, v) => setCustom(p => p.map((r, idx) => idx === i ? { ...r, [k]: v } : r));
   const addRow = () => setCustom(p => [...p, { label: "", value: "" }]);
   const delRow = (i) => setCustom(p => p.filter((_, idx) => idx !== i));
+
+  React.useEffect(() => {
+    if (c.series.trim() && !c.series_number) {
+      const n = parseSeriesNumber(c.title);
+      if (n !== null) setCan("series_number", String(n));
+    }
+  }, [c.title, c.series]);
 
   async function pickCoverPhoto() {
     const a = ipc(); if (!a) return;
@@ -189,6 +251,7 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
       year: Number.isFinite(yearNum) ? yearNum : (yearRaw ? item.year : null),
       type: etype,
       series: c.series.trim() || null,
+      series_number: c.series_number !== "" ? (parseFloat(c.series_number) || null) : null,
       region: c.region.trim() || null,
       cover_url: coverUrl || null,
       gallery: gallery.length ? gallery : null,
@@ -280,10 +343,13 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }) 
         {titleError && <div className="ef-error">{titleError}</div>}
         <EFSelect label="Type" value={etype} pairs={TYPE_OPTIONS} placeholder={false} onChange={v => setCan("type", v)} />
         {!coverUrl && <ColorPicker value={color} onChange={setColor} />}
-        <EFText label={eSub} value={c.sub} placeholder={eSub} onChange={v => setCan("sub", v)} />
+        {etype === "game"
+          ? <EFCombobox label={eSub} value={c.sub} options={PLATFORM_OPTS} placeholder="Platform" onChange={v => setCan("sub", v)} />
+          : <EFText label={eSub} value={c.sub} placeholder={eSub} onChange={v => setCan("sub", v)} />}
         <EFText label="Year" value={c.year} placeholder="e.g. 1996" onChange={v => setCan("year", v)} />
         {yearError && <div className="ef-error">{yearError}</div>}
         <EFText label="Series" value={c.series} placeholder="e.g. Dune, Pokémon" onChange={v => setCan("series", v)} />
+        <EFText label="# in series" value={c.series_number} placeholder="e.g. 4 or 4.5" onChange={v => setCan("series_number", v)} />
         {etype === "game" && <EFText label="Region" value={c.region} placeholder="e.g. NTSC, PAL, JPN" onChange={v => setCan("region", v)} />}
       </div>
 
@@ -460,11 +526,17 @@ export function CreateCollectionModal({ onClose, onCreated }) {
   );
 }
 
-export function AddItemModal({ collection, onClose, onAdded }) {
+export function AddItemModal({ collection, onClose, onAdded, prefill = null }) {
   const type = collection.type || "other";
   const subLabel = SUBLABELS[type] || "Detail";
   const [owned, setOwned] = React.useState(true);
-  const [c, setC] = React.useState({ title: "", sub: "", year: "", series: "", region: "" });
+  const [c, setC] = React.useState({
+    title:  prefill?.title  ?? "",
+    sub:    prefill?.sub    ?? "",
+    year:   prefill?.year   ? String(prefill.year) : "",
+    series: prefill?.series ?? "",
+    region: "",
+  });
   const [f, setF] = React.useState({ format: "", completeness: "", grade: "", pressing: "", edition: "", condition: "", acquired: "", watched: false, completed: false, purchase_price: "", purchase_currency: "USD", current_value: "" });
   const [custom, setCustom] = React.useState((collection.template || []).map(l => ({ label: l, value: "" })));
   const setCan = (k, v) => setC(p => ({ ...p, [k]: v }));
@@ -487,6 +559,7 @@ export function AddItemModal({ collection, onClose, onAdded }) {
       year: Number.isFinite(addYearNum) ? addYearNum : null, owned,
       ...(c.series.trim() ? { series: c.series.trim() } : {}),
       ...(c.region.trim() ? { region: c.region.trim() } : {}),
+      ...(prefill?.cover_url ? { cover_url: prefill.cover_url } : {}),
     };
     if (owned) {
       draft.format = f.format || null;
@@ -527,7 +600,9 @@ export function AddItemModal({ collection, onClose, onAdded }) {
           </div>
           <div className="ef-grid">
             <EFText label="Title" value={c.title} placeholder="Item title" onChange={v => setCan("title", v)} wide />
-            <EFText label={subLabel} value={c.sub} placeholder={subLabel} onChange={v => setCan("sub", v)} />
+            {type === "game"
+              ? <EFCombobox label={subLabel} value={c.sub} options={PLATFORM_OPTS} placeholder="Platform" onChange={v => setCan("sub", v)} />
+              : <EFText label={subLabel} value={c.sub} placeholder={subLabel} onChange={v => setCan("sub", v)} />}
             <EFText label="Year" value={c.year} placeholder="e.g. 1996" onChange={v => setCan("year", v)} />
             {addYearError && <div className="ef-error">{addYearError}</div>}
             <EFText label="Series" value={c.series} placeholder="e.g. Dune, Pokémon" onChange={v => setCan("series", v)} />
