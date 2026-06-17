@@ -14,12 +14,14 @@ function sv(v: unknown): SqlValue {
   if (v == null) return null;
   if (typeof v === 'string' || typeof v === 'number') return v;
   if (v instanceof Uint8Array) return v;
+  console.warn('[db] sv() received unexpected type:', typeof v, v);
   return String(v);
 }
 
 let db: Database;
 let SQL: SqlJsStatic;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let _activeProfileCache: string | null = null;
 
 function dbFilePath(): string {
   return path.join(app.getPath('userData'), 'hodd.db');
@@ -186,6 +188,11 @@ const SCHEMA = `
     PRIMARY KEY (id, collection_id),
     UNIQUE (collection_id, title, sub)
   );
+
+  CREATE INDEX IF NOT EXISTS idx_user_items_collection ON user_items(collection_id);
+  CREATE INDEX IF NOT EXISTS idx_user_items_created   ON user_items(created_at);
+  CREATE INDEX IF NOT EXISTS idx_favorites_profile    ON favorites_v2(profile_id);
+  CREATE INDEX IF NOT EXISTS idx_suggested_collection ON suggested_items(collection_id);
 `;
 
 // Items beyond catalog.json — replaces the old FALLBACK mock data
@@ -490,7 +497,10 @@ export function getSettings(): Record<string, string> {
 // ─── WRITE OPERATIONS ──────────────────────────────────────────────────────
 
 export function saveHolding(itemId: string, patch: Record<string, unknown>): void {
-  const existing = db.exec('SELECT * FROM holdings WHERE item_id = ?', [itemId]);
+  const existing = db.exec(
+    'SELECT item_id, format, completeness, grade, pressing, edition, condition_val, acquired, watched, completed, custom, notes, loan_from, loan_date, ownership, purchase_price, purchase_currency, current_value, loan_to, loan_to_date, rating FROM holdings WHERE item_id = ?',
+    [itemId]
+  );
   if (existing.length && existing[0].values.length) {
     // Map column names to current values
     const cols = existing[0].columns;
@@ -579,8 +589,11 @@ export function createCollection(def: { name: string; type: string; accent: stri
   const existing = getUserCollections();
   const taken = new Set(existing.map(c => c.id as string));
   const base = def.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'coll';
-  let id = 'u-' + base; let n = 2;
-  while (taken.has(id)) { id = 'u-' + base + '-' + n; n++; }
+  let id = 'u-' + base; let n = 2; let dedupIter = 0;
+  while (taken.has(id)) {
+    if (++dedupIter > 1000) throw new Error(`[db] createCollection: could not find unique ID after 1000 attempts for base "${base}"`);
+    id = 'u-' + base + '-' + n; n++;
+  }
   const name = (def.name || '').trim() || 'Untitled collection';
   const template = JSON.stringify((def.template || []).map(s => String(s).trim()).filter(Boolean));
   db.run('INSERT INTO user_collections (id, name, type, accent, template) VALUES (?, ?, ?, ?, ?)', [
@@ -633,6 +646,20 @@ export function addUserItem(collectionId: string, draft: Record<string, unknown>
     sv(draft.loan_to_date) ?? null,
   ]);
   scheduleWrite();
+  const row = db.exec('SELECT * FROM user_items WHERE id = ?', [id]);
+  if (row.length && row[0].values.length) {
+    const obj: Record<string, unknown> = {};
+    row[0].columns.forEach((col, i) => {
+      const key = col === 'condition_val' ? 'condition' : col === 'collection_id' ? 'collectionId' : col;
+      obj[key] = row[0].values[0][i];
+    });
+    obj.owned = obj.owned === 1;
+    if (obj.watched !== null) obj.watched = obj.watched === 1;
+    if (obj.completed !== null) obj.completed = obj.completed === 1;
+    if (obj.custom) { try { obj.custom = JSON.parse(obj.custom as string); } catch (_) {} }
+    if (obj.gallery) { try { obj.gallery = JSON.parse(obj.gallery as string); } catch (_) {} }
+    return obj;
+  }
   return { ...draft, id, collectionId, owned: draft.owned !== false };
 }
 
@@ -649,7 +676,8 @@ export function updateUserItemFields(id: string, fields: Record<string, unknown>
     purchase_price: 'text', purchase_currency: 'text', current_value: 'text',
     series_number: 'real', rating: 'real',
   };
-  const cols = Object.keys(fields).filter(k => k in allowed);
+  // Build SET clause only from whitelisted column names to prevent SQL injection
+  const cols = Object.keys(allowed).filter(k => k in fields);
   if (!cols.length) return;
   const vals = cols.map(c => {
     const v = fields[c];
@@ -728,8 +756,9 @@ export function importArchive(payload: Record<string, unknown>): { imported: num
       db.run(`INSERT OR REPLACE INTO user_items
         (id, collection_id, title, sub, year, type, color, owned,
          format, completeness, grade, pressing, edition, condition_val,
-         acquired, watched, completed, custom, series, region, cover_url, gallery)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+         acquired, watched, completed, custom, series, region, cover_url, gallery,
+         purchase_price, purchase_currency, current_value, loan_to, loan_to_date)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
         sv(it.id), collId,
         sv(it.title) ?? '', sv(it.sub), sv(it.year), sv(it.type), sv(it.color),
         it.owned !== false ? 1 : 0,
@@ -741,6 +770,8 @@ export function importArchive(payload: Record<string, unknown>): { imported: num
         it.custom ? JSON.stringify(it.custom) : null,
         sv(it.series), sv(it.region),
         sv(it.cover_url), typeof gallery === 'string' ? gallery : null,
+        sv(it.purchase_price) ?? null, sv(it.purchase_currency) ?? null,
+        sv(it.current_value) ?? null, sv(it.loan_to) ?? null, sv(it.loan_to_date) ?? null,
       ]);
       count++;
     }
@@ -753,8 +784,10 @@ export function importArchive(payload: Record<string, unknown>): { imported: num
     const cp = h.completed;
     db.run(`INSERT OR REPLACE INTO holdings
       (item_id, format, completeness, grade, pressing, edition,
-       condition_val, acquired, watched, completed, custom)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+       condition_val, acquired, watched, completed, custom,
+       notes, loan_from, loan_date, loan_to, loan_to_date,
+       ownership, purchase_price, purchase_currency, current_value, rating)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
       id,
       sv(h.format), sv(h.completeness), sv(h.grade),
       sv(h.pressing), sv(h.edition), sv(h.condition),
@@ -762,6 +795,11 @@ export function importArchive(payload: Record<string, unknown>): { imported: num
       w == null ? null : (w ? 1 : 0),
       cp == null ? null : (cp ? 1 : 0),
       h.custom ? JSON.stringify(h.custom) : null,
+      sv(h.notes) ?? null, sv(h.loan_from) ?? null, sv(h.loan_date) ?? null,
+      sv(h.loan_to) ?? null, sv(h.loan_to_date) ?? null,
+      sv(h.ownership) ?? null, sv(h.purchase_price) ?? null,
+      sv(h.purchase_currency) ?? null, sv(h.current_value) ?? null,
+      sv(h.rating) ?? null,
     ]);
   }
 
@@ -854,6 +892,7 @@ export function clearUserData(keepApiKeys = false): void {
   db.run('DELETE FROM favorites');
   db.run('DELETE FROM favorites_v2');
   db.run('DELETE FROM saved_filters');
+  db.run('DELETE FROM suggested_items');
   db.run('DELETE FROM profiles');
   db.run('DELETE FROM settings');
   for (const [k, v] of savedKeys) {
@@ -939,12 +978,14 @@ export function deleteProfile(id: string): void {
 }
 
 export function getActiveProfile(): string {
+  if (_activeProfileCache !== null) return _activeProfileCache;
   const res = db.exec("SELECT value FROM settings WHERE key = 'active_profile'");
-  if (!res.length || !res[0].values.length) return 'default';
-  return res[0].values[0][0] as string;
+  _activeProfileCache = (res.length && res[0].values.length) ? (res[0].values[0][0] as string) : 'default';
+  return _activeProfileCache;
 }
 
 export function setActiveProfile(id: string): void {
+  _activeProfileCache = id;
   db.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ['active_profile', id]);
   scheduleWrite();
 }
@@ -970,7 +1011,7 @@ export function getSuggestedItems(collectionId: string): Record<string, unknown>
   });
 }
 
-export function hasSuggestionsFor(collectionId: string): boolean {
+function hasSuggestionsFor(collectionId: string): boolean {
   const res = db.exec('SELECT COUNT(*) FROM suggested_items WHERE collection_id = ?', [collectionId]);
   return !!(res.length && (res[0].values[0][0] as number) > 0);
 }
@@ -1001,4 +1042,21 @@ export function upsertSuggestedItems(
 export function clearSuggestionsFor(collectionId: string): void {
   db.run('DELETE FROM suggested_items WHERE collection_id = ?', [collectionId]);
   scheduleWrite();
+}
+
+export function getGrowthStats(): { ym: string; n: number }[] {
+  const res = db.exec(`
+    SELECT strftime('%Y-%m', created_at) as ym, COUNT(*) as n
+    FROM user_items
+    WHERE created_at >= date('now', '-6 months')
+    GROUP BY ym
+    ORDER BY ym
+  `);
+  if (!res.length) return [];
+  const [{ columns, values }] = res;
+  return values.map(row => {
+    const obj: Record<string, unknown> = {};
+    columns.forEach((col, i) => { obj[col] = row[i]; });
+    return { ym: obj.ym as string, n: obj.n as number };
+  });
 }

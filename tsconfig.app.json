@@ -5,6 +5,8 @@
     "useDefineForClassFields": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "allowJs": false,
+    // skipLibCheck: intentionally true — avoids noise from type-only devDependencies
+    // (e.g. @types/sql.js) whose internal types are not consumed by renderer code.
     "skipLibCheck": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
