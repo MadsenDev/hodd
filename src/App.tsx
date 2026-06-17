@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, { useState, useEffect, useRef } from 'react';
 import { I } from './icons';
 import { Cover, Sidebar, Topbar, MobileTopBar, MobileTabs, useNarrow, Toaster } from './components';
@@ -35,12 +34,12 @@ const ACCENTS: Record<string, [string[], string[]]> = {
   "#d97706": [["#d97706", "#f59e0b", "#b45309"], ["#fbbf24", "#fde68a", "#f59e0b"]],
 };
 
-const HEADLINE_FONTS = {
+const HEADLINE_FONTS: Record<string, string> = {
   "Bricolage": '"Bricolage Grotesque", "Hanken Grotesk", system-ui, sans-serif',
   "Space Grotesk": '"Space Grotesk", "Hanken Grotesk", system-ui, sans-serif',
 };
 
-function hexA(hex, a) {
+function hexA(hex: string, a: number): string {
   const h = hex.replace("#", "");
   const n = parseInt(h.length === 3 ? h.split("").map(x => x + x).join("") : h, 16);
   return `rgba(${(n>>16)&255}, ${(n>>8)&255}, ${n&255}, ${a})`;
@@ -58,12 +57,12 @@ const TWEAK_DEFAULTS = {
 
 const ADD_EXAMPLES = ["Pokemon Red CIB", "Morgan Dollar 1884-O", "Dune hardcover", "Blade Runner 2049 4K", "Kind of Blue 180g"];
 
-const COLL_NAME_TO_ID = {
+const COLL_NAME_TO_ID: Record<string, string> = {
   "Games": "games", "Books": "books", "Movies": "movies",
   "Coins": "coins", "Comics": "comics", "Vinyl": "vinyl",
 };
 
-const ENRICH_FIELD_MAP = {
+const ENRICH_FIELD_MAP: Record<string, string> = {
   year: "Year", platform: "Platform", author: "Author", artist: "Artist",
   mint: "Mint", director: "Director", publisher: "Publisher",
   edition: "Edition", completeness: "Completeness", grade: "Grade", pressing: "Pressing",
@@ -72,34 +71,45 @@ const ENRICH_FIELD_MAP = {
 
 const AI_OVERRIDE_FIELDS = new Set(["Year"]);
 
-function applyEnrichment(item, enrich, aiPass = false, skipTitle = false) {
+// NavigationContext is the shared navigation object passed to views.
+export interface NavigationContext {
+  go(v: string): void;
+  openCollection(id: string): void;
+  openItem(it: any, coll: any): void;
+  back(): void;
+  search(q: string): void;
+  newCollection(): void;
+  addToCollection(coll: any, prefill?: any): void;
+}
+
+function applyEnrichment(item: any, enrich: any, aiPass = false, skipTitle = false) {
   if (!enrich) return item;
   let fields = [...item.fields];
   let title = item.title;
 
   if (!skipTitle && enrich.title && typeof enrich.title === "string" && enrich.title !== item.title) {
     title = enrich.title;
-    fields = fields.map(f => f.k === "Title" ? { ...f, v: enrich.title, c: "high" } : f);
+    fields = fields.map((f: any) => f.k === "Title" ? { ...f, v: enrich.title, c: "high" } : f);
   }
   const cover_url = enrich.cover_url || item.cover_url || null;
   Object.entries(enrich).forEach(([key, val]) => {
     if (!val || val === "null" || key === "title") return;
     const fieldKey = ENRICH_FIELD_MAP[key];
     if (!fieldKey) return;
-    const idx = fields.findIndex(f => f.k === fieldKey);
+    const idx = fields.findIndex((f: any) => f.k === fieldKey);
     const canOverride = fields[idx]?.c === "ask" || (aiPass && AI_OVERRIDE_FIELDS.has(fieldKey));
     if (idx >= 0 && canOverride) {
-      fields = fields.map((f, i) => i === idx ? { ...f, v: String(val), c: "high" } : f);
+      fields = fields.map((f: any, i: number) => i === idx ? { ...f, v: String(val), c: "high" } : f);
     } else if (idx < 0) {
       fields = [...fields, { k: fieldKey, v: String(val), c: "high" }];
     }
   });
-  return { ...item, title, fields, cover_url, askCount: fields.filter(f => f.c === "ask").length };
+  return { ...item, title, fields, cover_url, askCount: fields.filter((f: any) => f.c === "ask").length };
 }
 
-function buildDraft(item) {
-  const byKey = {};
-  item.fields.forEach(f => { byKey[f.k] = f.v; });
+function buildDraft(item: any) {
+  const byKey: Record<string, any> = {};
+  item.fields.forEach((f: any) => { byKey[f.k] = f.v; });
   const yearRaw = byKey["Year"];
   const year = typeof yearRaw === "number" ? yearRaw
     : (yearRaw && !/^Confirm/i.test(String(yearRaw))) ? parseInt(String(yearRaw), 10) : null;
@@ -132,12 +142,16 @@ function buildDraft(item) {
   };
 }
 
-function normalizeTitle(s) {
+function normalizeTitle(s: string): string {
   return (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
 
-function parseCSVRow(line) {
-  const result = [];
+// Simple CSV parser — handles basic quoted fields but does not support:
+// - Escaped double-quotes ("") within quoted fields
+// - Embedded newlines within quoted fields
+// Consider using papaparse for complex CSV input.
+function parseCSVRow(line: string): string[] {
+  const result: string[] = [];
   let cur = '', inQ = false;
   for (const ch of line) {
     if (ch === '"') inQ = !inQ;
@@ -148,15 +162,15 @@ function parseCSVRow(line) {
   return result;
 }
 
-function parseCSVItems(csvText) {
+function parseCSVItems(csvText: string) {
   const lines = csvText.split(/\r?\n/).filter(l => l.trim());
   if (lines.length < 2) return [];
   const headers = parseCSVRow(lines[0]).map(h => h.toLowerCase());
-  const idx = (k) => headers.indexOf(k);
-  const items = [];
+  const idx = (k: string) => headers.indexOf(k);
+  const items: any[] = [];
   for (let i = 1; i < lines.length; i++) {
     const cols = parseCSVRow(lines[i]);
-    const get = (k) => { const j = idx(k); return j >= 0 ? (cols[j] || '') : ''; };
+    const get = (k: string) => { const j = idx(k); return j >= 0 ? (cols[j] || '') : ''; };
     const title = get('title');
     if (!title) continue;
     const type = get('type') || 'game';
@@ -193,33 +207,38 @@ function parseCSVItems(csvText) {
   return items;
 }
 
-function ConfBadge({ c }) {
+function ConfBadge({ c }: { c: string }) {
   return <span className={"conf " + c}>{c === "high" ? "Confident" : "Confirm"}</span>;
 }
 
-const FIELD_OPTS = {
+const FIELD_OPTS: Record<string, string[]> = {
   Completeness: COMPLETENESS_OPTIONS,
   Condition: CONDITION_OPTIONS,
 };
 
-function AddCard({ item, onChange, onRemove, collOpts }) {
+function AddCard({ item, onChange, onRemove, collOpts }: {
+  item: any;
+  onChange: (item: any) => void;
+  onRemove: () => void;
+  collOpts: any[];
+}) {
   const [showAlt, setShowAlt] = React.useState(false);
 
-  const setField = (i, v) => {
-    const fields = item.fields.map((f, j) => j === i ? { ...f, v, c: "high" } : f);
-    onChange({ ...item, fields, askCount: fields.filter(f => f.c === "ask").length });
+  const setField = (i: number, v: string) => {
+    const fields = item.fields.map((f: any, j: number) => j === i ? { ...f, v, c: "high" } : f);
+    onChange({ ...item, fields, askCount: fields.filter((f: any) => f.c === "ask").length });
   };
 
-  function applyLookupResult(alt) {
-    let fields = item.fields.map(f => {
+  function applyLookupResult(alt: any) {
+    let fields = item.fields.map((f: any) => {
       if (f.k === "Year" && alt.year) return { ...f, v: String(alt.year), c: "high" };
       if ((f.k === "Platform" || f.k === "Author" || f.k === "Artist") && alt.sub) return { ...f, v: alt.sub, c: "high" };
       return f;
     });
-    onChange({ ...item, fields, cover_url: alt.cover_url || item.cover_url, askCount: fields.filter(f => f.c === "ask").length });
+    onChange({ ...item, fields, cover_url: alt.cover_url || item.cover_url, askCount: fields.filter((f: any) => f.c === "ask").length });
     setShowAlt(false);
   }
-  const opts = collOpts && collOpts.length ? collOpts.map(c => c.name) : [...new Set(Object.values(TYPE_COLL))];
+  const opts = collOpts && collOpts.length ? collOpts.map((c: any) => c.name) : [...new Set(Object.values(TYPE_COLL))];
   const extras = item.duplicate || (item._lookupResults || []).length > 1;
   return (
     <div className="add-card">
@@ -227,17 +246,17 @@ function AddCard({ item, onChange, onRemove, collOpts }) {
         <div className="add-card-cover"><Cover item={{ title: item.title, type: item.type, color: item.color, cover_url: item.cover_url || null }} h={84} /></div>
         <div className="add-card-body">
           <div className="add-card-head">
-            <input className="add-title" value={item.title} onChange={e => onChange({ ...item, title: e.target.value, fields: item.fields.map(f => f.k === "Title" ? { ...f, v: e.target.value } : f) })} />
+            <input className="add-title" value={item.title} onChange={e => onChange({ ...item, title: e.target.value, fields: item.fields.map((f: any) => f.k === "Title" ? { ...f, v: e.target.value } : f) })} />
             <div className="add-card-meta">
               <span className="add-type">{typeIcon(item.type, { size: 13, stroke: 1.8 })} {TYPE_LABEL[item.type]}</span>
               <span className="add-arrow">→</span>
               <select className="add-coll" value={item.collection} onChange={e => onChange({ ...item, collection: e.target.value })}>
-                {opts.map(c => <option key={c} value={c}>{c}</option>)}
+                {(opts as string[]).map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
           </div>
           <div className="add-fields">
-            {item.fields.filter(f => f.k !== "Title" && f.k !== "Type").map((f, i0) => {
+            {item.fields.filter((f: any) => f.k !== "Title" && f.k !== "Type").map((f: any, i0: number) => {
               const i = item.fields.indexOf(f);
               const isAsk = f.c === "ask";
               const isPlatform = f.k === "Platform" && item.type === "game";
@@ -261,7 +280,7 @@ function AddCard({ item, onChange, onRemove, collOpts }) {
                       onChange={e => setField(i, e.target.value)}
                     >
                       <option value="">{isAsk ? `Choose ${f.k.toLowerCase()}` : "—"}</option>
-                      {dropOpts.map(o => <option key={o} value={o}>{o}</option>)}
+                      {dropOpts.map((o: string) => <option key={o} value={o}>{o}</option>)}
                     </select>
                   ) : (
                     <input
@@ -294,7 +313,7 @@ function AddCard({ item, onChange, onRemove, collOpts }) {
               </button>
               {showAlt && (
                 <div className="alt-list">
-                  {item._lookupResults.map((alt, i) => (
+                  {item._lookupResults.map((alt: any, i: number) => (
                     <button key={i} className="alt-item" onClick={() => applyLookupResult(alt)}>
                       {alt.cover_url
                         ? <img src={alt.cover_url} className="alt-thumb" />
@@ -315,10 +334,10 @@ function AddCard({ item, onChange, onRemove, collOpts }) {
   );
 }
 
-function QuickCapture({ onClose }) {
+function QuickCapture({ onClose }: { onClose: () => void }) {
   const [text, setText] = useState("");
-  const [notes, setNotes] = useState([]);
-  const inputRef = useRef(null);
+  const [notes, setNotes] = useState<string[]>([]);
+  const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => { inputRef.current && inputRef.current.focus(); }, []);
   function commit() { const v = text.trim(); if (!v) return; setNotes(n => [v, ...n]); setText(""); inputRef.current && inputRef.current.focus(); }
   return (
@@ -353,31 +372,38 @@ function QuickCapture({ onClose }) {
         </div>
         <div className="sheet-foot">
           <span style={{ fontSize: 12, color: "var(--mute)" }}>{notes.length} note{notes.length !== 1 ? "s" : ""} captured</span>
-          <button className="btn solid" disabled={!notes.length} onClick={onClose}><I.check size={16} /> Save</button>
+          {/* Fix 4: Renamed "Save" to "Done" — notes are held in local state only and
+              are not persisted until processed on desktop. "Save" was misleading. */}
+          <button className="btn solid" disabled={!notes.length} onClick={onClose}><I.check size={16} /> Done</button>
         </div>
       </div>
     </div>
   );
 }
 
-function AddDesktop({ onClose, onAdded, ctx, ollamaModel }) {
+function AddDesktop({ onClose, onAdded, ctx, ollamaModel }: {
+  onClose: () => void;
+  onAdded?: () => void;
+  ctx: NavigationContext;
+  ollamaModel: string;
+}) {
   const [text, setText] = useState("");
   const [stage, setStage] = useState("input"); // input | thinking | review
   const [statusMsg, setStatusMsg] = useState("");
-  const [items, setItems] = useState([]);
+  const [items, setItems] = useState<any[]>([]);
   const [isCSVImport, setIsCSVImport] = useState(false);
-  const csvFileRef = useRef(null);
-  const inputRef = useRef(null);
+  const csvFileRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { inputRef.current && inputRef.current.focus(); }, []);
   const colls = useCollections();
   const collOpts = colls.data || [];
   const searchIndex = useSearchIndex();
 
-  function applyDuplicateDetection(parsed) {
+  function applyDuplicateDetection(parsed: any[]) {
     const idx = searchIndex.data || [];
     return parsed.map(item => {
       const normItem = normalizeTitle(item.title);
-      const existing = idx.find(e => normalizeTitle(e.title || "") === normItem);
+      const existing = idx.find((e: any) => normalizeTitle(e.title || "") === normItem);
       if (existing) return { ...item, duplicate: { id: existing.id, title: existing.title, type: existing.type } };
       return item;
     });
@@ -396,7 +422,7 @@ function AddDesktop({ onClose, onAdded, ctx, ollamaModel }) {
     // 2. Enrich each item in parallel: Ollama + online lookup
     setStatusMsg("Enriching with AI and metadata sources…");
     let metaFailed = false, ollamaFailed = false;
-    parsed = await Promise.all(parsed.map(async item => {
+    parsed = await Promise.all(parsed.map(async (item: any) => {
       const [aiEnrich, onlineLookup] = await Promise.all([
         ollamaModel ? OllamaClient.enrichItem(item.raw, item.type, ollamaModel).catch(() => { ollamaFailed = true; return null; }) : null,
         lookupMetadata(item.type, item.raw).catch(() => { metaFailed = true; return null; }),
@@ -432,7 +458,7 @@ function AddDesktop({ onClose, onAdded, ctx, ollamaModel }) {
     }
   }
 
-  function onCSVFileChange(e) {
+  function onCSVFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
@@ -448,13 +474,13 @@ function AddDesktop({ onClose, onAdded, ctx, ollamaModel }) {
     e.target.value = '';
   }
 
-  function addExample(s) {
-    setText(t => (t.trim() ? t.replace(/\n*$/, "") + "\n" : "") + s);
+  function addExample(s: string) {
+    setText(prev => (prev.trim() ? prev.replace(/\n*$/, "") + "\n" : "") + s);
     inputRef.current && inputRef.current.focus();
   }
 
   function confirmAdd() {
-    const nameToId = Object.fromEntries(collOpts.map(c => [c.name, c.id]));
+    const nameToId = Object.fromEntries(collOpts.map((c: any) => [c.name, c.id]));
     items.forEach(it => {
       const collId = nameToId[it.collection] || COLL_NAME_TO_ID[it.collection] || "games";
       addItem(collId, buildDraft(it));
@@ -474,7 +500,7 @@ function AddDesktop({ onClose, onAdded, ctx, ollamaModel }) {
   return (
     <div className="modal-scrim" onClick={onClose}>
       <datalist id="hodd-platform-list">
-        {PLATFORM_OPTS.map(o => <option key={o} value={o} />)}
+        {PLATFORM_OPTS.map((o: string) => <option key={o} value={o} />)}
       </datalist>
       <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
         <div className="modal-head">
@@ -555,13 +581,18 @@ function AddDesktop({ onClose, onAdded, ctx, ollamaModel }) {
   );
 }
 
-function AddModal({ onClose, onAdded, ctx, ollamaModel }) {
+function AddModal({ onClose, onAdded, ctx, ollamaModel }: {
+  onClose: () => void;
+  onAdded?: () => void;
+  ctx: NavigationContext;
+  ollamaModel: string;
+}) {
   const narrow = useNarrow();
   if (narrow) return <QuickCapture onClose={onClose} />;
   return <AddDesktop onClose={onClose} onAdded={onAdded} ctx={ctx} ollamaModel={ollamaModel} />;
 }
 
-function greetingFor(d) {
+function greetingFor(d: Date): string {
   const h = d.getHours();
   if (h < 5) return "Still up";
   if (h < 12) return "Good morning";
@@ -588,6 +619,21 @@ export default function App() {
       setBootReady(true);
     });
   }, []);
+
+  // Fix 7: Multi-window cache coherency via IPC notification.
+  // Requires the preload bridge to expose on/off. If it doesn't, this is a no-op.
+  // To enable: extend the preload to expose bridge.on('data-changed', handler).
+  useEffect(() => {
+    const bridge = (window as any).hoddDesktop;
+    if (!bridge?.on) return;
+    const handler = () => {
+      invalidateCache();
+      bumpData();
+    };
+    bridge.on('data-changed', handler);
+    return () => bridge.off?.('data-changed', handler);
+  }, []);
+
   useEffect(() => {
     const root = document.documentElement;
     root.setAttribute("data-theme", t.theme === "dark" ? "dark" : "light");
@@ -605,9 +651,9 @@ export default function App() {
   }, [t.theme, t.accent, t.headline]);
 
   const [view, setView] = useState("home");
-  const [collId, setCollId] = useState(null);
-  const [item, setItem] = useState(null);
-  const [itemColl, setItemColl] = useState(null);
+  const [collId, setCollId] = useState<string | null>(null);
+  const [item, setItem] = useState<any>(null);
+  const [itemColl, setItemColl] = useState<any>(null);
   const [searchInit, setSearchInit] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [createCollOpen, setCreateCollOpen] = useState(false);
@@ -615,35 +661,39 @@ export default function App() {
   const [dataVer, setDataVer] = useState(0);
   const bumpData = () => setDataVer(v => v + 1);
   const [topSearch, setTopSearch] = useState("");
-  const [ollamaModels, setOllamaModels] = useState([]);
+  const [ollamaModels, setOllamaModels] = useState<string[]>([]);
   useEffect(() => {
     OllamaClient.getModels().then(setOllamaModels).catch(() => {});
   }, []);
   const activeOllamaModel = t.ollamaModel || ollamaModels[0] || "";
-  const histRef = useRef([]);
-  const scrollRef = useRef(null);
+  const histRef = useRef<{ view: string; collId: string | null; item: any; itemColl: any }[]>([]);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const searchNavRef = useRef(0);
 
-  function push(v) { histRef.current.push({ view, collId, item, itemColl }); setView(v); }
+  function push(v: string) { histRef.current.push({ view, collId, item, itemColl }); setView(v); }
   function scrollTop() { if (scrollRef.current) scrollRef.current.scrollTop = 0; window.scrollTo(0, 0); }
 
-  const ctx = {
-    go(v) { push(v); scrollTop(); },
-    openCollection(id) { histRef.current.push({ view, collId, item, itemColl }); setCollId(id); setView("collection"); scrollTop(); },
-    openItem(it, coll) { histRef.current.push({ view, collId, item, itemColl }); setItem(it); setItemColl(coll || null); setView("item"); scrollTop(); },
+  // Fix 2: Memoize ctx to prevent a new object reference on every render,
+  // which would cause all child components receiving ctx to re-render unnecessarily.
+  const ctx = React.useMemo<NavigationContext>(() => ({
+    go(v: string) { push(v); scrollTop(); },
+    openCollection(id: string) { histRef.current.push({ view, collId, item, itemColl }); setCollId(id); setView("collection"); scrollTop(); },
+    openItem(it: any, coll: any) { histRef.current.push({ view, collId, item, itemColl }); setItem(it); setItemColl(coll || null); setView("item"); scrollTop(); },
     back() {
       const h = histRef.current.pop();
       if (h) { setView(h.view); setCollId(h.collId); setItem(h.item); setItemColl(h.itemColl); }
       else setView("home");
       scrollTop();
     },
-    search(q) { setSearchInit(q || ""); push("search"); scrollTop(); },
+    search(q: string) { setSearchInit(q || ""); push("search"); scrollTop(); },
     newCollection() { setCreateCollOpen(true); },
-    addToCollection(coll, prefill?) { setAddItemColl({ coll, prefill }); },
-  };
+    addToCollection(coll: any, prefill?: any) { setAddItemColl({ coll, prefill }); },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [view, collId, item, itemColl]);
 
   useEffect(() => { scrollTop(); }, [view]);
 
+  // Fix 3: ctx added to dep array so keyboard handler always uses the current ctx.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
@@ -659,12 +709,12 @@ export default function App() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [addOpen, createCollOpen, addItemColl, view]);
+  }, [addOpen, createCollOpen, addItemColl, view, ctx]);
 
   const user = useUser();
   const greeting = greetingFor(new Date());
   const name = user.data ? user.data.name : "";
-  let bar;
+  let bar: { title?: string; subtitle?: string | null; bare?: boolean };
   if (view === "home") {
     const h = new Date().getHours();
     const homeSub = h < 5  ? "Still awake? Your hoard never sleeps."
@@ -685,7 +735,7 @@ export default function App() {
   else if (view === "settings") bar = { title: "Settings", subtitle: null };
   else bar = { bare: true };
 
-  let body;
+  let body: React.ReactNode;
   if (view === "home") body = t.homeStyle === "Dashboard" ? <Home ctx={ctx} /> : <HomeNew ctx={ctx} art={t.shelfArt} />;
   else if (view === "collections") body = t.collStyle === "Cards" ? <Collections ctx={ctx} /> : <CollectionsNew ctx={ctx} art={t.shelfArt} />;
   else if (view === "collection") body = <CollectionDetail collId={collId} ctx={ctx} />;
@@ -703,7 +753,7 @@ export default function App() {
 
   const activeNav = ["collection"].includes(view) ? "collections" : ["item"].includes(view) ? null : view;
 
-  const navTo = (id) => {
+  const navTo = (id: string) => {
     if (id === "search") { ctx.search(""); return; }
     setCollId(null); setItem(null); setItemColl(null);
     histRef.current = []; setView(id); scrollTop();
@@ -711,7 +761,7 @@ export default function App() {
 
   if (!bootReady || onboarded === null) return <LoadingScreen />;
   if (onboarded === false) return (
-    <Onboarding onDone={(prefs) => {
+    <Onboarding onDone={(prefs: any) => {
       if (prefs) setTweak({ theme: prefs.theme, accent: prefs.accent });
       user.refetch();
       setOnboarded(true);
@@ -726,10 +776,15 @@ export default function App() {
         <div className="canvas">
           <Topbar {...bar}
             onAdd={() => setAddOpen(true)}
-            onSearch={() => { const t = Date.now(); if (view !== "search" && t - searchNavRef.current > 50) { searchNavRef.current = t; ctx.search(""); } }}
+            onSearch={() => {
+              // Fix 5: Renamed local timestamp variable from `t` to `ts` to avoid
+              // shadowing the outer `t` (tweak values) variable.
+              const ts = Date.now();
+              if (view !== "search" && ts - searchNavRef.current > 50) { searchNavRef.current = ts; ctx.search(""); }
+            }}
             searchValue={topSearch}
             onSearchChange={setTopSearch}
-            onSearchSubmit={(q) => { setTopSearch(""); ctx.search(q); }} />
+            onSearchSubmit={(q: string) => { setTopSearch(""); ctx.search(q); }} />
           <div key={view + ":" + collId + ":" + dataVer}>{body}</div>
         </div>
       </div>
@@ -737,10 +792,10 @@ export default function App() {
       {addOpen && <AddModal onClose={() => setAddOpen(false)} onAdded={bumpData} ctx={ctx} ollamaModel={activeOllamaModel} />}
       {createCollOpen && <CreateCollectionModal
         onClose={() => setCreateCollOpen(false)}
-        onCreated={(rec) => { setCreateCollOpen(false); bumpData(); ctx.openCollection(rec.id); }} />}
+        onCreated={(rec: any) => { setCreateCollOpen(false); bumpData(); ctx.openCollection(rec.id); }} />}
       {addItemColl && <AddItemModal collection={addItemColl.coll} prefill={addItemColl.prefill}
         onClose={() => setAddItemColl(null)}
-        onAdded={(rec) => { setAddItemColl(null); bumpData(); }} />}
+        onAdded={(_rec: any) => { setAddItemColl(null); bumpData(); }} />}
       <Toaster />
       <TweaksPanel>
         <TweakSection label="Layout" />
@@ -755,7 +810,7 @@ export default function App() {
           onChange={v => setTweak("theme", v)} />
         <TweakColor label="Accent" value={t.accent}
           options={["#4f46e5", "#0d9488", "#e2503b", "#2563eb", "#7c3aed", "#d97706"]}
-          onChange={v => setTweak("accent", v)} />
+          onChange={v => setTweak("accent", v as string)} />
         <TweakSection label="Typography" />
         <TweakRadio label="Headline" value={t.headline} options={["Bricolage", "Space Grotesk"]}
           onChange={v => setTweak("headline", v)} />
