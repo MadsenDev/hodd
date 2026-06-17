@@ -73,6 +73,7 @@ export function SeriesView({ ctx }) {
   const index = useSearchIndex();
   const [selected, setSelected] = React.useState(null);
   const [sort, setSort] = React.useState("alpha");
+  const itemRefs = React.useRef({});
 
   if (index.loading) return <Loading label="Scanning your series…" />;
   if (index.error) return <ErrorState error={index.error} onRetry={index.refetch} />;
@@ -113,7 +114,7 @@ export function SeriesView({ ctx }) {
   if (selected) {
     const series = sorted.find(s => s.name === selected);
     if (!series) { setSelected(null); return null; }
-    const itemRefs = React.useRef({});
+    itemRefs.current = {};
     const sortedItems = [...series.items].sort((a, b) => {
       const an = a.series_number ?? Infinity;
       const bn = b.series_number ?? Infinity;
