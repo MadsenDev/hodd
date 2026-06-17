@@ -333,7 +333,7 @@ export async function getCollections() {
     const owned    = all.filter(i => i.owned !== false).length;
     const missing  = all.filter(i => i.owned === false).length;
     return Object.assign({}, coll, { owned, missing, pct: all.length ? Math.round(owned / all.length * 100) : 0 });
-  }).filter(c => c.owned > 0);
+  });
 
   const made = (_userColls || []).map(rc => {
     const its     = (ui[rc.id] || []).map(applyEdits);
@@ -413,7 +413,9 @@ export async function getHome() {
     : null;
   home.featured = bestColl ? await getCollection(bestColl.id) : null;
 
-  home.recent = dynamic?.recent || [];
+  home.recent = dynamic?.recent?.length
+    ? dynamic.recent
+    : await getItems(home.recentIds || []);
 
   if (home.headlineStats) {
     const stats = [...home.headlineStats];
