@@ -172,6 +172,20 @@ const SCHEMA = `
     profile_id TEXT NOT NULL DEFAULT 'default',
     PRIMARY KEY (item_id, profile_id)
   );
+
+  CREATE TABLE IF NOT EXISTS suggested_items (
+    id TEXT NOT NULL,
+    collection_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    sub TEXT,
+    year INTEGER,
+    type TEXT,
+    cover_url TEXT,
+    series TEXT,
+    fetched_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    PRIMARY KEY (id, collection_id),
+    UNIQUE (collection_id, title, sub)
+  );
 `;
 
 // Items beyond catalog.json — replaces the old FALLBACK mock data
@@ -273,6 +287,9 @@ export async function initDb(): Promise<void> {
   try { db.run('ALTER TABLE user_items ADD COLUMN profile_id TEXT DEFAULT \'default\''); } catch (_) {}
   try { db.run('ALTER TABLE user_collections ADD COLUMN profile_id TEXT DEFAULT \'default\''); } catch (_) {}
   try { db.run('ALTER TABLE holdings ADD COLUMN profile_id TEXT DEFAULT \'default\''); } catch (_) {}
+  try { db.run('ALTER TABLE user_items ADD COLUMN series_number REAL'); } catch (_) {}
+  try { db.run('ALTER TABLE user_items ADD COLUMN rating REAL'); } catch (_) {}
+  try { db.run('ALTER TABLE holdings ADD COLUMN rating REAL'); } catch (_) {}
   // Migrate old favorites to favorites_v2
   try {
     const oldFavs = db.exec('SELECT item_id FROM favorites');
@@ -375,7 +392,7 @@ export function getCatalog(): Record<string, unknown>[] {
 }
 
 export function getHoldings(): Record<string, Record<string, unknown>> {
-  const res = db.exec('SELECT item_id, format, completeness, grade, pressing, edition, condition_val, acquired, watched, completed, custom, notes, loan_from, loan_date, ownership, purchase_price, purchase_currency, current_value, loan_to, loan_to_date FROM holdings');
+  const res = db.exec('SELECT item_id, format, completeness, grade, pressing, edition, condition_val, acquired, watched, completed, custom, notes, loan_from, loan_date, ownership, purchase_price, purchase_currency, current_value, loan_to, loan_to_date, rating FROM holdings');
   if (!res.length) return {};
   const [{ columns, values }] = res;
   const map: Record<string, Record<string, unknown>> = {};
@@ -431,7 +448,7 @@ export function getUserCollections(): Record<string, unknown>[] {
 }
 
 export function getUserItems(): Record<string, Record<string, unknown>[]> {
-  const res = db.exec('SELECT id, collection_id, title, sub, year, type, color, owned, format, completeness, grade, pressing, edition, condition_val, acquired, watched, completed, custom, series, region, cover_url, gallery, purchase_price, purchase_currency, current_value, loan_to, loan_to_date FROM user_items ORDER BY collection_id, created_at');
+  const res = db.exec('SELECT id, collection_id, title, sub, year, type, color, owned, format, completeness, grade, pressing, edition, condition_val, acquired, watched, completed, custom, series, region, cover_url, gallery, purchase_price, purchase_currency, current_value, loan_to, loan_to_date, series_number, rating FROM user_items ORDER BY collection_id, created_at');
   if (!res.length) return {};
   const [{ columns, values }] = res;
   const map: Record<string, Record<string, unknown>[]> = {};
@@ -493,20 +510,20 @@ export function saveHolding(itemId: string, patch: Record<string, unknown>): voi
     if (merged.custom && typeof merged.custom !== 'string') merged.custom = JSON.stringify(merged.custom);
     db.run(`UPDATE holdings SET format=?, completeness=?, grade=?, pressing=?, edition=?,
       condition_val=?, acquired=?, watched=?, completed=?, custom=?,
-      notes=?, loan_from=?, loan_date=?, ownership=?, purchase_price=?, purchase_currency=?, current_value=?, loan_to=?, loan_to_date=? WHERE item_id=?`, [
+      notes=?, loan_from=?, loan_date=?, ownership=?, purchase_price=?, purchase_currency=?, current_value=?, loan_to=?, loan_to_date=?, rating=? WHERE item_id=?`, [
       sv(merged.format), sv(merged.completeness), sv(merged.grade),
       sv(merged.pressing), sv(merged.edition), sv(merged.condition_val),
       sv(merged.acquired), sv(merged.watched), sv(merged.completed), sv(merged.custom),
       sv(merged.notes), sv(merged.loan_from), sv(merged.loan_date), sv(merged.ownership),
       sv(merged.purchase_price), sv(merged.purchase_currency), sv(merged.current_value),
-      sv(merged.loan_to), sv(merged.loan_to_date), itemId,
+      sv(merged.loan_to), sv(merged.loan_to_date), sv(merged.rating ?? null), itemId,
     ]);
   } else {
     const w = patch.watched;
     const cp = patch.completed;
     db.run(`INSERT INTO holdings (item_id, format, completeness, grade, pressing, edition,
       condition_val, acquired, watched, completed, custom,
-      notes, loan_from, loan_date, ownership, purchase_price, purchase_currency, current_value, loan_to, loan_to_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+      notes, loan_from, loan_date, ownership, purchase_price, purchase_currency, current_value, loan_to, loan_to_date, rating) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
       itemId,
       sv(patch.format), sv(patch.completeness), sv(patch.grade),
       sv(patch.pressing), sv(patch.edition), sv(patch.condition),
@@ -516,7 +533,7 @@ export function saveHolding(itemId: string, patch: Record<string, unknown>): voi
       patch.custom ? JSON.stringify(patch.custom) : null,
       sv(patch.notes), sv(patch.loan_from), sv(patch.loan_date), sv(patch.ownership),
       sv(patch.purchase_price), sv(patch.purchase_currency), sv(patch.current_value),
-      sv(patch.loan_to), sv(patch.loan_to_date),
+      sv(patch.loan_to), sv(patch.loan_to_date), sv(patch.rating ?? null),
     ]);
   }
   scheduleWrite();
@@ -626,11 +643,12 @@ export function setUserItemOwned(id: string, owned: boolean): void {
 }
 
 export function updateUserItemFields(id: string, fields: Record<string, unknown>): void {
-  const allowed: Record<string, 'text' | 'int' | 'json'> = {
+  const allowed: Record<string, 'text' | 'int' | 'json' | 'real'> = {
     title: 'text', sub: 'text', year: 'int', type: 'text',
     series: 'text', region: 'text', color: 'text',
     cover_url: 'text', gallery: 'json',
     purchase_price: 'text', purchase_currency: 'text', current_value: 'text',
+    series_number: 'real', rating: 'real',
   };
   const cols = Object.keys(fields).filter(k => k in allowed);
   if (!cols.length) return;
@@ -638,6 +656,7 @@ export function updateUserItemFields(id: string, fields: Record<string, unknown>
     const v = fields[c];
     if (v == null || v === '') return null;
     if (allowed[c] === 'int') return Number(v);
+    if (allowed[c] === 'real') return v === null || v === '' ? null : Number(v);
     if (allowed[c] === 'json') return typeof v === 'string' ? (v || null) : JSON.stringify(v);
     return String(v);
   });
@@ -920,5 +939,53 @@ export function getActiveProfile(): string {
 
 export function setActiveProfile(id: string): void {
   db.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ['active_profile', id]);
+  scheduleWrite();
+}
+
+// ─── SUGGESTED ITEMS ─────────────────────────────────────────────────────────
+
+export function getSuggestedItems(collectionId: string): Record<string, unknown>[] {
+  const res = db.exec(
+    'SELECT id, collection_id, title, sub, year, type, cover_url, series FROM suggested_items WHERE collection_id = ? ORDER BY year DESC',
+    [collectionId]
+  );
+  if (!res.length) return [];
+  const [{ columns, values }] = res;
+  return values.map(row => {
+    const obj: Record<string, unknown> = {};
+    columns.forEach((col, i) => {
+      const key = col === 'collection_id' ? 'collectionId' : col;
+      obj[key] = row[i];
+    });
+    obj.owned = false;
+    obj.suggested = true;
+    return obj;
+  });
+}
+
+export function hasSuggestionsFor(collectionId: string): boolean {
+  const res = db.exec('SELECT COUNT(*) FROM suggested_items WHERE collection_id = ?', [collectionId]);
+  return !!(res.length && (res[0].values[0][0] as number) > 0);
+}
+
+export function upsertSuggestedItems(
+  collectionId: string,
+  items: { title: string; sub?: string | null; year?: number | null; type?: string | null; cover_url?: string | null; series?: string | null }[]
+): void {
+  const stmt = db.prepare(
+    'INSERT OR IGNORE INTO suggested_items (id, collection_id, title, sub, year, type, cover_url, series) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  );
+  for (const it of items) {
+    const slug = (it.title + '-' + (it.year ?? '') + '-' + collectionId)
+      .toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').slice(0, 40);
+    const id = 'sg-' + slug;
+    stmt.run([id, collectionId, it.title, it.sub ?? null, it.year ?? null, it.type ?? null, it.cover_url ?? null, it.series ?? null]);
+  }
+  stmt.free();
+  scheduleWrite();
+}
+
+export function clearSuggestionsFor(collectionId: string): void {
+  db.run('DELETE FROM suggested_items WHERE collection_id = ?', [collectionId]);
   scheduleWrite();
 }

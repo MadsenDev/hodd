@@ -15,7 +15,7 @@ let _userColls = null;
 let _userItems = null;
 let _baseCols  = null;
 
-function resolveId(id) { return id === "featured" ? "pokemon" : id; }
+function resolveId(id) { return id; }
 function ipc() { return (window as any).hoddDesktop?.api; }
 
 async function ensureCache() {
@@ -66,6 +66,14 @@ export function saveHolding(id, patch) {
     _searchIndex = null;
     toaster.error("Couldn't save changes — please try again.");
   });
+}
+export function saveRating(id, rating) {
+  _searchIndex = null;
+  if (String(id).startsWith("i-")) {
+    saveCatalog(id, { rating });
+  } else {
+    saveHolding(id, { rating });
+  }
 }
 export function removeHolding(id) {
   const prev = _holdings && _holdings[id] ? { ..._holdings[id] } : undefined;
@@ -272,6 +280,7 @@ function joinHolding(cat, h) {
     purchase_price:   (h && h.purchase_price)   ?? null,
     purchase_currency:(h && h.purchase_currency) || 'USD',
     current_value:    (h && h.current_value)    ?? null,
+    rating:           (h && h.rating != null) ? h.rating : null,
   });
 }
 
@@ -310,18 +319,21 @@ export async function getCollectionItems(collectionId) {
     .map(c => joinHolding(c, _holdings && _holdings[c.id]));
 }
 
+// Returns catalog items related to the owned items: same series or same sub (platform/author/etc.)
+
 export async function getCollections() {
   await ensureCache();
   const cat = _catalog || [], h = _holdings || {}, ui = _userItems || {};
 
   const built = (_baseCols || []).map(coll => {
-    const catItems = cat.filter(c => c.collectionId === coll.id);
+    // Only count items the user has explicitly interacted with (has a holding record)
+    const explicit = cat.filter(c => c.collectionId === coll.id && !!h[c.id]).map(c => joinHolding(c, h[c.id]));
     const extra    = (ui[coll.id] || []).map(applyEdits);
-    const all      = catItems.map(c => joinHolding(c, h[c.id])).concat(extra);
+    const all      = explicit.concat(extra);
     const owned    = all.filter(i => i.owned !== false).length;
-    const total    = all.length;
-    return Object.assign({}, coll, { owned, missing: total - owned, pct: total ? Math.round(owned / total * 100) : 0 });
-  });
+    const missing  = all.filter(i => i.owned === false).length;
+    return Object.assign({}, coll, { owned, missing, pct: all.length ? Math.round(owned / all.length * 100) : 0 });
+  }).filter(c => c.owned > 0);
 
   const made = (_userColls || []).map(rc => {
     const its     = (ui[rc.id] || []).map(applyEdits);
@@ -362,19 +374,18 @@ export async function getCollection(id) {
       sub: ownedN + (ownedN === 1 ? " item" : " items"), items: extra };
   }
 
-  const cat      = _catalog || [], h = _holdings || {};
-  const catItems = cat.filter(c => c.collectionId === resolved)
-    .map(c => joinHolding(c, h[c.id]));
-  const all      = catItems.concat(extra);
-  const owned    = all.filter(i => i.owned !== false).length;
-  const total    = all.length;
-  const pct      = total ? Math.round(owned / total * 100) : 0;
+  const cat = _catalog || [], h = _holdings || {};
+  const explicit = cat.filter(c => c.collectionId === resolved && !!h[c.id]).map(c => joinHolding(c, h[c.id]));
+  const items    = explicit.concat(extra);
+  const owned    = items.filter(i => i.owned !== false).length;
+  const missing  = items.filter(i => i.owned === false).length;
+  const pct      = items.length ? Math.round(owned / items.length * 100) : 0;
 
   const meta = (_baseCols || []).find(c => c.id === resolved)
     || { id: resolved, name: resolved, type: "game", accent: "#6366f1" };
 
-  return Object.assign({}, meta, { owned, missing: total - owned, pct,
-    sub: owned + " owned · " + (total - owned) + " missing", items: all });
+  return Object.assign({}, meta, { owned, missing, pct,
+    sub: owned + " owned · " + missing + " missing", items });
 }
 
 export async function getCollectionsExpanded() {
@@ -395,11 +406,14 @@ export async function getHome() {
   ]);
   if (!homeConf) return null;
   const home = Object.assign({}, homeConf);
-  home.featured = await getCollection(home.featuredCollectionId);
+  // Pick the collection with the most owned items; fall back to home.json config if none
+  const allColls = await getCollections();
+  const bestColl = allColls.length
+    ? allColls.reduce((best, c) => (c.owned > best.owned ? c : best), allColls[0])
+    : null;
+  home.featured = bestColl ? await getCollection(bestColl.id) : null;
 
-  home.recent = dynamic?.recent?.length
-    ? dynamic.recent
-    : await getItems(home.recentIds || []);
+  home.recent = dynamic?.recent || [];
 
   if (home.headlineStats) {
     const stats = [...home.headlineStats];
@@ -445,14 +459,7 @@ export async function getHome() {
     home.wishlist = Object.assign({}, home.wishlist, { items: await getItems(home.wishlist.itemIds) });
   }
 
-  if (dynamic?.rediscover) {
-    home.rediscover = dynamic.rediscover;
-  } else if (home.rediscover?.itemId) {
-    const redItem = await getItem(home.rediscover.itemId);
-    home.rediscover = Object.assign({}, redItem, home.rediscover);
-  } else {
-    home.rediscover = null;
-  }
+  home.rediscover = dynamic?.rediscover || null;
   return home;
 }
 
@@ -516,7 +523,13 @@ export async function getSearchIndex() {
   await ensureCache();
   const cat = _catalog || [], h = _holdings || {};
   const bcMap = Object.fromEntries((_baseCols || []).map(c => [c.id as string, c.name as string]));
-  const catIdx = cat.map(c => {
+  // Only index catalog items from collections where the user owns at least one item
+  const activeBaseCollIds = new Set(
+    (_baseCols || [])
+      .map(bc => bc.id as string)
+      .filter(id => cat.some(c => c.collectionId === id && !!(h as any)[c.id]))
+  );
+  const catIdx = cat.filter(c => activeBaseCollIds.has(c.collectionId)).map(c => {
     const item = joinHolding(c, h[c.id]);
     item.coll = bcMap[c.collectionId] || COLL_NAME[c.collectionId] || "Hoard";
     if (c.type === "game")  item.platform = c.sub;
@@ -540,6 +553,21 @@ export async function getSearchIndex() {
   });
   _searchIndex = catIdx.concat(userIdx);
   return _searchIndex;
+}
+
+export async function fetchSuggestions(
+  collectionId: string,
+  type: string,
+  ownedItems: { title: string; series?: string | null; sub?: string | null }[]
+): Promise<any[]> {
+  const api = (window as any).hoddDesktop?.api;
+  if (!api?.fetchSuggestions) return [];
+  try {
+    return await api.fetchSuggestions(collectionId, type, ownedItems);
+  } catch (e) {
+    console.warn('[HODD] fetchSuggestions failed', e);
+    return [];
+  }
 }
 
 // ── Ollama local AI client ────────────────────────────────────────────────────
