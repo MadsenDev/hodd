@@ -1,9 +1,9 @@
 // @ts-nocheck
 import React from 'react';
 import { I } from '../icons';
-import { Cover, CompletionRing, Loading, ErrorState, EmptyState } from '../components';
+import { Cover, CompletionRing, Loading, ErrorState, EmptyState, StarRating } from '../components';
 import { useCollection } from '../hooks';
-import { deleteCollection, saveCatalog, saveHolding, setItemOwned, removeItem } from '../api';
+import { deleteCollection, saveCatalog, saveHolding, setItemOwned, removeItem, fetchSuggestions } from '../api';
 
 const CONDITIONS = ["Mint", "Near Mint", "Very Good", "Good", "Fair", "Poor"];
 const STATUSES = [["owned", "Owned"], ["wishlist", "Wishlist"], ["borrowed", "Borrowed"], ["subscription", "Subscription"]];
@@ -24,6 +24,33 @@ export function CollectionDetail({ collId, ctx }) {
   const [seriesValue, setSeriesValue] = React.useState("");
   const [conditionValue, setConditionValue] = React.useState(CONDITIONS[0]);
   const [statusValue, setStatusValue] = React.useState("owned");
+
+  const [suggestions, setSuggestions] = React.useState<any[]>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = React.useState(false);
+
+  // Fetch suggestions in background once collection data is loaded
+  React.useEffect(() => {
+    if (!data || !data.type) return;
+    const owned = (data.items || []).filter((i: any) => i.owned !== false);
+    if (!owned.length) return;
+    let cancelled = false;
+    setSuggestionsLoading(true);
+    fetchSuggestions(collId, data.type, owned.map((i: any) => ({ title: i.title, series: i.series, sub: i.sub }))).then(results => {
+      if (!cancelled) {
+        const ownedTitles = new Set((data.items || []).map((i: any) => (i.title || '').toLowerCase()));
+        setSuggestions((results || []).filter((s: any) => !ownedTitles.has((s.title || '').toLowerCase())));
+        setSuggestionsLoading(false);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [collId, data?.type, (data?.items || []).filter((i: any) => i.owned !== false).length]);
+
+  // Remove newly-added items from suggestions list
+  React.useEffect(() => {
+    if (!data?.items?.length || !suggestions.length) return;
+    const ownedTitles = new Set((data.items || []).map((i: any) => (i.title || '').toLowerCase()));
+    setSuggestions(prev => prev.filter((s: any) => !ownedTitles.has((s.title || '').toLowerCase())));
+  }, [data?.items]);
 
   const hasSearch = data && data.items && data.items.length > 12;
   React.useEffect(() => {
@@ -148,6 +175,7 @@ export function CollectionDetail({ collId, ctx }) {
     if (sort === "title") return (a.title || "").localeCompare(b.title || "");
     if (sort === "year")  return (a.year || 9999) - (b.year || 9999);
     if (sort === "status") return (b.owned ? 1 : 0) - (a.owned ? 1 : 0);
+    if (sort === "rating") return (b.rating ?? -1) - (a.rating ?? -1);
     if (sort === "progress") {
       const aP = type === "game" ? (a.completed ? 1 : 0) : (a.watched ? 1 : 0);
       const bP = type === "game" ? (b.completed ? 1 : 0) : (b.watched ? 1 : 0);
@@ -188,6 +216,8 @@ export function CollectionDetail({ collId, ctx }) {
             <button className="btn" onClick={() => setConfirmDelete(false)}>Cancel</button>
           </div>
         )}
+      </div>
+      <div className="detail-toolbar">
         <div className="seg">
           {[["all", "All", items.length], ["owned", "Owned", ownedCount], ["missing", "Missing", missingCount]].map(([v, l, n]) => (
             <button key={v} className={filter === v ? "on" : ""} onClick={() => setFilter(v)}>
@@ -205,11 +235,11 @@ export function CollectionDetail({ collId, ctx }) {
           </div>
         )}
         <div className="seg">
-          {[["default", "Default"], ["title", "A–Z"], ["year", "Year"], ["status", "Status"], ...(progressLabel ? [["progress", progressLabel]] : [])].map(([v, l]) => (
+          {[["default", "Default"], ["title", "A–Z"], ["year", "Year"], ["status", "Status"], ...(progressLabel ? [["progress", progressLabel]] : []), ["rating", "Rating"]].map(([v, l]) => (
             <button key={v} className={sort === v ? "on" : ""} onClick={() => setSort(v)}>{l}</button>
           ))}
         </div>
-        {/* Select mode toggle */}
+        <div style={{ flex: 1 }} />
         <button
           className={"btn" + (selectMode ? " solid" : "")}
           style={selectMode ? { background: "var(--accent)", color: "#fff" } : {}}
@@ -234,8 +264,10 @@ export function CollectionDetail({ collId, ctx }) {
           </div>
         )}
       </div>
-      {items.length === 0
+      {items.length === 0 && suggested.length === 0
         ? <EmptyState title={`${name} is empty`} sub="Add your first item to start the collection." />
+        : shown.length === 0 && !sq && filter === "all"
+        ? null
         : shown.length === 0
         ? <EmptyState title={sq ? `No matches for "${search}"` : `No ${filter} items`} sub={sq ? "Try a different search term." : "Try a different filter."} />
         : <div className="items-grid">
@@ -275,6 +307,11 @@ export function CollectionDetail({ collId, ctx }) {
                 <Cover item={{ ...it, type }} h={210} ghost={!it.owned} />
                 <div className="nm">{it.title}</div>
                 <div className="yr">{it.sub || ""}{it.year ? ` · ${it.year}` : ""}</div>
+                {it.rating != null && (
+                  <div style={{ marginTop: 3 }}>
+                    <StarRating value={it.rating} size={10} readonly />
+                  </div>
+                )}
                 {it.owned
                   ? <div className="badge badge-owned"><I.check size={12} stroke={2.2} /> {
                       (type === "game" && it.completed) ? "Played" :
@@ -286,6 +323,32 @@ export function CollectionDetail({ collId, ctx }) {
               </div>
             ))}
           </div>}
+
+      {filter === "all" && !sq && (suggestionsLoading || suggestions.length > 0) && (
+        <div className="suggested-section">
+          <div className="suggested-head">
+            <span className="eyebrow">Suggested</span>
+            <span className="suggested-desc">{suggestionsLoading ? "Finding related items…" : "Related items you haven't tracked yet"}</span>
+          </div>
+          {suggestionsLoading
+            ? <div className="suggested-loading"><span className="spinner-dot" /><span className="spinner-dot" /><span className="spinner-dot" /></div>
+            : <div className="items-grid suggested-grid">
+                {suggestions.map(it => (
+                  <div
+                    className="item-cell missing suggested-item"
+                    key={it.id}
+                    onClick={() => ctx.addToCollection(data, it)}
+                  >
+                    <Cover item={{ ...it, type }} h={210} />
+                    <div className="nm">{it.title}</div>
+                    <div className="yr">{it.sub || ""}{it.year ? ` · ${it.year}` : ""}</div>
+                    <div className="badge badge-suggested"><I.plus size={12} stroke={2} /> Add to collection</div>
+                  </div>
+                ))}
+              </div>
+          }
+        </div>
+      )}
 
       {/* Floating action bar */}
       {selectMode && selected.size > 0 && (
