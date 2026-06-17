@@ -11,9 +11,7 @@ export function Wishlist({ ctx }) {
   if (index.loading) return <Loading label="Building your wishlist…" />;
   if (index.error) return <ErrorState error={index.error} onRetry={index.refetch} />;
 
-  const items = (index.data || []).filter(i =>
-    i.ownership === "wishlist" || (i.owned === false && !i.ownership)
-  );
+  const items = (index.data || []).filter(i => i.ownership === "wishlist");
 
   if (!items.length) return (
     <EmptyState

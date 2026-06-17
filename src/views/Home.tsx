@@ -100,15 +100,19 @@ export function Home({ ctx }) {
   }
 
   const D = home.data;
-  const F = D.featured;
   const collections = cols.data;
-  const redis = D.rediscover || null;
-  const ownedShelf = F.items.filter(i => i.owned).slice(0, 3);
-  const missShelf = F.items.filter(i => !i.owned).slice(0, 3);
-  const openRediscover = () => redis && ctx.openItem(redis);
 
-  const isEmptyHoard = (collections && collections.length === 0) ||
-    (collections && collections.length > 0 && collections.every(c => (c.owned || 0) + (c.missing || 0) === 0));
+  const hasAnyActivity = collections && (
+    collections.some(c => (c.owned || 0) > 0) ||
+    collections.some(c => c.user && ((c.owned || 0) + (c.missing || 0)) > 0)
+  );
+  const isEmptyHoard = !hasAnyActivity || !D;
+
+  const F = D?.featured;
+  const redis = D?.rediscover || null;
+  const ownedShelf = F?.items?.filter(i => i.owned).slice(0, 3) ?? [];
+  const missShelf = F?.items?.filter(i => !i.owned).slice(0, 3) ?? [];
+  const openRediscover = () => redis && ctx.openItem(redis);
 
   if (isEmptyHoard) {
     return (
@@ -164,7 +168,7 @@ export function Home({ ctx }) {
           <div className="panel" style={{ overflow: "hidden" }}>
             <div style={{ padding: "20px 24px 0" }}><div className="eyebrow">Rediscover</div></div>
             <div className="rediscover">
-              <Cover item={{ title: redis.title, sub: redis.sub, type: redis.type, color: redis.color }} h={188} onClick={openRediscover} />
+              <Cover item={redis} h={188} onClick={openRediscover} />
               <div className="copy">
                 <div className="ago">You acquired this {redis.acquired}</div>
                 <h3>{redis.title}</h3>
@@ -255,15 +259,19 @@ export function HomeNew({ ctx, art = "Covers" }) {
   if (home.error || cols.error) return <ErrorState error={home.error || cols.error} onRetry={() => { home.refetch(); cols.refetch(); }} />;
 
   const D = home.data;
-  const F = D.featured;
   const collections = cols.data;
-  const redis = D.rediscover || null;
-  const ownedShelf = F.items.filter(i => i.owned).slice(0, 3);
-  const missShelf = F.items.filter(i => !i.owned).slice(0, 3);
-  const openRediscover = () => redis && ctx.openItem(redis);
 
-  const isEmptyHoard = (collections && collections.length === 0) ||
-    (collections && collections.length > 0 && collections.every(c => (c.owned || 0) + (c.missing || 0) === 0));
+  const hasAnyActivity = collections && (
+    collections.some(c => (c.owned || 0) > 0) ||
+    collections.some(c => c.user && ((c.owned || 0) + (c.missing || 0)) > 0)
+  );
+  const isEmptyHoard = !hasAnyActivity || !D;
+
+  const F = D?.featured;
+  const redis = D?.rediscover || null;
+  const ownedShelf = F?.items?.filter(i => i.owned).slice(0, 3) ?? [];
+  const missShelf = F?.items?.filter(i => !i.owned).slice(0, 3) ?? [];
+  const openRediscover = () => redis && ctx.openItem(redis);
 
   if (isEmptyHoard) {
     return (
@@ -349,7 +357,7 @@ export function HomeNew({ ctx, art = "Covers" }) {
           <div className="section-head" style={{ marginTop: 34 }}><div className="eyebrow">Rediscover</div></div>
           <div className="panel" style={{ overflow: "hidden" }}>
             <div className="rediscover">
-              <Cover item={{ title: redis.title, sub: redis.sub, type: redis.type, color: redis.color }} h={188} onClick={openRediscover} />
+              <Cover item={redis} h={188} onClick={openRediscover} />
               <div className="copy">
                 <div className="ago">You acquired this {redis.acquired}</div>
                 <h3>{redis.title}</h3>

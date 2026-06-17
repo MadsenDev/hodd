@@ -6,14 +6,29 @@ import { useSearchIndex } from '../hooks';
 import { OllamaClient } from '../api';
 import { searchHoard } from '../engine';
 
-const SEARCH_SAMPLES = [
-  "Which Tolkien books am I missing?",
-  "Game Boy games I haven't completed",
-  "Movies I own but haven't watched",
-  "Books I haven't read yet",
-  "Coins from the 1920s",
-  "Vinyl I'm still missing",
-];
+const TYPE_SUGGESTIONS: Record<string, string[]> = {
+  game:  ["Games I haven't completed", "Games I'm still missing"],
+  book:  ["Books I haven't read yet", "Books I'm still missing"],
+  movie: ["Movies I own but haven't watched", "Movies I'm still missing"],
+  vinyl: ["Vinyl I'm still missing", "Vinyl I own"],
+  coin:  ["Coins I'm still missing", "Coins I own"],
+  comic: ["Comics I haven't read", "Comics I'm still missing"],
+};
+
+function buildSuggestions(idx: any[]): string[] {
+  const types = [...new Set(idx.map(i => i.type).filter(Boolean))] as string[];
+  const colls = [...new Set(idx.map(i => i.coll).filter(Boolean))] as string[];
+  const series = [...new Set(idx.map(i => i.series).filter(Boolean))] as string[];
+  const out: string[] = [];
+  for (const t of types) {
+    const s = TYPE_SUGGESTIONS[t];
+    if (s) out.push(s[0]);
+    if (out.length >= 4) break;
+  }
+  if (series.length > 0 && out.length < 6) out.push(`${series[0]} items I'm missing`);
+  if (colls.length > 0 && out.length < 6) out.push(`Everything in ${colls[0]}`);
+  return out.slice(0, 6);
+}
 
 export function SearchView({ initial, ctx, ollamaModel }) {
   const index = useSearchIndex();
@@ -90,7 +105,7 @@ export function SearchView({ initial, ctx, ollamaModel }) {
       </div>
       <div className="add-examples" style={{ marginTop: 12 }}>
         <span className="add-examples-lbl">Try</span>
-        {SEARCH_SAMPLES.map(s => <div key={s} className="chip" onClick={() => run(s)}>{s}</div>)}
+        {buildSuggestions(index.data || []).map(s => <div key={s} className="chip" onClick={() => run(s)}>{s}</div>)}
       </div>
 
       {value.trim() && (

@@ -9,7 +9,7 @@ import { OllamaClient, addItem, lookupMetadata, invalidateCache, getSettings } f
 import { Onboarding, LoadingScreen } from './views/Onboarding';
 import { TYPE_COLL, TYPE_COLOR, TYPE_LABEL, parseHoardLines } from './engine';
 import { typeIcon } from './icons';
-import { CreateCollectionModal, AddItemModal, FORMAT_OPTIONS, CONDITION_OPTIONS, COMPLETENESS_OPTIONS } from './forms';
+import { CreateCollectionModal, AddItemModal, FORMAT_OPTIONS, CONDITION_OPTIONS, COMPLETENESS_OPTIONS, PLATFORM_OPTS } from './forms';
 import { Home, HomeNew } from './views/Home';
 import { Collections, CollectionsNew } from './views/Collections';
 import { CollectionDetail } from './views/CollectionDetail';
@@ -201,7 +201,6 @@ const FIELD_OPTS = {
   Completeness: COMPLETENESS_OPTIONS,
   Condition: CONDITION_OPTIONS,
 };
-const PLATFORM_OPTS = ["Game Boy", "Game Boy Color", "Game Boy Advance", "NES", "SNES", "N64", "GameCube", "Wii", "Wii U", "Switch", "PS1", "PS2", "PS3", "PS4", "PS5", "Xbox", "Xbox 360", "Xbox One", "Xbox Series X", "PC", "Sega Genesis", "Sega Saturn", "Dreamcast", "3DS", "DS"];
 
 function AddCard({ item, onChange, onRemove, collOpts }) {
   const [showAlt, setShowAlt] = React.useState(false);
@@ -241,12 +240,21 @@ function AddCard({ item, onChange, onRemove, collOpts }) {
             {item.fields.filter(f => f.k !== "Title" && f.k !== "Type").map((f, i0) => {
               const i = item.fields.indexOf(f);
               const isAsk = f.c === "ask";
-              const dropOpts = FIELD_OPTS[f.k] || (f.k === "Platform" && item.type === "game" ? PLATFORM_OPTS : null)
-                            || (f.k === "Edition" && FORMAT_OPTIONS[item.type] ? FORMAT_OPTIONS[item.type] : null);
+              const isPlatform = f.k === "Platform" && item.type === "game";
+              const dropOpts = !isPlatform && (FIELD_OPTS[f.k] || (f.k === "Edition" && FORMAT_OPTIONS[item.type] ? FORMAT_OPTIONS[item.type] : null));
               return (
                 <div className={"add-field" + (isAsk ? " ask" : "")} key={f.k}>
                   <span className="afk">{f.k}</span>
-                  {dropOpts ? (
+                  {isPlatform ? (
+                    <input
+                      className="afv-input"
+                      list="hodd-platform-list"
+                      value={/^Confirm/i.test(String(f.v)) ? "" : f.v}
+                      placeholder={isAsk ? "Platform" : ""}
+                      onChange={e => setField(i, e.target.value)}
+                      autoComplete="off"
+                    />
+                  ) : dropOpts ? (
                     <select
                       className="afv-input"
                       value={/^Confirm/i.test(String(f.v)) ? "" : f.v}
@@ -465,6 +473,9 @@ function AddDesktop({ onClose, onAdded, ctx, ollamaModel }) {
 
   return (
     <div className="modal-scrim" onClick={onClose}>
+      <datalist id="hodd-platform-list">
+        {PLATFORM_OPTS.map(o => <option key={o} value={o} />)}
+      </datalist>
       <div className="modal modal-lg" onClick={e => e.stopPropagation()}>
         <div className="modal-head">
           <div className="t">
@@ -600,7 +611,7 @@ export default function App() {
   const [searchInit, setSearchInit] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [createCollOpen, setCreateCollOpen] = useState(false);
-  const [addItemColl, setAddItemColl] = useState(null);
+  const [addItemColl, setAddItemColl] = useState<{ coll: any; prefill?: any } | null>(null);
   const [dataVer, setDataVer] = useState(0);
   const bumpData = () => setDataVer(v => v + 1);
   const [topSearch, setTopSearch] = useState("");
@@ -628,7 +639,7 @@ export default function App() {
     },
     search(q) { setSearchInit(q || ""); push("search"); scrollTop(); },
     newCollection() { setCreateCollOpen(true); },
-    addToCollection(coll) { setAddItemColl(coll); },
+    addToCollection(coll, prefill?) { setAddItemColl({ coll, prefill }); },
   };
 
   useEffect(() => { scrollTop(); }, [view]);
@@ -702,6 +713,7 @@ export default function App() {
   if (onboarded === false) return (
     <Onboarding onDone={(prefs) => {
       if (prefs) setTweak({ theme: prefs.theme, accent: prefs.accent });
+      user.refetch();
       setOnboarded(true);
     }} />
   );
@@ -726,9 +738,9 @@ export default function App() {
       {createCollOpen && <CreateCollectionModal
         onClose={() => setCreateCollOpen(false)}
         onCreated={(rec) => { setCreateCollOpen(false); bumpData(); ctx.openCollection(rec.id); }} />}
-      {addItemColl && <AddItemModal collection={addItemColl}
+      {addItemColl && <AddItemModal collection={addItemColl.coll} prefill={addItemColl.prefill}
         onClose={() => setAddItemColl(null)}
-        onAdded={() => { setAddItemColl(null); bumpData(); }} />}
+        onAdded={(rec) => { setAddItemColl(null); bumpData(); }} />}
       <Toaster />
       <TweaksPanel>
         <TweakSection label="Layout" />

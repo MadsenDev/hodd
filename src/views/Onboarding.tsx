@@ -1,16 +1,7 @@
 // @ts-nocheck
 import React, { useState, useEffect } from 'react';
 import { typeIcon, HoddMark, I } from '../icons';
-import { saveSetting, createCollection, invalidateCache } from '../api';
-
-const COLLECTION_TYPES = [
-  { type: "game",  label: "Games" },
-  { type: "book",  label: "Books" },
-  { type: "movie", label: "Movies" },
-  { type: "coin",  label: "Coins" },
-  { type: "comic", label: "Comics" },
-  { type: "vinyl", label: "Vinyl" },
-];
+import { saveSetting, invalidateCache } from '../api';
 
 // Mirrors the accent palette in App.tsx: [light a, soft, deep] / [dark a, soft, deep]
 const ACCENTS = {
@@ -57,27 +48,17 @@ export function LoadingScreen() {
   );
 }
 
-const STEPS = ["Welcome", "Your name", "Collections", "Appearance", "Review"];
+const STEPS = ["Welcome", "Your name", "Appearance", "Review"];
 
 export function Onboarding({ onDone }) {
   const [step, setStep] = useState(0);
   const [name, setName] = useState("");
-  const [selected, setSelected] = useState(new Set());
   const [theme, setTheme] = useState("light");
   const [accent, setAccent] = useState(ACCENT_KEYS[0]);
   const [creating, setCreating] = useState(false);
 
   // Live-apply appearance whenever the choice changes.
   useEffect(() => { applyAppearance(theme, accent); }, [theme, accent]);
-
-  function toggleType(type) {
-    setSelected(prev => {
-      const next = new Set(prev);
-      if (next.has(type)) next.delete(type);
-      else next.add(type);
-      return next;
-    });
-  }
 
   const go = (n) => setStep(Math.max(0, Math.min(STEPS.length - 1, n)));
 
@@ -86,11 +67,6 @@ export function Onboarding({ onDone }) {
     if (name.trim()) saveSetting("user.name", name.trim());
     saveSetting("theme", theme);
     saveSetting("accent", accent);
-    for (const { type, label } of COLLECTION_TYPES) {
-      if (selected.has(type)) {
-        await createCollection({ name: `My ${label}`, type, accent, template: [] });
-      }
-    }
     saveSetting("onboarded", "1");
     invalidateCache();
     onDone({ theme, accent });
@@ -105,8 +81,6 @@ export function Onboarding({ onDone }) {
       </div>
     );
   }
-
-  const chosen = COLLECTION_TYPES.filter(c => selected.has(c.type));
 
   return (
     <div className="ob-root">
@@ -164,7 +138,7 @@ export function Onboarding({ onDone }) {
 
           {step === 1 && (
             <div className="ob-panel" key="s1">
-              <div className="ob-eyebrow">Step 1 of 4</div>
+              <div className="ob-eyebrow">Step 1 of 3</div>
               <h1 className="ob-title">What should we call you?</h1>
               <p className="ob-sub">Hodd will greet you by name. You can change this anytime in Settings.</p>
               <input
@@ -182,28 +156,7 @@ export function Onboarding({ onDone }) {
 
           {step === 2 && (
             <div className="ob-panel" key="s2">
-              <div className="ob-eyebrow">Step 2 of 4</div>
-              <h1 className="ob-title">What do you collect?</h1>
-              <p className="ob-sub">Pick a few to get started — we'll create a collection for each. You can add more later.</p>
-              <div className="ob-grid">
-                {COLLECTION_TYPES.map(({ type, label }) => {
-                  const on = selected.has(type);
-                  return (
-                    <button key={type} className={`ob-type${on ? " on" : ""}`} onClick={() => toggleType(type)}>
-                      <span className="tic">{typeIcon(type, { size: 26, stroke: 1.7 })}</span>
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-              <Footer step={step} onBack={() => go(1)} onNext={() => go(3)}
-                nextLabel={selected.size ? "Continue" : "Skip for now"} />
-            </div>
-          )}
-
-          {step === 3 && (
-            <div className="ob-panel" key="s3">
-              <div className="ob-eyebrow">Step 3 of 4</div>
+              <div className="ob-eyebrow">Step 2 of 3</div>
               <h1 className="ob-title">Make it yours.</h1>
               <p className="ob-sub">Choose a look. Everything updates live — see for yourself below.</p>
 
@@ -233,12 +186,12 @@ export function Onboarding({ onDone }) {
 
               <PreviewMock />
 
-              <Footer step={step} onBack={() => go(2)} onNext={() => go(4)} nextLabel="Continue" />
+              <Footer step={step} onBack={() => go(1)} onNext={() => go(3)} nextLabel="Continue" />
             </div>
           )}
 
-          {step === 4 && (
-            <div className="ob-panel" key="s4">
+          {step === 3 && (
+            <div className="ob-panel" key="s3">
               <div className="ob-eyebrow">Almost done</div>
               <h1 className="ob-title">Ready when you are.</h1>
               <p className="ob-sub">Here's how Hodd will be set up. You can change any of this later.</p>
@@ -248,17 +201,7 @@ export function Onboarding({ onDone }) {
                   <span className="lbl">Name</span>
                   <span className="val">{name.trim() || <span style={{ color: "var(--mute)", fontWeight: 400 }}>Not set</span>}</span>
                 </div>
-                <div className="ob-sum-row">
-                  <span className="lbl">Collections</span>
-                  <span className="val">
-                    {chosen.length
-                      ? chosen.map(c => (
-                          <span key={c.type} className="ob-chip">{typeIcon(c.type, { size: 15, stroke: 1.8 })}My {c.label}</span>
-                        ))
-                      : <span style={{ color: "var(--mute)", fontWeight: 400 }}>You can add these later</span>}
-                  </span>
-                </div>
-                <div className="ob-sum-row">
+<div className="ob-sum-row">
                   <span className="lbl">Appearance</span>
                   <span className="val">
                     <span className="ob-dot" style={{ background: (theme === "dark" ? ACCENTS[accent].dark : ACCENTS[accent].light)[0] }} />
@@ -267,7 +210,7 @@ export function Onboarding({ onDone }) {
                 </div>
               </div>
 
-              <Footer step={step} onBack={() => go(3)} onNext={finish} nextLabel="Create my hoard" nextIcon />
+              <Footer step={step} onBack={() => go(2)} onNext={finish} nextLabel="Create my hoard" nextIcon />
             </div>
           )}
         </div>

@@ -366,27 +366,46 @@ export function OllamaSetupCard() {
           </>
         );
 
-      case 'pulling':
+      case 'pulling': {
+        const pct = pullPct ?? 0;
+        const indeterminate = pullPct === null;
+        const label = pullStatus
+          ? pullStatus.replace(/pulling [a-f0-9]{12,}.*/, 'Downloading weights…').replace(/^pulling /, 'Pulling ')
+          : 'Connecting…';
         return (
-          <>
-            <p className="settings-hint" style={{ marginBottom: 12 }}>
-              Pulling <span className="model-tag">{selectedModel}</span>…
-            </p>
-            {pullPct !== null ? (
-              <>
-                <div style={{ height: 8, borderRadius: 6, background: 'var(--panel-3)', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', borderRadius: 6, background: 'var(--accent)', width: `${pullPct}%`, transition: 'width .4s var(--ease)' }} />
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--mute)', marginTop: 6 }}>{Math.round(pullPct)}%</div>
-              </>
-            ) : (
-              <p className="settings-hint" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <I.refresh size={14} className="spin" />
-                {pullStatus || 'Connecting…'}
-              </p>
-            )}
-          </>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <I.refresh size={14} className="spin" style={{ color: 'var(--accent)', flexShrink: 0 }} />
+              <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>
+                Downloading <span className="model-tag">{selectedModel}</span>
+              </span>
+            </div>
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                <span style={{ fontSize: 12, color: 'var(--mute)' }}>{label}</span>
+                {!indeterminate && (
+                  <span style={{ fontSize: 12, color: 'var(--mute)', fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>
+                    {pct}%
+                  </span>
+                )}
+              </div>
+              <div style={{ height: 6, borderRadius: 6, background: 'var(--panel-3)', overflow: 'hidden' }}>
+                {indeterminate ? (
+                  <div style={{
+                    height: '100%', borderRadius: 6, background: 'var(--accent)', opacity: 0.5,
+                    width: '40%', animation: 'indeterminate-bar 1.4s ease-in-out infinite',
+                  }} />
+                ) : (
+                  <div style={{
+                    height: '100%', borderRadius: 6, background: 'var(--accent)',
+                    width: `${pct}%`, transition: 'width .4s var(--ease)',
+                  }} />
+                )}
+              </div>
+            </div>
+          </div>
         );
+      }
 
       case 'ready':
         return (

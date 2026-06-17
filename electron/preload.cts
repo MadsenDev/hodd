@@ -56,6 +56,9 @@ contextBridge.exposeInMainWorld('hoddDesktop', {
     pickImage: (multi?: boolean) => ipcRenderer.invoke('hodd:image:pick', multi),
     deleteImage: (filename: string) => ipcRenderer.invoke('hodd:image:delete', filename),
     resetAll: () => ipcRenderer.invoke('hodd:reset-all'),
+    getSuggestions: (collectionId: string) => ipcRenderer.invoke('hodd:suggestions:get', collectionId),
+    fetchSuggestions: (collectionId: string, type: string, ownedItems: { title: string; series?: string | null; sub?: string | null }[]) =>
+      ipcRenderer.invoke('hodd:suggestions:fetch', collectionId, type, ownedItems),
     getSavedFilters: () => ipcRenderer.invoke('hodd:filters:get'),
     saveFilter: (name: string, query: string, collectionId?: string) => ipcRenderer.invoke('hodd:filters:save', name, query, collectionId),
     deleteFilter: (id: number) => ipcRenderer.invoke('hodd:filters:delete', id),

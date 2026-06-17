@@ -625,6 +625,23 @@ function registerIpc(): void {
     if (!VALID_MODEL.test(model)) return { ok: false, error: 'Invalid model name' };
     const win = BrowserWindow.fromWebContents(event.sender);
 
+    const stripAnsi = (s: string) => s.replace(/\x1B\[[0-9;?]*[A-Za-z]/g, '').replace(/\r/g, '').trim();
+
+    function parsePullLine(raw: string): { status: string; pct: number | null } {
+      const clean = stripAnsi(raw).trim();
+      if (!clean) return { status: '', pct: null };
+      try {
+        const obj = JSON.parse(clean) as { status?: string; total?: number; completed?: number };
+        const pct = (obj.total && obj.completed)
+          ? Math.round((obj.completed / obj.total) * 100)
+          : null;
+        return { status: obj.status ?? '', pct };
+      } catch {
+        const m = clean.match(/(\d+)%/);
+        return { status: clean.replace(/\s+/g, ' ').replace(/[^\x20-\x7E]/g, ''), pct: m ? parseInt(m[1]) : null };
+      }
+    }
+
     return new Promise<{ ok: boolean; error?: string }>(resolve => {
       const proc = spawn('ollama', ['pull', model], { shell: false });
 
@@ -635,27 +652,21 @@ function registerIpc(): void {
         buf = lines.pop() ?? '';
         for (const line of lines) {
           if (!line.trim()) continue;
-          try {
-            const obj = JSON.parse(line) as {
-              status?: string;
-              total?: number;
-              completed?: number;
-            };
-            const pct = (obj.total && obj.completed)
-              ? Math.round((obj.completed / obj.total) * 100)
-              : null;
-            win?.webContents.send('hodd:ollama:pull-progress', {
-              status: obj.status ?? '',
-              pct,
-            });
-          } catch {
-            win?.webContents.send('hodd:ollama:pull-progress', { status: line, pct: null });
+          const parsed = parsePullLine(line);
+          if (parsed.status || parsed.pct !== null) {
+            win?.webContents.send('hodd:ollama:pull-progress', parsed);
           }
         }
       });
 
       proc.stderr.on('data', (d: Buffer) => {
-        win?.webContents.send('hodd:ollama:pull-progress', { status: d.toString().trim(), pct: null });
+        const lines = d.toString().split(/[\r\n]+/);
+        for (const line of lines) {
+          const parsed = parsePullLine(line);
+          if (parsed.status || parsed.pct !== null) {
+            win?.webContents.send('hodd:ollama:pull-progress', parsed);
+          }
+        }
       });
 
       proc.on('close', code => resolve(code === 0 ? { ok: true } : { ok: false, error: `ollama pull exited with code ${code}` }));
@@ -715,11 +726,22 @@ function registerIpc(): void {
         const res = await fetch(`https://api.rawg.io/api/games?search=${encodeURIComponent(query)}&page_size=10&key=${settings['api.rawg']}`);
         const data = await res.json() as { results?: { name?: string; released?: string; background_image?: string; platforms?: { platform?: { name?: string } }[] }[] };
         const sorted = (data.results ?? []).sort((a, b) => titleSim(b.name ?? '', query) - titleSim(a.name ?? '', query));
-        return sorted.slice(0, 3).map(d => ({
+        const top = sorted.slice(0, 3);
+        const steamCovers = new Map<string, string>();
+        await Promise.all(top.map(async d => {
+          if (!d.name) return;
+          try {
+            const steamRes = await fetch(`https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(d.name)}&cc=us&l=en`);
+            const steamData = await steamRes.json() as { items?: { id: number; name: string }[] };
+            const match = steamData.items?.find(i => titleSim(i.name, d.name!) > 0.85);
+            if (match) steamCovers.set(d.name, `https://cdn.akamai.steamstatic.com/steam/apps/${match.id}/library_600x900_2x.jpg`);
+          } catch (_) {}
+        }));
+        return top.map(d => ({
           title:     d.name ?? query,
           year:      d.released ? parseInt(d.released.slice(0, 4)) : null,
           sub:       d.platforms?.[0]?.platform?.name ?? null,
-          cover_url: d.background_image ?? null,
+          cover_url: (d.name && steamCovers.get(d.name)) || d.background_image || null,
         }));
       }
       if (type === 'movie' && settings['api.omdb']) {
@@ -738,6 +760,73 @@ function registerIpc(): void {
       console.warn('[HODD lookup]', type, (e as Error).message?.replace(/((?:api)?key)=[^&\s]+/gi, '$1=REDACTED'));
       return null;
     }
+  });
+
+  // Suggested items
+  ipcMain.handle('hodd:suggestions:get', (_e, collectionId: string) => db.getSuggestedItems(collectionId));
+
+  ipcMain.handle('hodd:suggestions:fetch', async (
+    _e,
+    collectionId: string,
+    type: string,
+    ownedItems: { title: string; series?: string | null; sub?: string | null }[]
+  ) => {
+    if (db.hasSuggestionsFor(collectionId)) return db.getSuggestedItems(collectionId);
+
+    const settings = db.getSettings();
+    const ownedTitles = new Set(ownedItems.map(i => (i.title ?? '').toLowerCase()));
+
+    // Build deduplicated search queries: prefer explicit series, fall back to first 2 words of title
+    const queries = new Map<string, string>(); // query → series label
+    for (const item of ownedItems) {
+      const q = item.series?.trim() || item.title.split(/\s+/).slice(0, 2).join(' ');
+      if (q) queries.set(q.toLowerCase(), q);
+    }
+
+    const results: { title: string; sub?: string | null; year?: number | null; cover_url?: string | null; series?: string | null; type?: string | null }[] = [];
+
+    for (const [, query] of queries) {
+      try {
+        if (type === 'game' && settings['api.rawg']) {
+          const res = await fetch(`https://api.rawg.io/api/games?search=${encodeURIComponent(query)}&page_size=12&key=${settings['api.rawg']}`);
+          const data = await res.json() as { results?: { name?: string; released?: string; background_image?: string; platforms?: { platform?: { name?: string } }[] }[] };
+          for (const g of data.results ?? []) {
+            if (g.name && !ownedTitles.has(g.name.toLowerCase())) {
+              results.push({ title: g.name, year: g.released ? parseInt(g.released.slice(0, 4)) : null, sub: g.platforms?.[0]?.platform?.name ?? null, cover_url: g.background_image ?? null, series: query, type });
+            }
+          }
+        } else if (type === 'book') {
+          const res = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=10&fields=title,author_name,first_publish_year,cover_i`);
+          const data = await res.json() as { docs?: { title?: string; author_name?: string[]; first_publish_year?: number; cover_i?: number }[] };
+          for (const d of data.docs ?? []) {
+            if (d.title && !ownedTitles.has(d.title.toLowerCase())) {
+              results.push({ title: d.title, year: d.first_publish_year ?? null, sub: d.author_name?.[0] ?? null, cover_url: d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-L.jpg` : null, series: query, type });
+            }
+          }
+        } else if (type === 'vinyl') {
+          const res = await fetch(`https://musicbrainz.org/ws/2/release/?query=${encodeURIComponent(query)}&fmt=json&limit=10`, { headers: { 'User-Agent': 'HODD-Desktop/1.0 (hodd-app)' } });
+          const data = await res.json() as { releases?: { title?: string; date?: string; 'artist-credit'?: { artist?: { name?: string } }[]; id?: string }[] };
+          for (const d of data.releases ?? []) {
+            if (d.title && !ownedTitles.has(d.title.toLowerCase())) {
+              results.push({ title: d.title, year: d.date ? parseInt(d.date.slice(0, 4)) : null, sub: d['artist-credit']?.[0]?.artist?.name ?? null, cover_url: d.id ? `https://coverartarchive.org/release/${d.id}/front-250` : null, series: query, type });
+            }
+          }
+        } else if (type === 'movie' && settings['api.omdb']) {
+          const res = await fetch(`https://www.omdbapi.com/?s=${encodeURIComponent(query)}&apikey=${settings['api.omdb']}&type=movie`);
+          const data = await res.json() as { Search?: { Title?: string; Year?: string; Poster?: string }[] };
+          for (const d of data.Search ?? []) {
+            if (d.Title && !ownedTitles.has(d.Title.toLowerCase())) {
+              results.push({ title: d.Title, year: d.Year ? parseInt(d.Year) : null, sub: null, cover_url: d.Poster && d.Poster !== 'N/A' ? d.Poster : null, series: query, type });
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[HODD suggestions]', type, (e as Error).message);
+      }
+    }
+
+    db.upsertSuggestedItems(collectionId, results.slice(0, 24));
+    return db.getSuggestedItems(collectionId);
   });
 
   // Saved filters
