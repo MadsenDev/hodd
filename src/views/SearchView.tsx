@@ -8,8 +8,7 @@ import { searchHoard } from '../engine';
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface AppCtx {
-  openItem: (item: Record<string, unknown>) => void;
-  [key: string]: unknown;
+  openItem: (item: Record<string, unknown>, collection?: unknown) => void;
 }
 
 interface SearchViewProps {
@@ -102,8 +101,8 @@ export function SearchView({ initial, ctx, ollamaModel }: SearchViewProps) {
     if (ollamaOn && ollamaAvail && ollamaModel) {
       setAiPending(true);
       try {
-        const result = await OllamaClient.ollamaSearch(query, index.data, ollamaModel);
-        if (result) { setOut(result); setPhase("done"); }
+        const result = await OllamaClient.ollamaSearch(query, index.data as Record<string, unknown>[], ollamaModel);
+        if (result) { setOut(result as SearchResult); setPhase("done"); }
       } catch (_) {
         // Fix 9: exit AI loading state and surface failure to the user
         setPhase("done");
@@ -130,7 +129,7 @@ export function SearchView({ initial, ctx, ollamaModel }: SearchViewProps) {
         <input
           className="ai-input"
           autoFocus
-          placeholder={"Ask anything… e.g. "Game Boy games I haven't completed""}
+          placeholder={`Ask anything… e.g. "Game Boy games I haven't completed"`}
           aria-label="Search your collection"
           value={value}
           onChange={e => setValue(e.target.value)}

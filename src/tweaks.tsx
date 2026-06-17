@@ -262,7 +262,7 @@ export function TweakRadio({ label, value, options, onChange }: {
 
   const labelLen = (o: RadioOption) => String(typeof o === 'object' ? o.label : o).length;
   const maxLen = options.reduce((m, o) => Math.max(m, labelLen(o)), 0);
-  const fitsAsSegments = maxLen <= ({ 2: 16, 3: 10 } as Record<number, number>)[options.length] ?? 0;
+  const fitsAsSegments = maxLen <= (({ 2: 16, 3: 10 } as Partial<Record<number, number>>)[options.length] ?? 0);
   if (!fitsAsSegments) {
     const resolve = (s: string) => {
       const m = options.find((o) => String(typeof o === 'object' ? o.value : o) === s);

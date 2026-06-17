@@ -4,7 +4,7 @@ import { Cover, FluidCover, useNarrow, StarRating } from '../components';
 import { useCollection, useStory } from '../hooks';
 import { saveCatalog, saveStory, saveHolding, removeHolding, removeItem, setItemOwned, toggleFavorite, OllamaClient, saveRating, getCachedSuggestions } from '../api';
 import { useFavorite } from '../hooks';
-import { ItemEditForm, SUBLABELS, OWNERSHIP_LABEL } from '../forms';
+import { ItemEditForm, ItemRecord, SUBLABELS, OWNERSHIP_LABEL } from '../forms';
 import { toaster } from '../toaster';
 
 // ── Local interfaces ──────────────────────────────────────────────────────────
@@ -16,38 +16,39 @@ interface CollectionLike {
   items?: ItemLike[];
 }
 
+// N.B. Many fields allow null because that's what the DB stores for cleared values.
 interface ItemLike {
   id: string;
-  title?: string;
-  sub?: string;
+  title?: string | null;
+  sub?: string | null;
   type?: string;
-  series?: string;
+  series?: string | null;
   collectionId?: string;
   collName?: string;
-  cover_url?: string;
-  gallery?: string[];
-  owned?: boolean;
-  format?: string;
-  year?: string | number;
-  region?: string;
-  completeness?: string;
-  completed?: boolean;
-  grade?: string;
-  edition?: string;
-  pressing?: string;
-  watched?: boolean;
-  condition?: string;
-  acquired?: string;
-  notes?: string;
-  ownership?: string;
-  loan_from?: string;
-  loan_date?: string;
-  purchase_price?: string | number;
-  purchase_currency?: string;
-  current_value?: string | number;
-  loan_to?: string;
-  loan_to_date?: string;
-  custom?: Array<{ label: string; value: string }>;
+  cover_url?: string | null;
+  gallery?: string[] | null;
+  owned?: boolean | null;
+  format?: string | null;
+  year?: string | number | null;
+  region?: string | null;
+  completeness?: string | null;
+  completed?: boolean | null;
+  grade?: string | null;
+  edition?: string | null;
+  pressing?: string | null;
+  watched?: boolean | null;
+  condition?: string | null;
+  acquired?: string | null;
+  notes?: string | null;
+  ownership?: string | null;
+  loan_from?: string | null;
+  loan_date?: string | null;
+  purchase_price?: string | number | null;
+  purchase_currency?: string | null;
+  current_value?: string | number | null;
+  loan_to?: string | null;
+  loan_to_date?: string | null;
+  custom?: Array<{ label: string; value: string }> | null;
   rating?: number | null;
   [key: string]: unknown;
 }
@@ -114,11 +115,12 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }: 
   React.useEffect(() => {
     const collId = collection?.id || item.collectionId;
     if (!collId) return;
-    getCachedSuggestions(collId).then((all: ItemLike[]) => {
+    getCachedSuggestions(collId).then((all: unknown) => {
+      const allItems = (all as ItemLike[]) || [];
       const series = item.series?.toLowerCase();
       const titleWords = item.title?.toLowerCase().split(/\s+/).slice(0, 2).join(' ');
       const owned = new Set([item.title?.toLowerCase()]);
-      const filtered = (all || []).filter((s: ItemLike) => {
+      const filtered = allItems.filter((s: ItemLike) => {
         const sq = (s.series || '').toLowerCase();
         return (series ? sq === series : sq === titleWords) && !owned.has((s.title || '').toLowerCase());
       });
@@ -133,7 +135,7 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }: 
   const storyState = useStory(item.id);
   const type = item.type || "game";
   const story = storyOv || storyState.data || fallbackStory(item);
-  const pool = (collection && collection.items) ? collection.items : (fallback.data ? fallback.data.items : []);
+  const pool = (collection && collection.items) ? collection.items : ((fallback.data as { items?: ItemLike[] } | null)?.items ?? []);
   const poolIdx = pool.findIndex((i: ItemLike) => i.id === item.id);
   const prevItem = poolIdx > 0 ? pool[poolIdx - 1] : null;
   const nextItem = poolIdx >= 0 && poolIdx < pool.length - 1 ? pool[poolIdx + 1] : null;
@@ -160,7 +162,7 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }: 
   const owned = item.owned !== false;
   const medium = (item.format && item.format !== "—" && item.format !== "Owned") ? item.format : null;
   const subLabel = SUBLABELS[type] || "Detail";
-  const facts: [string, unknown][] = [
+  const rawFacts: unknown[] = [
     ["Status", owned ? (OWNERSHIP_LABEL[item.ownership as string] || "Owned") : "Wishlist"],
     owned && ["Format", medium],
     ["Year", item.year],
@@ -184,7 +186,10 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }: 
     owned && item.current_value && ["Est. value", `${item.purchase_currency || "USD"} ${item.current_value}`],
     owned && item.loan_to && ["Lent to", item.loan_to],
     owned && item.loan_to && item.loan_to_date && ["Since (lent)", item.loan_to_date],
-  ].filter((f): f is [string, unknown] => !!f && (f as unknown[])[1] != null && (f as unknown[])[1] !== "") as [string, unknown][];
+  ];
+  const facts: [string, unknown][] = rawFacts.filter(Boolean).filter(
+    (f): f is [string, unknown] => Array.isArray(f) && f.length >= 2 && typeof f[0] === 'string' && f[1] != null && f[1] !== ""
+  );
 
   return (
     <div className="view-enter">
@@ -347,9 +352,9 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }: 
           )}
 
           {editing
-            ? <ItemEditForm item={item} type={type} subLabel={subLabel} story={story}
+            ? <ItemEditForm item={item as ItemRecord} type={type} subLabel={subLabel} story={story}
                 onCancel={() => setEditing(false)}
-                onSave={({ owned: isOwned, holding, canonical, story: paras }: { owned?: boolean; holding?: Record<string, unknown>; canonical?: ItemLike & { gallery?: string[] | string }; story?: string[] }) => {
+                onSave={({ owned: isOwned, holding, canonical, story: paras }) => {
                   if (canonical) {
                     // Fix 5: pass gallery as an array directly — db.ts (jsonOrNull) handles
                     // JSON stringification for the SQLite TEXT column. Stringifying here
@@ -359,18 +364,18 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }: 
                   }
                   if (paras) { saveStory(item.id, paras); setStoryOv(paras); }
                   const photoUpdate = {
-                    cover_url: canonical?.cover_url ?? null,
-                    gallery: Array.isArray(canonical?.gallery) ? canonical.gallery
-                      : (canonical?.gallery ? (() => { try { return JSON.parse(canonical.gallery as string); } catch (_) { return item.gallery; } })() : null),
+                    cover_url: typeof canonical?.cover_url === 'string' ? canonical.cover_url : null,
+                    gallery: Array.isArray(canonical?.gallery) ? (canonical.gallery as string[])
+                      : (canonical?.gallery ? (() => { try { return JSON.parse(canonical.gallery as string) as string[]; } catch (_) { return item.gallery; } })() : null),
                   };
                   if (isOwned === false) {
                     removeHolding(item.id);
                     if (isUserItem) setItemOwned(item.id, false);
                     setItem({ ...item, ...(canonical || {}), ...photoUpdate, owned: false, format: null, completeness: null, completed: null, grade: null, pressing: null, edition: null, condition: null, acquired: null, watched: undefined, notes: null, ownership: null, loan_from: null, loan_date: null, purchase_price: null, purchase_currency: null, current_value: null, loan_to: null, loan_to_date: null });
                   } else {
-                    saveHolding(item.id, holding);
+                    if (holding) saveHolding(item.id, holding as Parameters<typeof saveHolding>[1]);
                     if (isUserItem && item.owned === false) setItemOwned(item.id, true);
-                    setItem({ ...item, ...(canonical || {}), ...photoUpdate, owned: true, ...holding });
+                    setItem({ ...item, ...(canonical || {}), ...photoUpdate, owned: true, ...(holding || {}) });
                   }
                   setEditing(false);
                 }} />
@@ -387,9 +392,11 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }: 
               <StarRating
                 value={rating}
                 size={20}
-                onChange={(v: number) => {
-                  setRatingOptimistic(v);
-                  saveRating(item.id, v);
+                onChange={(v: number | null) => {
+                  if (v !== null) {
+                    setRatingOptimistic(v);
+                    saveRating(item.id, v);
+                  }
                 }}
               />
               {rating && (
@@ -406,7 +413,8 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }: 
                 onClick={async () => {
                   setGeneratingStory(true);
                   try {
-                    const paras = await OllamaClient.generateStory(item, ollamaModel);
+                    const storyItem = { ...item, year: typeof item.year === 'number' ? item.year : (item.year ? Number(item.year) || null : null) };
+                    const paras = await OllamaClient.generateStory(storyItem, ollamaModel);
                     saveStory(item.id, paras);
                     setStoryOv(paras);
                   } catch (e) {

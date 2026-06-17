@@ -43,7 +43,7 @@ export function useAsync<T>(
 export const useUser            = ()            => useAsync(() => getUser(), []);
 export const useCollections     = ()            => useAsync(() => getCollections(), []);
 export const useCollectionsFull = ()            => useAsync(() => getCollectionsExpanded(), []);
-export const useCollection      = (id: string) => useAsync(() => (id ? getCollection(id) : Promise.resolve(null)), [id]);
+export const useCollection      = (id: string | null | undefined) => useAsync(() => (id ? getCollection(id) : Promise.resolve(null)), [id]);
 export const useHome            = ()            => useAsync(() => getHome(), []);
 export const useStats           = ()            => useAsync(() => getStats(), []);
 export const useStory           = (id: string) => useAsync(() => getStory(id), [id]);

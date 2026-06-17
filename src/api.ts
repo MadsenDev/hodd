@@ -44,7 +44,7 @@ interface HoddApi {
 interface CatalogItem {
   id: string;
   collectionId: string;
-  title: string;
+  title?: string;
   year?: number | null;
   sub?: string | null;
   type?: string;
@@ -86,6 +86,7 @@ interface UserCollection {
   accent: string;
   template: string[];
   user: boolean;
+  [key: string]: unknown;
 }
 
 interface UserItem {
@@ -556,7 +557,7 @@ export async function getCollections(): Promise<unknown[]> {
     // Only count items the user has explicitly interacted with (has a holding record)
     const explicit = cat.filter(c => c.collectionId === coll.id && !!h[c.id]).map(c => joinHolding(c, h[c.id]));
     const extra    = (ui[coll.id] || []).map(applyEdits);
-    const all      = explicit.concat(extra);
+    const all      = ([...explicit, ...extra] as Array<{ owned?: boolean; [key: string]: unknown }>);
     const owned    = all.filter(i => i.owned !== false).length;
     const missing  = all.filter(i => i.owned === false).length;
     return Object.assign({}, coll, { owned, missing, pct: all.length ? Math.round(owned / all.length * 100) : 0 });
@@ -603,7 +604,7 @@ export async function getCollection(id: string): Promise<unknown> {
 
   const cat = _catalog || [], h = _holdings || {};
   const explicit = cat.filter(c => c.collectionId === id && !!h[c.id]).map(c => joinHolding(c, h[c.id]));
-  const items    = explicit.concat(extra);
+  const items    = ([...explicit, ...extra] as Array<{ owned?: boolean; [key: string]: unknown }>);
   const owned    = items.filter(i => i.owned !== false).length;
   const missing  = items.filter(i => i.owned === false).length;
   const pct      = items.length ? Math.round(owned / items.length * 100) : 0;
@@ -942,7 +943,7 @@ export const OllamaClient = {
     } catch (_) { return null; }
   },
 
-  async generateStory(item: { title?: string; year?: number | null; sub?: string | null; type?: string; format?: string | null; edition?: string | null; grade?: string | null; acquired?: string | null }, model: string): Promise<string[]> {
+  async generateStory(item: { title?: string | null; year?: number | string | null; sub?: string | null; type?: string; format?: string | null; edition?: string | null; grade?: string | null; acquired?: string | null }, model: string): Promise<string[]> {
     const subLabel = item.type === "book" ? "Author" : item.type === "game" ? "Platform"
       : item.type === "coin" ? "Mint" : item.type === "vinyl" ? "Artist"
       : item.type === "movie" ? "Director" : item.type === "comic" ? "Publisher" : "Detail";

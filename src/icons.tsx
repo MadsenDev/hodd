@@ -2,7 +2,7 @@ import React from 'react';
 
 // Fix 10: Added aria-label and role="img" to HoddMark for accessibility.
 // Use aria-hidden="true" at call sites where the icon is purely decorative.
-export function HoddMark({ size = 28, stroke = 1.6, color = "currentColor", style = undefined, className = undefined }) {
+export function HoddMark({ size = 28, stroke = 1.6, color = "currentColor", style = undefined as React.CSSProperties | undefined, className = undefined as string | undefined }) {
   return (
     <svg width={size} height={size} viewBox="0 0 100 100" fill="none" style={style} className={className}
       role="img" aria-label="HODD">

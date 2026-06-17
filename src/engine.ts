@@ -480,7 +480,7 @@ export function searchHoard(query: string, idx: any[]): SearchResult {
       const seriesMatches = scored.filter(s => words.some(w => norm(s.i.series || "").includes(w)));
       if (seriesMatches.length === scored.length && scored[0].i.series) {
         seriesHit = scored[0].i.series;
-        tokens.push(["Series", seriesHit]);
+        tokens.push(["Series", seriesHit!]);
       } else {
         const kw = [...new Set(scored.flatMap(s => s.hits))].join(", ");
         if (kw) tokens.push(["Keywords", kw]);

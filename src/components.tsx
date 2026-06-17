@@ -1,6 +1,7 @@
 import React from 'react';
 import { HoddMark, Icon, I, typeIcon } from './icons';
 import { toaster } from './toaster';
+import type { Toast } from './toaster';
 
 // ── TypeScript interfaces ─────────────────────────────────────────────────────
 
@@ -9,15 +10,15 @@ interface UserInfo {
 }
 
 interface SidebarProps {
-  active: string;
+  active: string | null;
   onNav: (view: string) => void;
-  user?: UserInfo;
+  user?: UserInfo | null;
   onSettings: () => void;
 }
 
 interface TopbarProps {
   title?: string;
-  subtitle?: string;
+  subtitle?: string | null;
   bare?: boolean;
   onSearch?: () => void;
   onAdd?: () => void;
@@ -31,7 +32,7 @@ interface MobileTopBarProps {
 }
 
 interface MobileTabsProps {
-  active: string;
+  active: string | null;
   onNav: (view: string) => void;
 }
 
@@ -77,14 +78,14 @@ interface CompletionRingProps {
 interface CoverItem {
   type?: string;
   coverType?: string;
-  color?: string;
-  cover_url?: string;
-  title?: string;
-  sub?: string;
+  color?: string | null;
+  cover_url?: string | null;
+  title?: string | null;
+  sub?: string | null;
   year?: number | string | null;
-  author?: string;
-  format?: string;
-  gallery?: string[];
+  author?: string | null;
+  format?: string | null;
+  gallery?: string[] | null;
   [key: string]: unknown;
 }
 
@@ -324,7 +325,7 @@ export function Cover({ item, h = 168, ghost = false, onClick = undefined, glyph
       <div className={cls} style={{ width: w, height: h, borderRadius: br, overflow: "hidden",
         boxShadow: type === "book" ? `inset -8px 0 14px ${rgba("#000",0.28)}, 0 14px 26px -14px rgba(0,0,0,.85)` : undefined }}
         onClick={onClick}>
-        <img src={item.cover_url.startsWith("http://") || item.cover_url.startsWith("https://") ? item.cover_url : `hodd-img://${item.cover_url}`} alt={item.title}
+        <img src={item.cover_url.startsWith("http://") || item.cover_url.startsWith("https://") ? item.cover_url : `hodd-img://${item.cover_url}`} alt={item.title ?? ""}
           style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
           onError={() => setImgError(true)} />
       </div>
@@ -806,12 +807,6 @@ export function SpineMosaic({ accent, pct = 0, count = 14, height = 150 }: Spine
 }
 
 // ── Toast notifications ───────────────────────────────────────────────────────
-
-interface Toast {
-  id: string;
-  kind: "error" | "success" | "info";
-  message: string;
-}
 
 export function Toaster() {
   const [toasts, setToasts] = React.useState<Toast[]>([]);

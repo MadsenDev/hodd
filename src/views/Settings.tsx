@@ -106,7 +106,7 @@ export function Settings({ onSaved = undefined }: SettingsProps) {
   async function handleImport() {
     setImporting(true);
     try {
-      const result = await importData();
+      const result = await importData() as { canceled?: boolean } | null;
       if (result && !result.canceled) {
         setImportDone(true);
         if (onSaved) onSaved();
@@ -123,7 +123,7 @@ export function Settings({ onSaved = undefined }: SettingsProps) {
   async function handleExport() {
     setExporting(true);
     try {
-      const result = await exportData();
+      const result = await exportData() as { canceled?: boolean } | null;
       if (result && !result.canceled) {
         setExportDone(true);
         toaster.success("Archive exported successfully.");

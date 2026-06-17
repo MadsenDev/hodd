@@ -75,7 +75,7 @@ const AI_OVERRIDE_FIELDS = new Set(["Year"]);
 export interface NavigationContext {
   go(v: string): void;
   openCollection(id: string): void;
-  openItem(it: any, coll: any): void;
+  openItem(it: any, coll?: any): void;
   back(): void;
   search(q: string): void;
   newCollection(): void;
@@ -404,7 +404,7 @@ function AddDesktop({ onClose, onAdded, ctx, ollamaModel }: {
     return parsed.map(item => {
       const normItem = normalizeTitle(item.title);
       const existing = idx.find((e: any) => normalizeTitle(e.title || "") === normItem);
-      if (existing) return { ...item, duplicate: { id: existing.id, title: existing.title, type: existing.type } };
+      if (existing) return { ...item, duplicate: { id: (existing as any).id, title: (existing as any).title, type: (existing as any).type } };
       return item;
     });
   }
@@ -428,8 +428,9 @@ function AddDesktop({ onClose, onAdded, ctx, ollamaModel }: {
         lookupMetadata(item.type, item.raw).catch(() => { metaFailed = true; return null; }),
       ]);
       // Apply online lookup first (lower confidence), then AI on top (higher confidence)
-      const afterLookup = onlineLookup && onlineLookup.length
-        ? applyEnrichment(item, onlineLookup[0], false, true)
+      const lookupArr = onlineLookup as any[] | null;
+      const afterLookup = lookupArr && lookupArr.length
+        ? applyEnrichment(item, lookupArr[0], false, true)
         : item;
       const enriched = aiEnrich ? applyEnrichment(afterLookup, aiEnrich, true) : afterLookup;
       // Stash all lookup candidates so the user can switch if the top match is wrong
@@ -738,7 +739,7 @@ export default function App() {
   let body: React.ReactNode;
   if (view === "home") body = t.homeStyle === "Dashboard" ? <Home ctx={ctx} /> : <HomeNew ctx={ctx} art={t.shelfArt} />;
   else if (view === "collections") body = t.collStyle === "Cards" ? <Collections ctx={ctx} /> : <CollectionsNew ctx={ctx} art={t.shelfArt} />;
-  else if (view === "collection") body = <CollectionDetail collId={collId} ctx={ctx} />;
+  else if (view === "collection") body = <CollectionDetail collId={collId ?? ""} ctx={ctx} />;
   else if (view === "item") body = <ItemDetail item={item} collection={itemColl} ctx={ctx} ollamaModel={activeOllamaModel} />;
   else if (view === "search") body = <SearchView initial={searchInit} ctx={ctx} ollamaModel={activeOllamaModel} />;
   else if (view === "statistics") body = <Statistics ctx={ctx} />;
@@ -770,7 +771,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <Sidebar active={activeNav} onNav={navTo} user={user.data} onSettings={() => navTo("settings")} />
+      <Sidebar active={activeNav} onNav={navTo} user={user.data ?? undefined} onSettings={() => navTo("settings")} />
       <MobileTopBar onAdd={() => setAddOpen(true)} />
       <div className="main" ref={scrollRef} style={{ height: "100vh", overflowY: "auto" }}>
         <div className="canvas">

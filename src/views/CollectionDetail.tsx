@@ -7,6 +7,20 @@ import { deleteCollection, saveCatalog, saveHolding, setItemOwned, removeItem, f
 const CONDITIONS = ["Mint", "Near Mint", "Very Good", "Good", "Fair", "Poor"];
 const STATUSES: [string, string][] = [["owned", "Owned"], ["wishlist", "Wishlist"], ["borrowed", "Borrowed"], ["subscription", "Subscription"]];
 
+interface CollectionData {
+  id?: string;
+  name?: string;
+  type?: string;
+  accent?: string;
+  owned?: number;
+  missing?: number;
+  pct?: number;
+  sub?: string;
+  user?: boolean;
+  items?: any[];
+  template?: string[];
+}
+
 interface CollectionDetailProps {
   collId: string;
   ctx: {
@@ -17,7 +31,8 @@ interface CollectionDetailProps {
 }
 
 export function CollectionDetail({ collId, ctx }: CollectionDetailProps) {
-  const { data, loading, error, refetch } = useCollection(collId);
+  const { data: rawData, loading, error, refetch } = useCollection(collId);
+  const data = rawData as CollectionData | null;
   const [filter, setFilter] = React.useState<string>("all");
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
   const [sort, setSort] = React.useState<string>("default");
@@ -126,7 +141,7 @@ export function CollectionDetail({ collId, ctx }: CollectionDetailProps) {
   async function applySetCondition() {
     // Only apply to owned items
     for (const id of selected) {
-      const item = data.items.find((i: any) => i.id === id);
+      const item = data?.items?.find((i: any) => i.id === id);
       if (item && item.owned !== false) {
         saveHolding(id, { condition: conditionValue });
       }
@@ -163,7 +178,8 @@ export function CollectionDetail({ collId, ctx }: CollectionDetailProps) {
   if (error) return <ErrorState error={error} onRetry={refetch} />;
   if (!data) return <EmptyState title="Collection not found" />;
 
-  const { name, sub, accent, owned, missing, pct, type, items } = data;
+  const { name, sub, accent, owned, missing, pct, type } = data;
+  const items = data.items ?? [];
   const ownedItemCount = items.filter((i: any) => i.owned !== false).length;
   const missingCount = items.filter((i: any) => i.owned === false).length;
 

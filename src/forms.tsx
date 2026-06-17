@@ -13,38 +13,38 @@ interface CollectionRecord {
   [key: string]: unknown;
 }
 
-interface ItemRecord {
+export interface ItemRecord {
   id?: string;
-  title?: string;
-  sub?: string;
+  title?: string | null;
+  sub?: string | null;
   year?: number | null;
-  type?: string;
-  series?: string;
+  type?: string | null;
+  series?: string | null;
   series_number?: number | null;
-  region?: string;
+  region?: string | null;
   cover_url?: string | null;
-  gallery?: string[];
-  color?: string;
-  format?: string;
-  condition?: string;
-  acquired?: string;
-  completeness?: string;
-  grade?: string;
-  pressing?: string;
-  edition?: string;
-  notes?: string;
-  loan_from?: string;
-  loan_date?: string;
+  gallery?: string[] | null;
+  color?: string | null;
+  format?: string | null;
+  condition?: string | null;
+  acquired?: string | null;
+  completeness?: string | null;
+  grade?: string | null;
+  pressing?: string | null;
+  edition?: string | null;
+  notes?: string | null;
+  loan_from?: string | null;
+  loan_date?: string | null;
   purchase_price?: number | null;
-  purchase_currency?: string;
+  purchase_currency?: string | null;
   current_value?: number | null;
-  loan_to?: string;
-  loan_to_date?: string;
-  watched?: boolean;
-  completed?: boolean;
-  owned?: boolean;
-  ownership?: string;
-  custom?: Array<{ label: string; value: string }>;
+  loan_to?: string | null;
+  loan_to_date?: string | null;
+  watched?: boolean | null;
+  completed?: boolean | null;
+  owned?: boolean | null;
+  ownership?: string | null;
+  custom?: Array<{ label: string; value: string }> | null;
   [key: string]: unknown;
 }
 
@@ -675,7 +675,7 @@ export function CreateCollectionModal({ onClose, onCreated }: CreateCollectionMo
       name, type, accent,
       template: tmpl.map(s => s.trim()).filter(Boolean),
     });
-    onCreated(rec);
+    onCreated(rec as CollectionRecord);
   }
 
   return (
@@ -766,7 +766,7 @@ export function AddItemModal({ collection, onClose, onAdded, prefill = null }: A
     }
     try {
       const rec = addItem(collection.id, draft);
-      onAdded(rec);
+      onAdded(rec as ItemRecord);
     } catch (err) {
       console.error('[AddItemModal] addItem failed:', err);
       setAddError('Failed to add item. Please try again.');
