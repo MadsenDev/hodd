@@ -1,24 +1,189 @@
-// @ts-nocheck
 // Electron IPC data layer. All reads go through an in-memory cache; writes
 // update the cache immediately so the UI never waits on IPC, then persist async.
 
 import { toaster } from './toaster';
 
-const COLL_NAME = { books: "Books", movies: "Movies", games: "Games", coins: "Coins", comics: "Comics", vinyl: "Vinyl" };
+// ── IPC interface types ───────────────────────────────────────────────────────
+
+interface HoddApi {
+  getCatalog(): Promise<CatalogItem[]>;
+  getHoldings(): Promise<Record<string, HoldingRecord>>;
+  getCatalogOverrides(): Promise<Record<string, Partial<CatalogItem>>>;
+  getUserCollections(): Promise<UserCollection[]>;
+  getUserItems(): Promise<Record<string, UserItem[]>>;
+  getBaseCollections(): Promise<BaseCollection[]>;
+  saveHolding(id: string, patch: Partial<HoldingRecord>): Promise<void>;
+  removeHolding(id: string): Promise<void>;
+  deleteItem(id: string): Promise<void>;
+  setItemOwned(id: string, owned: boolean): Promise<void>;
+  updateUserItem(id: string, patch: Record<string, unknown>): Promise<void>;
+  saveCatalog(id: string, patch: Record<string, unknown>): Promise<void>;
+  saveStory(id: string, paragraphs: string[]): Promise<void>;
+  saveSetting(key: string, value: unknown): Promise<void>;
+  getFavorites(): Promise<string[]>;
+  removeFavorite(id: string): Promise<void>;
+  addFavorite(id: string): Promise<void>;
+  deleteCollection(id: string): Promise<void>;
+  createCollection(def: CollectionDef): Promise<{ id: string }>;
+  addItem(collectionId: string, draft: Record<string, unknown>): Promise<{ id: string }>;
+  getUser(): Promise<UserRecord>;
+  getStatsConfig(): Promise<StatsConfig | null>;
+  getGrowth(): Promise<GrowthEntry[]>;
+  getHomeConfig(): Promise<HomeConfig | null>;
+  getHomeDynamic(): Promise<HomeDynamic | null>;
+  getTimeline(): Promise<TimelineEntry[]>;
+  getStory(id: string): Promise<string[] | null>;
+  getSettings(): Promise<Record<string, string>>;
+  lookup(type: string, query: string): Promise<unknown>;
+  getAllStories(): Promise<Record<string, string[]>>;
+  resetAll(): Promise<void>;
+  getSuggestions(collectionId: string): Promise<unknown[]>;
+  fetchSuggestions(collectionId: string, type: string, ownedItems: OwnedItem[]): Promise<unknown[]>;
+}
+
+interface CatalogItem {
+  id: string;
+  collectionId: string;
+  title: string;
+  year?: number | null;
+  sub?: string | null;
+  type?: string;
+  region?: string | null;
+  series?: string | null;
+  color?: string | null;
+  rating?: number | null;
+  [key: string]: unknown;
+}
+
+interface HoldingRecord {
+  ownership?: string | null;
+  notes?: string | null;
+  loan_from?: string | null;
+  loan_date?: string | null;
+  loan_to?: string | null;
+  loan_to_date?: string | null;
+  format?: string | null;
+  completeness?: string | null;
+  grade?: string | null;
+  pressing?: string | null;
+  edition?: string | null;
+  condition?: string | null;
+  acquired?: string | null;
+  watched?: boolean;
+  completed?: boolean;
+  custom?: unknown;
+  purchase_price?: number | null;
+  purchase_currency?: string;
+  current_value?: number | null;
+  rating?: number | null;
+  [key: string]: unknown;
+}
+
+interface UserCollection {
+  id: string;
+  name: string;
+  type: string;
+  accent: string;
+  template: string[];
+  user: boolean;
+}
+
+interface UserItem {
+  id: string;
+  collectionId: string;
+  owned?: boolean;
+  color?: string;
+  title?: string;
+  year?: number | null;
+  sub?: string | null;
+  type?: string;
+  rating?: number | null;
+  watched?: boolean;
+  [key: string]: unknown;
+}
+
+interface BaseCollection {
+  id: string;
+  name: string;
+  type: string;
+  accent?: string;
+}
+
+interface CollectionDef {
+  name?: string;
+  type?: string;
+  accent?: string;
+  template?: unknown[];
+}
+
+interface UserRecord {
+  id: string;
+  name: string;
+  joined: string;
+}
+
+interface StatsConfig {
+  growth: GrowthEntry[];
+  [key: string]: unknown;
+}
+
+interface GrowthEntry {
+  [key: string]: unknown;
+}
+
+interface HomeConfig {
+  featured?: unknown;
+  recent?: unknown[];
+  recentIds?: string[];
+  headlineStats?: HeadlineStat[];
+  wishlist?: { itemIds?: string[]; items?: unknown[] };
+  rediscover?: unknown;
+  [key: string]: unknown;
+}
+
+interface HomeDynamic {
+  recent?: unknown[];
+  addedThisMonth?: number;
+  rediscover?: unknown;
+  [key: string]: unknown;
+}
+
+interface HeadlineStat {
+  id?: string;
+  icon?: string;
+  value?: string | number;
+  label?: string;
+  ring?: number | null;
+  unit?: string;
+  [key: string]: unknown;
+}
+
+interface TimelineEntry {
+  [key: string]: unknown;
+}
+
+interface OwnedItem {
+  title: string;
+  series?: string | null;
+  sub?: string | null;
+}
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const COLL_NAME: Record<string, string> = { books: "Books", movies: "Movies", games: "Games", coins: "Coins", comics: "Comics", vinyl: "Vinyl" };
 export const HOLDING_FIELDS = ["ownership", "notes", "loan_from", "loan_date", "loan_to", "loan_to_date", "format", "completeness", "grade", "pressing", "edition", "condition", "acquired", "watched", "custom", "purchase_price", "purchase_currency", "current_value"];
 const USER_HUES = ["#6366f1", "#5BA47A", "#5C8AD6", "#C9A24C", "#CF6B5A", "#7FB0C4", "#9B7BD4", "#C0392B"];
 
-let _catalog   = null;
-let _holdings  = null;
-let _catOv     = null;
-let _userColls = null;
-let _userItems = null;
-let _baseCols  = null;
+let _catalog:   CatalogItem[] | null = null;
+let _holdings:  Record<string, HoldingRecord> | null = null;
+let _catOv:     Record<string, Partial<CatalogItem>> | null = null;
+let _userColls: UserCollection[] | null = null;
+let _userItems: Record<string, UserItem[]> | null = null;
+let _baseCols:  BaseCollection[] | null = null;
 
-function resolveId(id) { return id; }
-function ipc() { return (window as any).hoddDesktop?.api; }
+function ipc(): HoddApi | undefined { return (window as unknown as { hoddDesktop?: { api?: HoddApi } }).hoddDesktop?.api; }
 
-async function ensureCache() {
+async function ensureCache(): Promise<void> {
   if (_catalog && _holdings && _catOv && _userColls && _userItems && _baseCols) return;
   const a = ipc();
   if (!a) {
@@ -36,9 +201,10 @@ async function ensureCache() {
   _catalog = cat; _holdings = h; _catOv = co; _userColls = uc; _userItems = ui; _baseCols = bc;
 }
 
-export function invalidateCache() { _holdings = null; _catOv = null; _userColls = null; _userItems = null; _favorites = null; _searchIndex = null; }
+// Fix 2: _catalog added to invalidateCache
+export function invalidateCache(): void { _catalog = null; _holdings = null; _catOv = null; _userColls = null; _userItems = null; _favorites = null; _searchIndex = null; }
 
-export async function resetAllData() {
+export async function resetAllData(): Promise<void> {
   const a = ipc(); if (a) await a.resetAll();
   invalidateCache();
 }
@@ -48,14 +214,22 @@ export async function getOnboarded(): Promise<boolean> {
   return settings['onboarded'] === '1';
 }
 
-function readOverrides()  { return _holdings  || {}; }
-function readCatalogOv()  { return _catOv     || {}; }
-function readUserColls()  { return _userColls || []; }
-function readUserItems()  { return _userItems || {}; }
+// Fix 13: readOverrides was a misleading name — it reads holdings, not overrides. Renamed to readHoldings.
+function readHoldings():   Record<string, HoldingRecord> { return _holdings  || {}; }
+function readCatalogOv():  Record<string, Partial<CatalogItem>> { return _catOv     || {}; }
+function readUserColls():  UserCollection[] { return _userColls || []; }
+function readUserItems():  Record<string, UserItem[]> { return _userItems || {}; }
+
+// ── Prompt injection sanitizer ────────────────────────────────────────────────
+
+// Fix 10: sanitize user-supplied strings before embedding in Ollama prompts
+function sanitizeForPrompt(s: string, maxLen = 200): string {
+  return String(s).replace(/[\n\r`]/g, ' ').slice(0, maxLen);
+}
 
 // ── Write operations ─────────────────────────────────────────────────────────
 
-export function saveHolding(id, patch) {
+export function saveHolding(id: string, patch: Partial<HoldingRecord>): void {
   const prev = _holdings && _holdings[id] ? { ..._holdings[id] } : undefined;
   if (!_holdings) _holdings = {};
   _holdings[id] = Object.assign({}, _holdings[id] || {}, patch);
@@ -67,7 +241,7 @@ export function saveHolding(id, patch) {
     toaster.error("Couldn't save changes — please try again.");
   });
 }
-export function saveRating(id, rating) {
+export function saveRating(id: string, rating: number | null): void {
   _searchIndex = null;
   if (String(id).startsWith("i-")) {
     saveCatalog(id, { rating });
@@ -75,7 +249,7 @@ export function saveRating(id, rating) {
     saveHolding(id, { rating });
   }
 }
-export function removeHolding(id) {
+export function removeHolding(id: string): void {
   const prev = _holdings && _holdings[id] ? { ..._holdings[id] } : undefined;
   if (_holdings) delete _holdings[id];
   _searchIndex = null;
@@ -86,9 +260,9 @@ export function removeHolding(id) {
   });
 }
 
-export function removeItem(id) {
+export function removeItem(id: string): void {
   _searchIndex = null;
-  const prevItems = _userItems ? JSON.parse(JSON.stringify(_userItems)) : undefined;
+  const prevItems = _userItems ? JSON.parse(JSON.stringify(_userItems)) as Record<string, UserItem[]> : undefined;
   const prevHolding = _holdings && _holdings[id] ? { ..._holdings[id] } : undefined;
   const prevCatOv = _catOv && _catOv[id] ? { ..._catOv[id] } : undefined;
   const prevFavs = _favorites ? [..._favorites] : undefined;
@@ -111,7 +285,7 @@ export function removeItem(id) {
   });
 }
 
-export function setItemOwned(id, owned) {
+export function setItemOwned(id: string, owned: boolean): void {
   _searchIndex = null;
   const prevOwned = _userItems
     ? Object.values(_userItems).flat().find(i => i.id === id)?.owned
@@ -131,7 +305,7 @@ export function setItemOwned(id, owned) {
     toaster.error("Couldn't update item — please try again.");
   });
 }
-export function saveCatalog(id, patch) {
+export function saveCatalog(id: string, patch: Record<string, unknown>): void {
   _searchIndex = null;
   if (String(id).startsWith("i-")) {
     const prevItem = _userItems
@@ -148,7 +322,7 @@ export function saveCatalog(id, patch) {
     if (a) a.updateUserItem(id, patch).catch(() => {
       if (prevSnap !== undefined && _userItems) {
         for (const collId of Object.keys(_userItems)) {
-          _userItems[collId] = (_userItems[collId] || []).map(i => i.id === id ? prevSnap : i);
+          _userItems[collId] = (_userItems[collId] || []).map(i => i.id === id ? prevSnap as UserItem : i);
         }
       }
       toaster.error("Couldn't save item — please try again.");
@@ -165,12 +339,19 @@ export function saveCatalog(id, patch) {
     });
   }
 }
-export function saveStory(id, paragraphs) {
-  const a = ipc(); if (a) a.saveStory(id, paragraphs);
+
+// Fix 3: saveStory returns a Promise with error handling
+export function saveStory(id: string, paragraphs: string[]): Promise<void> {
+  const a = ipc();
+  if (!a) return Promise.resolve();
+  return a.saveStory(id, paragraphs).catch((err: unknown) => {
+    console.error('[api] saveStory failed:', err);
+    toaster.error("Couldn't save story — please try again.");
+  });
 }
 
 let _favorites: string[] | null = null;
-let _searchIndex: any[] | null = null;
+let _searchIndex: unknown[] | null = null;
 
 export async function getFavorites(): Promise<string[]> {
   if (_favorites) return _favorites;
@@ -184,30 +365,52 @@ export async function isFavorite(id: string): Promise<boolean> {
   return favs.includes(id);
 }
 
+// Fix 6: toggleFavorite saves previous state and rolls back on error
 export function toggleFavorite(id: string, currentlyFav: boolean): void {
   if (!_favorites) _favorites = [];
+  const prevFavs = [..._favorites];
   if (currentlyFav) {
     _favorites = _favorites.filter(f => f !== id);
-    const a = ipc(); if (a) a.removeFavorite(id);
+    const a = ipc();
+    if (a) a.removeFavorite(id).catch((err: unknown) => {
+      console.error('[api] removeFavorite failed:', err);
+      _favorites = prevFavs;
+      toaster.error("Couldn't update favorites — please try again.");
+    });
   } else {
     if (!_favorites.includes(id)) _favorites.push(id);
-    const a = ipc(); if (a) a.addFavorite(id);
+    const a = ipc();
+    if (a) a.addFavorite(id).catch((err: unknown) => {
+      console.error('[api] addFavorite failed:', err);
+      _favorites = prevFavs;
+      toaster.error("Couldn't update favorites — please try again.");
+    });
   }
 }
 
-export function deleteCollection(id) {
+// Fix 5: deleteCollection saves previous state and rolls back on error
+export function deleteCollection(id: string): void {
+  const prevColls = _userColls ? [..._userColls] : null;
+  const prevItems = _userItems ? { ..._userItems } : null;
   if (_userColls) _userColls = _userColls.filter(c => c.id !== id);
   if (_userItems) delete _userItems[id];
-  const a = ipc(); if (a) a.deleteCollection(id);
+  const a = ipc();
+  if (a) a.deleteCollection(id).catch((err: unknown) => {
+    console.error('[api] deleteCollection failed:', err);
+    _userColls = prevColls;
+    _userItems = prevItems;
+    toaster.error("Couldn't delete collection — please try again.");
+  });
 }
 
-export function createCollection(def) {
+// Fix 7: createCollection rolls back optimistic add on error
+export function createCollection(def: CollectionDef): UserCollection {
   const colls = readUserColls();
   const base = (def.name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "coll";
   let id = "u-" + base; let n = 2;
   const taken = colls.map(c => c.id);
   while (taken.indexOf(id) !== -1) { id = "u-" + base + "-" + n; n++; }
-  const rec = {
+  const rec: UserCollection = {
     id,
     name: (def.name || "").trim() || "Untitled collection",
     type: def.type || "other",
@@ -218,46 +421,70 @@ export function createCollection(def) {
   if (!_userColls) _userColls = [];
   _userColls.push(rec);
   const a = ipc();
-  if (a) a.createCollection(def).then(p => { if (p && p.id && p.id !== rec.id) rec.id = p.id; });
+  if (a) a.createCollection(def).then(p => {
+    if (p && p.id && p.id !== rec.id) rec.id = p.id;
+  }).catch((err: unknown) => {
+    console.error('[api] createCollection failed:', err);
+    if (_userColls) _userColls = _userColls.filter(c => c !== rec);
+    toaster.error("Couldn't create collection — please try again.");
+  });
   return rec;
 }
 
-export function addItem(collectionId, draft) {
+// Fix 8: addItem rolls back optimistic add on error
+export function addItem(collectionId: string, draft: Record<string, unknown>): UserItem {
   _searchIndex = null;
   const id = "i-" + Math.random().toString(36).slice(2, 9);
   if (!_userItems) _userItems = {};
   if (!_userItems[collectionId]) _userItems[collectionId] = [];
   const list = _userItems[collectionId];
-  const rec = Object.assign({ id, collectionId, owned: true,
-    color: draft.color || USER_HUES[list.length % USER_HUES.length] }, draft);
+  const rec: UserItem = Object.assign({ id, collectionId, owned: true,
+    color: draft.color as string || USER_HUES[list.length % USER_HUES.length] }, draft);
   list.push(rec);
   const a = ipc();
   if (a) a.addItem(collectionId, draft).then(p => {
     if (p && p.id && p.id !== rec.id) rec.id = p.id;
+  }).catch((err: unknown) => {
+    console.error('[api] addItem failed:', err);
+    if (_userItems && _userItems[collectionId]) {
+      _userItems[collectionId] = _userItems[collectionId].filter(i => i !== rec);
+    }
+    _searchIndex = null;
+    toaster.error("Couldn't add item — please try again.");
   });
   return rec;
 }
 
+// Fix 4: saveSetting returns a Promise with error handling
+export function saveSetting(key: string, value: unknown): Promise<void> {
+  const a = ipc();
+  if (!a) return Promise.resolve();
+  return a.saveSetting(key, value).catch((err: unknown) => {
+    console.error('[api] saveSetting failed:', err);
+    toaster.error("Couldn't save setting — please try again.");
+  });
+}
+
 // ── JOIN helpers ──────────────────────────────────────────────────────────────
 
-function applyCatalogOv(cat) {
+function applyCatalogOv(cat: CatalogItem): CatalogItem {
   const o = readCatalogOv()[cat.id];
   return o ? Object.assign({}, cat, o) : cat;
 }
 
-function applyEdits(it) {
-  const hv = readOverrides()[it.id];
+function applyEdits(it: UserItem): UserItem {
+  const hv = readHoldings()[it.id];
   if (hv) it = Object.assign({}, it, hv, { owned: true });
   const cv = readCatalogOv()[it.id];
   if (cv) it = Object.assign({}, it, cv);
   return it;
 }
 
-function userItemsFor(collectionId) {
+function userItemsFor(collectionId: string): UserItem[] {
   return ((_userItems && _userItems[collectionId]) || []).map(applyEdits);
 }
 
-function joinHolding(cat, h) {
+function joinHolding(cat: CatalogItem, h: HoldingRecord | undefined): CatalogItem & HoldingRecord & { owned: boolean } {
   cat = applyCatalogOv(cat);
   return Object.assign({}, cat, {
     owned: !!h,
@@ -286,42 +513,42 @@ function joinHolding(cat, h) {
 
 // ── Read endpoints ────────────────────────────────────────────────────────────
 
-export function getUser() {
+export function getUser(): Promise<UserRecord> {
   const a = ipc();
   return a ? a.getUser() : Promise.resolve({ id: "local", name: "Collector", joined: "2019" });
 }
 
-export async function getCatalog() {
-  await ensureCache(); return _catalog;
+export async function getCatalog(): Promise<CatalogItem[]> {
+  await ensureCache(); return _catalog!;
 }
 
-export async function getHoldings() {
-  await ensureCache(); return _holdings;
+export async function getHoldings(): Promise<Record<string, HoldingRecord>> {
+  await ensureCache(); return _holdings!;
 }
 
-export async function getItem(id) {
+export async function getItem(id: string): Promise<(CatalogItem & HoldingRecord & { owned: boolean }) | null> {
   await ensureCache();
   const row = (_catalog || []).find(c => c.id === id);
   if (!row) return null;
-  return joinHolding(row, _holdings && _holdings[id]);
+  return joinHolding(row, _holdings ? _holdings[id] : undefined);
 }
 
-export async function getItems(ids) {
-  const out = [];
+export async function getItems(ids: string[]): Promise<(CatalogItem & HoldingRecord & { owned: boolean })[]> {
+  const out: (CatalogItem & HoldingRecord & { owned: boolean })[] = [];
   for (const id of ids) { const it = await getItem(id); if (it) out.push(it); }
   return out;
 }
 
-export async function getCollectionItems(collectionId) {
+export async function getCollectionItems(collectionId: string): Promise<(CatalogItem & HoldingRecord & { owned: boolean })[]> {
   await ensureCache();
   return (_catalog || [])
     .filter(c => c.collectionId === collectionId)
-    .map(c => joinHolding(c, _holdings && _holdings[c.id]));
+    .map(c => joinHolding(c, _holdings ? _holdings[c.id] : undefined));
 }
 
 // Returns catalog items related to the owned items: same series or same sub (platform/author/etc.)
 
-export async function getCollections() {
+export async function getCollections(): Promise<unknown[]> {
   await ensureCache();
   const cat = _catalog || [], h = _holdings || {}, ui = _userItems || {};
 
@@ -347,23 +574,23 @@ export async function getCollections() {
   return built.concat(made);
 }
 
-export async function getStats() {
+export async function getStats(): Promise<StatsConfig> {
   const a = ipc();
   if (!a) return { growth: [] };
   const [conf, growth] = await Promise.all([
     a.getStatsConfig(),
     a.getGrowth().catch(() => null),
   ]);
-  const base = conf || { growth: [] };
+  const base: StatsConfig = conf || { growth: [] };
   if (growth?.length) base.growth = growth;
   return base;
 }
 
-export async function getCollection(id) {
+export async function getCollection(id: string): Promise<unknown> {
   await ensureCache();
-  const resolved = resolveId(id);
-  const made  = (_userColls || []).find(c => c.id === resolved);
-  const extra = userItemsFor(resolved);
+  // Fix 11: resolveId was a no-op identity function — inlined id directly
+  const made  = (_userColls || []).find(c => c.id === id);
+  const extra = userItemsFor(id);
 
   if (made) {
     const ownedN  = extra.filter(i => i.owned !== false).length;
@@ -375,29 +602,29 @@ export async function getCollection(id) {
   }
 
   const cat = _catalog || [], h = _holdings || {};
-  const explicit = cat.filter(c => c.collectionId === resolved && !!h[c.id]).map(c => joinHolding(c, h[c.id]));
+  const explicit = cat.filter(c => c.collectionId === id && !!h[c.id]).map(c => joinHolding(c, h[c.id]));
   const items    = explicit.concat(extra);
   const owned    = items.filter(i => i.owned !== false).length;
   const missing  = items.filter(i => i.owned === false).length;
   const pct      = items.length ? Math.round(owned / items.length * 100) : 0;
 
-  const meta = (_baseCols || []).find(c => c.id === resolved)
-    || { id: resolved, name: resolved, type: "game", accent: "#6366f1" };
+  const meta = (_baseCols || []).find(c => c.id === id)
+    || { id, name: id, type: "game", accent: "#6366f1" };
 
   return Object.assign({}, meta, { owned, missing, pct,
     sub: owned + " owned · " + missing + " missing", items });
 }
 
-export async function getCollectionsExpanded() {
-  const list = await getCollections(), out = [];
-  for (const c of list) {
-    const full = await getCollection(c.id);
+export async function getCollectionsExpanded(): Promise<unknown[]> {
+  const list = await getCollections(), out: unknown[] = [];
+  for (const c of list as Array<{ id: string; [key: string]: unknown }>) {
+    const full = await getCollection(c.id) as { items?: unknown[] };
     out.push(Object.assign({}, c, { items: full.items || [] }));
   }
   return out;
 }
 
-export async function getHome() {
+export async function getHome(): Promise<HomeConfig | null> {
   const a = ipc();
   if (!a) return null;
   const [homeConf, dynamic] = await Promise.all([
@@ -405,9 +632,9 @@ export async function getHome() {
     a.getHomeDynamic().catch(() => null),
   ]);
   if (!homeConf) return null;
-  const home = Object.assign({}, homeConf);
+  const home: HomeConfig = Object.assign({}, homeConf);
   // Pick the collection with the most owned items; fall back to home.json config if none
-  const allColls = await getCollections();
+  const allColls = await getCollections() as Array<{ id: string; owned: number }>;
   const bestColl = allColls.length
     ? allColls.reduce((best, c) => (c.owned > best.owned ? c : best), allColls[0])
     : null;
@@ -422,7 +649,7 @@ export async function getHome() {
 
     // Patch the "added this month" stat with live data
     if (dynamic?.addedThisMonth !== undefined) {
-      const idx = stats.findIndex((s: any) => s.id === 'added');
+      const idx = stats.findIndex((s: HeadlineStat) => s.id === 'added');
       if (idx >= 0) stats[idx] = { ...stats[idx], value: dynamic.addedThisMonth };
       else stats.unshift({ id: 'added', icon: 'plus', value: dynamic.addedThisMonth, label: 'added\nthis month' });
     }
@@ -430,14 +657,14 @@ export async function getHome() {
     // Patch collection-completion stats with live data (ensureCache already ran)
     if (_catalog && _holdings && _baseCols) {
       const h = _holdings;
-      const liveColls = (_baseCols as any[]).map(bc => {
-        const catItems = (_catalog as any[]).filter(c => c.collectionId === bc.id);
+      const liveColls = (_baseCols as BaseCollection[]).map(bc => {
+        const catItems = (_catalog as CatalogItem[]).filter(c => c.collectionId === bc.id);
         const ownedN = catItems.filter(c => !!h[c.id]).length;
         const totalN = catItems.length;
         const pct = totalN ? Math.round(ownedN / totalN * 100) : 0;
         return { id: bc.id, type: bc.type as string, owned: ownedN, total: totalN, pct };
       });
-      stats.forEach((s: any, i: number) => {
+      stats.forEach((s: HeadlineStat, i: number) => {
         const typeMatch = liveColls.find(c => s.id === c.id || (s.id && s.id === c.type + 's') || (s.id && c.id === s.id));
         if (typeMatch && (s.ring != null || s.unit === '%')) {
           stats[i] = { ...s, value: String(typeMatch.pct), ring: typeMatch.pct };
@@ -445,11 +672,11 @@ export async function getHome() {
       });
 
       // Patch "unread books" stat from live holdings
-      const unreadIdx = stats.findIndex((s: any) => s.id === 'unread');
+      const unreadIdx = stats.findIndex((s: HeadlineStat) => s.id === 'unread');
       if (unreadIdx >= 0) {
-        const catUnread = (_catalog as any[]).filter(c => c.type === 'book' && (_holdings as any)[c.id] && !(_holdings as any)[c.id].watched).length;
-        const userUnread = Object.values(_userItems as Record<string, any[]> || {}).flat()
-          .filter((i: any) => i.type === 'book' && i.owned !== false && !i.watched).length;
+        const catUnread = (_catalog as CatalogItem[]).filter(c => c.type === 'book' && (_holdings as Record<string, HoldingRecord>)[c.id] && !(_holdings as Record<string, HoldingRecord>)[c.id].watched).length;
+        const userUnread = Object.values(_userItems as Record<string, UserItem[]> || {}).flat()
+          .filter((i: UserItem) => i.type === 'book' && i.owned !== false && !i.watched).length;
         stats[unreadIdx] = { ...stats[unreadIdx], value: String(catUnread + userUnread) };
       }
     }
@@ -465,30 +692,26 @@ export async function getHome() {
   return home;
 }
 
-export async function getTimeline() {
+export async function getTimeline(): Promise<TimelineEntry[]> {
   const a = ipc();
   return a ? a.getTimeline() : [];
 }
 
-export async function getStory(id) {
+export async function getStory(id: string | null | undefined): Promise<string[] | null> {
   if (!id) return null;
   const a = ipc(); return a ? a.getStory(id) : null;
 }
 
-export async function getSettings() {
+export async function getSettings(): Promise<Record<string, string>> {
   const a = ipc(); return a ? a.getSettings() : {};
 }
 
-export function saveSetting(key, value) {
-  const a = ipc(); if (a) a.saveSetting(key, value);
-}
-
-export async function lookupMetadata(type, query) {
+export async function lookupMetadata(type: string, query: string): Promise<unknown> {
   const a = ipc(); return a ? a.lookup(type, query) : null;
 }
 
-export async function importData() {
-  const fn = (window as any).hoddDesktop?.importArchive;
+export async function importData(): Promise<unknown> {
+  const fn = (window as unknown as { hoddDesktop?: { importArchive?: () => Promise<{ canceled?: boolean }> } }).hoddDesktop?.importArchive;
   if (!fn) return null;
   const result = await fn();
   if (result && !result.canceled) {
@@ -498,9 +721,9 @@ export async function importData() {
   return result;
 }
 
-export async function exportData() {
+export async function exportData(): Promise<unknown> {
   await ensureCache();
-  const fn = (window as any).hoddDesktop?.exportArchive;
+  const fn = (window as unknown as { hoddDesktop?: { exportArchive?: (payload: unknown) => Promise<unknown> } }).hoddDesktop?.exportArchive;
   if (!fn) return null;
   const a = ipc();
   const [user, stories] = await Promise.all([
@@ -520,7 +743,7 @@ export async function exportData() {
   return fn(payload);
 }
 
-export async function getSearchIndex() {
+export async function getSearchIndex(): Promise<unknown[]> {
   if (_searchIndex) return _searchIndex;
   await ensureCache();
   const cat = _catalog || [], h = _holdings || {};
@@ -529,10 +752,10 @@ export async function getSearchIndex() {
   const activeBaseCollIds = new Set(
     (_baseCols || [])
       .map(bc => bc.id as string)
-      .filter(id => cat.some(c => c.collectionId === id && !!(h as any)[c.id]))
+      .filter(id => cat.some(c => c.collectionId === id && !!(h as Record<string, HoldingRecord>)[c.id]))
   );
   const catIdx = cat.filter(c => activeBaseCollIds.has(c.collectionId)).map(c => {
-    const item = joinHolding(c, h[c.id]);
+    const item = joinHolding(c, h[c.id]) as Record<string, unknown>;
     item.coll = bcMap[c.collectionId] || COLL_NAME[c.collectionId] || "Hoard";
     if (c.type === "game")  item.platform = c.sub;
     if (c.type === "book")  item.author   = c.sub;
@@ -540,11 +763,11 @@ export async function getSearchIndex() {
     if (c.type === "movie") item.director = c.sub;
     return item;
   });
-  const ui = _userItems || {}, uc = _userColls || [], bc = _baseCols || [], userIdx = [];
+  const ui = _userItems || {}, uc = _userColls || [], bc = _baseCols || [], userIdx: Record<string, unknown>[] = [];
   Object.keys(ui).forEach(collId => {
     const coll = uc.find(c => c.id === collId) || bc.find(c => c.id === collId);
     (ui[collId] || []).forEach(it => {
-      const item = applyEdits(it);
+      const item = applyEdits(it) as Record<string, unknown>;
       item.coll = coll ? (coll.name as string) : "My Collection";
       if (item.type === "game")  item.platform = item.sub;
       if (item.type === "book")  item.author   = item.sub;
@@ -557,8 +780,9 @@ export async function getSearchIndex() {
   return _searchIndex;
 }
 
-export async function getCachedSuggestions(collectionId: string): Promise<any[]> {
-  const api = (window as any).hoddDesktop?.api;
+// Fix 12: use ipc() helper instead of accessing hoddDesktop.api directly
+export async function getCachedSuggestions(collectionId: string): Promise<unknown[]> {
+  const api = ipc();
   if (!api?.getSuggestions) return [];
   try { return await api.getSuggestions(collectionId); } catch { return []; }
 }
@@ -566,9 +790,9 @@ export async function getCachedSuggestions(collectionId: string): Promise<any[]>
 export async function fetchSuggestions(
   collectionId: string,
   type: string,
-  ownedItems: { title: string; series?: string | null; sub?: string | null }[]
-): Promise<any[]> {
-  const api = (window as any).hoddDesktop?.api;
+  ownedItems: OwnedItem[]
+): Promise<unknown[]> {
+  const api = ipc();
   if (!api?.fetchSuggestions) return [];
   try {
     return await api.fetchSuggestions(collectionId, type, ownedItems);
@@ -580,35 +804,49 @@ export async function fetchSuggestions(
 
 // ── Ollama local AI client ────────────────────────────────────────────────────
 
-let _ollamaStatus = null;
+interface OllamaStatus {
+  running: boolean;
+  models: string[];
+}
 
-async function checkOllamaStatus() {
+interface OllamaApi {
+  status(): Promise<OllamaStatus>;
+  generate(model: string, prompt: string, system?: string): Promise<string>;
+  chat(model: string, messages: unknown[]): Promise<unknown>;
+}
+
+let _ollamaStatus: OllamaStatus | null = null;
+
+async function checkOllamaStatus(): Promise<OllamaStatus> {
   if (_ollamaStatus) return _ollamaStatus;
-  const o = (window as any).hoddDesktop?.ollama;
+  const o = (window as unknown as { hoddDesktop?: { ollama?: OllamaApi } }).hoddDesktop?.ollama;
   _ollamaStatus = o ? (await o.status()) : { running: false, models: [] };
   return _ollamaStatus;
 }
 
-async function ollamaGenerate(model, prompt, system?) {
-  const o = (window as any).hoddDesktop?.ollama;
+async function ollamaGenerate(model: string, prompt: string, system?: string): Promise<string> {
+  const o = (window as unknown as { hoddDesktop?: { ollama?: OllamaApi } }).hoddDesktop?.ollama;
   if (!o) throw new Error("Ollama not available");
   return o.generate(model, prompt, system);
 }
 
-export const OllamaClient = {
-  invalidateStatus() { _ollamaStatus = null; },
-  async isRunning() { return (await checkOllamaStatus()).running; },
-  async getModels() { return (await checkOllamaStatus()).models; },
+// Fix 9: allowlist for keys that may be merged from LLM output
+const ALLOWED_ENRICH_KEYS = new Set(['title', 'year', 'sub', 'type', 'region', 'series', 'color']);
 
-  async chat(model, messages) {
-    const o = (window as any).hoddDesktop?.ollama;
+export const OllamaClient = {
+  invalidateStatus(): void { _ollamaStatus = null; },
+  async isRunning(): Promise<boolean> { return (await checkOllamaStatus()).running; },
+  async getModels(): Promise<string[]> { return (await checkOllamaStatus()).models; },
+
+  async chat(model: string, messages: unknown[]): Promise<unknown> {
+    const o = (window as unknown as { hoddDesktop?: { ollama?: OllamaApi } }).hoddDesktop?.ollama;
     if (!o) throw new Error("Ollama not available");
     return o.chat(model, messages);
   },
 
   generate: ollamaGenerate,
 
-  async ollamaSearch(query, idx, model) {
+  async ollamaSearch(query: string, idx: Record<string, unknown>[], model: string): Promise<unknown> {
     const systemPrompt = [
       "You are a query parser for HODD, a personal collection management app.",
       "The collection may contain: games, books, movies, coins, comics, vinyl records.",
@@ -623,8 +861,18 @@ export const OllamaClient = {
     ].join(" ");
 
     try {
-      const raw = await ollamaGenerate(model, query, systemPrompt);
-      const filters = JSON.parse(raw.trim().replace(/^```json\s*/, "").replace(/```$/, ""));
+      // Fix 10: sanitize user-supplied query before embedding in prompt
+      const safeQuery = sanitizeForPrompt(query);
+      const raw = await ollamaGenerate(model, safeQuery, systemPrompt);
+      const filters = JSON.parse(raw.trim().replace(/^```json\s*/, "").replace(/```$/, "")) as {
+        type?: string;
+        status?: string;
+        watched?: string;
+        completed?: string;
+        yearFrom?: number;
+        yearTo?: number;
+        keywords?: string[];
+      };
       const results = idx.filter(i => {
         if (filters.type && i.type !== filters.type) return false;
         if (filters.status === "owned"   && i.owned === false) return false;
@@ -633,8 +881,8 @@ export const OllamaClient = {
         if (filters.watched === "yes"    && !i.watched) return false;
         if (filters.completed === "no"   && (i.owned === false || i.completed !== false)) return false;
         if (filters.completed === "yes"  && !i.completed) return false;
-        if (filters.yearFrom && i.year < filters.yearFrom) return false;
-        if (filters.yearTo   && i.year > filters.yearTo)   return false;
+        if (filters.yearFrom && (i.year as number) < filters.yearFrom) return false;
+        if (filters.yearTo   && (i.year as number) > filters.yearTo)   return false;
         if (filters.keywords && filters.keywords.length) {
           const haystack = ((i.title || "") + " " + (i.sub || "") + " " + (i.coll || "")).toLowerCase();
           return filters.keywords.some(kw => haystack.includes(kw.toLowerCase()));
@@ -645,7 +893,7 @@ export const OllamaClient = {
         i.title + (i.year ? " (" + i.year + ")" : "") + " — " + (i.owned ? "owned" : "not owned")
       ).join("; ");
       const answerPrompt = [
-        'The user asked: "' + query + '".',
+        'The user asked: "' + safeQuery + '".',
         results.length
           ? "Found " + results.length + " matching items: " + snippet + "."
           : "No matching items found.",
@@ -664,37 +912,47 @@ export const OllamaClient = {
       if (filters.keywords?.length)  tokens.push(["Keywords",  filters.keywords.join(", ")]);
       return { tokens, results: results.slice(0, 24), total: results.length, summary: (answer as string).trim(), q: query, aiPowered: true };
     } catch (e) {
-      console.warn("[HODD Ollama] search failed, falling back to heuristic:", e.message);
+      console.warn("[HODD Ollama] search failed, falling back to heuristic:", (e as Error).message);
       return null;
     }
   },
 
-  async enrichItem(rawText, type, model) {
-    const prompts = {
-      game:  `Input: "${rawText}"\nType: game\nReturn JSON only: {"title":"clean game title only — no platform name, no year, no edition (e.g. 'Cyberpunk 2077' not 'Cyberpunk 2077 PS4')","year":REAL_RELEASE_YEAR_NOT_FROM_TITLE,"platform":"Game Boy|SNES|GBA|NES|N64|PS1|PS2|PS3|PS4|PS5|Xbox|Xbox 360|Xbox One|PC|Switch|etc","completeness":"CIB|Loose|Sealed|null (null unless explicitly stated)","condition":"Mint|Near Mint|Very Good|Good|Fair|Poor|null (null unless explicitly stated)","series":"franchise/series name or null (e.g. The Legend of Zelda, Mario, Halo)"}`,
-      book:  `Input: "${rawText}"\nType: book\nReturn JSON only: {"title":"exact title","year":YYYY,"author":"Full Name","edition":"First Edition|Paperback|Hardcover|Mass Market|null","series":"book series name or null (e.g. Harry Potter, Dune, The Expanse)"}`,
-      movie: `Input: "${rawText}"\nType: movie\nReturn JSON only: {"title":"exact title","year":YYYY,"director":"Full Name or null","format":"4K Blu-ray|Blu-ray|DVD|Digital|VHS|null","series":"film series/franchise or null (e.g. Marvel Cinematic Universe, James Bond, Star Wars)"}`,
-      vinyl: `Input: "${rawText}"\nType: vinyl\nReturn JSON only: {"title":"exact title","year":YYYY,"artist":"Full Name","pressing":"180g|Original Press|Limited|null","series":"album series or box set name or null"}`,
-      coin:  `Input: "${rawText}"\nType: coin\nReturn JSON only: {"title":"coin name","year":YYYY,"mint":"Philadelphia|Denver|San Francisco|New Orleans|Carson City|null","grade":"MS-63|MS-64|etc or null","series":"coin series or program or null (e.g. State Quarters, Walking Liberty, Morgan Dollar)"}`,
-      comic: `Input: "${rawText}"\nType: comic\nReturn JSON only: {"title":"exact title","year":YYYY,"publisher":"Marvel|DC|Image|Dark Horse|etc","format":"Single Issue|TPB|Hardcover|Omnibus|null","series":"comic series name or null (e.g. Amazing Spider-Man, Batman, Saga)"}`,
+  async enrichItem(rawText: string, type: string, model: string): Promise<Record<string, unknown> | null> {
+    // Fix 10: sanitize user-supplied rawText before embedding in prompt
+    const safeRawText = sanitizeForPrompt(rawText);
+    const prompts: Record<string, string> = {
+      game:  `Input: "${safeRawText}"\nType: game\nReturn JSON only: {"title":"clean game title only — no platform name, no year, no edition (e.g. 'Cyberpunk 2077' not 'Cyberpunk 2077 PS4')","year":REAL_RELEASE_YEAR_NOT_FROM_TITLE,"platform":"Game Boy|SNES|GBA|NES|N64|PS1|PS2|PS3|PS4|PS5|Xbox|Xbox 360|Xbox One|PC|Switch|etc","completeness":"CIB|Loose|Sealed|null (null unless explicitly stated)","condition":"Mint|Near Mint|Very Good|Good|Fair|Poor|null (null unless explicitly stated)","series":"franchise/series name or null (e.g. The Legend of Zelda, Mario, Halo)"}`,
+      book:  `Input: "${safeRawText}"\nType: book\nReturn JSON only: {"title":"exact title","year":YYYY,"author":"Full Name","edition":"First Edition|Paperback|Hardcover|Mass Market|null","series":"book series name or null (e.g. Harry Potter, Dune, The Expanse)"}`,
+      movie: `Input: "${safeRawText}"\nType: movie\nReturn JSON only: {"title":"exact title","year":YYYY,"director":"Full Name or null","format":"4K Blu-ray|Blu-ray|DVD|Digital|VHS|null","series":"film series/franchise or null (e.g. Marvel Cinematic Universe, James Bond, Star Wars)"}`,
+      vinyl: `Input: "${safeRawText}"\nType: vinyl\nReturn JSON only: {"title":"exact title","year":YYYY,"artist":"Full Name","pressing":"180g|Original Press|Limited|null","series":"album series or box set name or null"}`,
+      coin:  `Input: "${safeRawText}"\nType: coin\nReturn JSON only: {"title":"coin name","year":YYYY,"mint":"Philadelphia|Denver|San Francisco|New Orleans|Carson City|null","grade":"MS-63|MS-64|etc or null","series":"coin series or program or null (e.g. State Quarters, Walking Liberty, Morgan Dollar)"}`,
+      comic: `Input: "${safeRawText}"\nType: comic\nReturn JSON only: {"title":"exact title","year":YYYY,"publisher":"Marvel|DC|Image|Dark Horse|etc","format":"Single Issue|TPB|Hardcover|Omnibus|null","series":"comic series name or null (e.g. Amazing Spider-Man, Batman, Saga)"}`,
     };
-    const prompt = prompts[type] || `Input: "${rawText}"\nReturn JSON only: {"title":"exact title","year":YYYY,"series":"series or franchise name or null"}`;
+    const prompt = prompts[type] || `Input: "${safeRawText}"\nReturn JSON only: {"title":"exact title","year":YYYY,"series":"series or franchise name or null"}`;
     try {
       const raw = await ollamaGenerate(model, prompt,
         "You are a collectibles database. Return ONLY valid JSON. No markdown, no explanations. Use null for unknown fields.");
       const cleaned = (raw as string).trim().replace(/^```(?:json)?\s*/m, "").replace(/\s*```$/m, "");
-      return JSON.parse(cleaned);
+      const parsed = JSON.parse(cleaned) as Record<string, unknown>;
+      // Fix 9: filter LLM output through an allowlist before merging
+      const safePatch = Object.fromEntries(
+        Object.entries(parsed).filter(([k]) => ALLOWED_ENRICH_KEYS.has(k))
+      );
+      return safePatch;
     } catch (_) { return null; }
   },
 
-  async generateStory(item, model) {
+  async generateStory(item: { title?: string; year?: number | null; sub?: string | null; type?: string; format?: string | null; edition?: string | null; grade?: string | null; acquired?: string | null }, model: string): Promise<string[]> {
     const subLabel = item.type === "book" ? "Author" : item.type === "game" ? "Platform"
       : item.type === "coin" ? "Mint" : item.type === "vinyl" ? "Artist"
       : item.type === "movie" ? "Director" : item.type === "comic" ? "Publisher" : "Detail";
+    // Fix 10: sanitize user-supplied item fields before embedding in prompt
+    const safeTitle = sanitizeForPrompt(item.title || '');
+    const safeSub   = item.sub ? sanitizeForPrompt(item.sub) : null;
     const details = [
-      "Title: " + item.title,
+      "Title: " + safeTitle,
       item.year    ? "Year: "    + item.year         : null,
-      item.sub     ? subLabel + ": " + item.sub      : null,
+      safeSub      ? subLabel + ": " + safeSub        : null,
       item.format  ? "Format: "  + item.format       : null,
       item.edition ? "Edition: " + item.edition      : null,
       item.grade   ? "Grade: "   + item.grade        : null,

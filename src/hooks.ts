@@ -1,12 +1,22 @@
-// @ts-nocheck
 import React from 'react';
 import {
   getUser, getCollections, getCollectionsExpanded, getCollection,
   getHome, getStats, getStory, getSearchIndex, getTimeline, isFavorite,
 } from './api';
 
-export function useAsync(fn, deps) {
-  const [state, setState] = React.useState({ data: null, loading: true, error: null });
+// Fix 14 & 15: proper generics and optional onError callback
+// NOTE: call sites should check the returned `.error` field to handle async errors gracefully.
+export function useAsync<T>(
+  fn: () => Promise<T>,
+  deps: React.DependencyList,
+  onError?: (error: unknown) => void,
+): {
+  data: T | null;
+  loading: boolean;
+  error: unknown;
+  refetch: () => void;
+} {
+  const [state, setState] = React.useState<{ data: T | null; loading: boolean; error: unknown }>({ data: null, loading: true, error: null });
   const [nonce, setNonce] = React.useState(0);
 
   React.useEffect(() => {
@@ -16,9 +26,10 @@ export function useAsync(fn, deps) {
       .then(fn)
       .then(
         (data) => { if (alive) setState({ data, loading: false, error: null }); },
-        (error) => {
+        (error: unknown) => {
           if (alive) setState({ data: null, loading: false, error });
           console.error("[HODD] data error:", error);
+          if (onError) onError(error);
         }
       );
     return () => { alive = false; };
@@ -29,18 +40,27 @@ export function useAsync(fn, deps) {
   return { data: state.data, loading: state.loading, error: state.error, refetch };
 }
 
-export const useUser            = ()   => useAsync(() => getUser(), []);
-export const useCollections     = ()   => useAsync(() => getCollections(), []);
-export const useCollectionsFull = ()   => useAsync(() => getCollectionsExpanded(), []);
-export const useCollection      = (id) => useAsync(() => (id ? getCollection(id) : Promise.resolve(null)), [id]);
-export const useHome            = ()   => useAsync(() => getHome(), []);
-export const useStats           = ()   => useAsync(() => getStats(), []);
-export const useStory           = (id) => useAsync(() => getStory(id), [id]);
-export const useSearchIndex     = ()   => useAsync(() => getSearchIndex(), []);
-export const useTimeline        = ()   => useAsync(() => getTimeline(), []);
-export const useFavorite        = (id) => useAsync(() => isFavorite(id), [id]);
+export const useUser            = ()            => useAsync(() => getUser(), []);
+export const useCollections     = ()            => useAsync(() => getCollections(), []);
+export const useCollectionsFull = ()            => useAsync(() => getCollectionsExpanded(), []);
+export const useCollection      = (id: string) => useAsync(() => (id ? getCollection(id) : Promise.resolve(null)), [id]);
+export const useHome            = ()            => useAsync(() => getHome(), []);
+export const useStats           = ()            => useAsync(() => getStats(), []);
+export const useStory           = (id: string) => useAsync(() => getStory(id), [id]);
+export const useSearchIndex     = ()            => useAsync(() => getSearchIndex(), []);
+export const useTimeline        = ()            => useAsync(() => getTimeline(), []);
+export const useFavorite        = (id: string) => useAsync(() => isFavorite(id), [id]);
 
-export function combine(...states) {
+// Fix 16: combine is not imported anywhere else in the codebase; kept with proper TypeScript types
+// in case it becomes useful, but can be removed if confirmed unused.
+interface AsyncState<T = unknown> {
+  data: T | null;
+  loading: boolean;
+  error: unknown;
+  refetch?: () => void;
+}
+
+export function combine(...states: AsyncState[]): AsyncState<unknown[]> {
   return {
     data:    states.every((s) => s.data != null) ? states.map((s) => s.data) : null,
     loading: states.some((s) => s.loading),
