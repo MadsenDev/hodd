@@ -78,7 +78,7 @@ A reusable `StarRating` component in `src/components.tsx`:
 
 - `StarRating` placed in the facts section, between Condition and Acquired
 - Only shown for owned items
-- Saves immediately via `saveHolding` (same pattern as watched/completed)
+- Saves immediately via `updateUserItemFields` — `rating` added to its `allowed` map in `db.ts`
 
 ### Collection grid cards
 
