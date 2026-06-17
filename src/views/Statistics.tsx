@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React from 'react';
 import { I, typeIcon } from '../icons';
-import { CompletionRing, Loading, ErrorState, EmptyState } from '../components';
+import { CompletionRing, Loading, ErrorState, EmptyState, StarRating, Cover } from '../components';
 import { useCollections, useStats, useSearchIndex } from '../hooks';
 
 export function Statistics({ ctx }) {
@@ -49,6 +49,21 @@ export function Statistics({ ctx }) {
     { label: "Books read",      icon: "check", color: "#5BA47A", done: idx.filter(i => i.type === "book" && i.owned !== false && i.watched === true).length,  total: idx.filter(i => i.type === "book" && i.owned !== false).length },
   ].filter(c => c.total > 0);
   const cols_ = cols.data || [];
+
+  const topRated = [...idx]
+    .filter(i => i.owned !== false && i.rating != null)
+    .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))
+    .slice(0, 5);
+
+  const collAvgRatings = {};
+  cols_.forEach(c => {
+    const ratedInColl = idx.filter(i => i.owned !== false && i.coll === c.name && i.rating != null);
+    if (ratedInColl.length) {
+      const avg = ratedInColl.reduce((s, i) => s + i.rating, 0) / ratedInColl.length;
+      collAvgRatings[c.id] = Math.round(avg * 2) / 2;
+    }
+  });
+
   if (!cols_.length) return <EmptyState title="No collections yet" sub="Add your first collection to start tracking your hoard." />;
   const totalOwned = cols_.reduce((s, c) => s + c.owned, 0);
   const totalMissing = cols_.reduce((s, c) => s + c.missing, 0);
@@ -80,7 +95,14 @@ export function Statistics({ ctx }) {
             {sorted.map(c => (
               <div className="bar-row" key={c.id} onClick={() => ctx.openCollection(c.id)}>
                 <div className="bar-row-ic" style={{ color: c.accent }}>{typeIcon(c.type, { size: 18, stroke: 1.7 })}</div>
-                <div className="bar-row-name">{c.name}</div>
+                <div className="bar-row-name">
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
+                    <span>{c.name}</span>
+                    {collAvgRatings[c.id] != null && (
+                      <StarRating value={collAvgRatings[c.id]} size={10} readonly />
+                    )}
+                  </div>
+                </div>
                 <div className="bar-row-track"><i style={{ width: c.pct + "%", background: c.accent }} /></div>
                 <div className="bar-row-pct">{c.pct}%</div>
                 <div className="bar-row-count">{c.owned} of {c.owned + c.missing}</div>
@@ -215,6 +237,28 @@ export function Statistics({ ctx }) {
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {topRated.length > 0 && (
+        <div className="panel stat-panel" style={{ marginTop: 22 }}>
+          <div className="section-head" style={{ margin: "0 0 18px" }}>
+            <div className="eyebrow">Top rated</div>
+            <span style={{ fontSize: 12.5, color: "var(--mute)" }}>Your highest-rated items</span>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {topRated.map(item => (
+              <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}
+                onClick={() => ctx.openItem(item)}>
+                <Cover item={item} h={48} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.title}</div>
+                  <div style={{ fontSize: 11.5, color: "var(--mute)" }}>{item.coll}</div>
+                </div>
+                <StarRating value={item.rating} size={14} readonly />
+              </div>
+            ))}
           </div>
         </div>
       )}
