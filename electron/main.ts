@@ -15,7 +15,7 @@ import { networkInterfaces } from 'node:os';
 // Fix 6 — Read version from package.json instead of hardcoding it
 import { createRequire } from 'node:module';
 const _require = createRequire(import.meta.url);
-const { version: APP_VERSION } = _require('../../package.json') as { version: string };
+const { version: APP_VERSION } = _require('../package.json') as { version: string };
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

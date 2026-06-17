@@ -56,7 +56,7 @@ interface ItemLike {
 interface AppCtx {
   back: () => void;
   openItem: (item: ItemLike, collection?: CollectionLike | null) => void;
-  addSuggested?: (item: ItemLike, collectionId?: string) => void;
+  addToCollection: (coll: any, prefill?: any) => void;
 }
 
 interface ItemDetailProps {
@@ -119,7 +119,9 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }: 
       const allItems = (all as ItemLike[]) || [];
       const series = item.series?.toLowerCase();
       const titleWords = item.title?.toLowerCase().split(/\s+/).slice(0, 2).join(' ');
-      const owned = new Set([item.title?.toLowerCase()]);
+      const collectionItems = (collection?.items as ItemLike[] | undefined) || [];
+      const owned = new Set(collectionItems.map((i: ItemLike) => (i.title || '').toLowerCase()));
+      owned.add((item.title || '').toLowerCase());
       const filtered = allItems.filter((s: ItemLike) => {
         const sq = (s.series || '').toLowerCase();
         return (series ? sq === series : sq === titleWords) && !owned.has((s.title || '').toLowerCase());
@@ -441,9 +443,14 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }: 
           {itemSuggestions.length > 0 && (
             <div style={{ marginTop: 30 }}>
               <div className="eyebrow">You might also want</div>
-              <div className="related-strip" style={{ marginTop: 14 }}>
+              <div className="related-strip" style={{ marginTop: 14, overflowX: "auto", paddingBottom: 6 }}>
                 {itemSuggestions.map((s: ItemLike) => (
-                  <Cover key={s.id} item={{ ...s, type: relType }} h={130} ghost onClick={() => ctx.addSuggested && ctx.addSuggested(s, collection?.id || item.collectionId)} />
+                  <div key={s.id} style={{ display: "flex", flexDirection: "column", gap: 6, cursor: "pointer", flexShrink: 0 }}
+                    onClick={() => ctx.addToCollection(collection || { id: item.collectionId }, s)}>
+                    <Cover item={{ ...s, type: relType }} h={130} />
+                    <div style={{ fontSize: 11.5, fontWeight: 500, color: "var(--text)", lineHeight: 1.3, maxWidth: 90, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.title}</div>
+                    {s.sub && <div style={{ fontSize: 10.5, color: "var(--mute)", marginTop: -3, maxWidth: 90, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.sub}</div>}
+                  </div>
                 ))}
               </div>
             </div>

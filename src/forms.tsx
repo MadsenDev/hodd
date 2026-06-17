@@ -111,7 +111,7 @@ export const PLATFORMS_BY_MAKER: Record<string, string[]> = {
 
 export const PLATFORM_OPTS = Object.values(PLATFORMS_BY_MAKER).flat();
 
-function makerFor(platform: string): string {
+export function makerFor(platform: string): string {
   for (const [maker, consoles] of Object.entries(PLATFORMS_BY_MAKER)) {
     if (consoles.includes(platform)) return maker;
   }
@@ -150,7 +150,11 @@ export function PlatformPicker({ value, onChange }: { value: string; onChange: (
         <div className="ef-select-wrap">
           <select className="ef-control" value={value || ""} onChange={e => handleConsole(e.target.value)} disabled={!maker}>
             <option value="">—</option>
-            {consoles.map(c => <option key={c} value={c}>{c}</option>)}
+            {consoles.map(c => {
+              const prefix = maker + ' ';
+              const label = c.startsWith(prefix) ? c.slice(prefix.length) : c;
+              return <option key={c} value={c}>{label}</option>;
+            })}
             {value && !consoles.includes(value) && <option value={value}>{value}</option>}
           </select>
           <span className="ef-chev">▾</span>

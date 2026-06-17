@@ -8,7 +8,7 @@ import { OllamaClient, addItem, lookupMetadata, invalidateCache, getSettings } f
 import { Onboarding, LoadingScreen } from './views/Onboarding';
 import { TYPE_COLL, TYPE_COLOR, TYPE_LABEL, parseHoardLines } from './engine';
 import { typeIcon } from './icons';
-import { CreateCollectionModal, AddItemModal, FORMAT_OPTIONS, CONDITION_OPTIONS, COMPLETENESS_OPTIONS, PLATFORM_OPTS } from './forms';
+import { CreateCollectionModal, AddItemModal, FORMAT_OPTIONS, CONDITION_OPTIONS, COMPLETENESS_OPTIONS, PLATFORM_OPTS, PLATFORMS_BY_MAKER, makerFor } from './forms';
 import { Home, HomeNew } from './views/Home';
 import { Collections, CollectionsNew } from './views/Collections';
 import { CollectionDetail } from './views/CollectionDetail';
@@ -223,6 +223,9 @@ function AddCard({ item, onChange, onRemove, collOpts }: {
   collOpts: any[];
 }) {
   const [showAlt, setShowAlt] = React.useState(false);
+  const platformField = item.fields.find((f: any) => f.k === "Platform");
+  const platformVal = platformField && !/^Confirm/i.test(String(platformField.v)) ? String(platformField.v || "") : "";
+  const [selectedMaker, setSelectedMaker] = React.useState(() => makerFor(platformVal) || "");
 
   const setField = (i: number, v: string) => {
     const fields = item.fields.map((f: any, j: number) => j === i ? { ...f, v, c: "high" } : f);
@@ -256,24 +259,44 @@ function AddCard({ item, onChange, onRemove, collOpts }: {
             </div>
           </div>
           <div className="add-fields">
-            {item.fields.filter((f: any) => f.k !== "Title" && f.k !== "Type").map((f: any, i0: number) => {
+            {item.fields.filter((f: any) => f.k !== "Title" && f.k !== "Type").map((f: any) => {
               const i = item.fields.indexOf(f);
               const isAsk = f.c === "ask";
               const isPlatform = f.k === "Platform" && item.type === "game";
               const dropOpts = !isPlatform && (FIELD_OPTS[f.k] || (f.k === "Edition" && FORMAT_OPTIONS[item.type] ? FORMAT_OPTIONS[item.type] : null));
+              if (isPlatform) {
+                const curVal = /^Confirm/i.test(String(f.v)) ? "" : String(f.v || "");
+                const consoles = selectedMaker ? (PLATFORMS_BY_MAKER[selectedMaker] || []) : [];
+                const makerOptions = Object.keys(PLATFORMS_BY_MAKER);
+                return (
+                  <React.Fragment key={f.k}>
+                    <div className={"add-field" + (isAsk ? " ask" : "")}>
+                      <span className="afk">Maker</span>
+                      <select className="afv-input" value={selectedMaker} onChange={e => { setSelectedMaker(e.target.value); setField(i, ""); }}>
+                        <option value="">—</option>
+                        {makerOptions.map(m => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </div>
+                    <div className={"add-field" + (isAsk ? " ask" : "")}>
+                      <span className="afk">Platform</span>
+                      <select className="afv-input" value={curVal} onChange={e => setField(i, e.target.value)} disabled={!selectedMaker}>
+                        <option value="">—</option>
+                        {consoles.map(c => {
+                          const prefix = selectedMaker + ' ';
+                          const label = c.startsWith(prefix) ? c.slice(prefix.length) : c;
+                          return <option key={c} value={c}>{label}</option>;
+                        })}
+                        {curVal && !consoles.includes(curVal) && <option value={curVal}>{curVal}</option>}
+                      </select>
+                      {!isAsk && curVal && <I.check size={12} stroke={2.6} className="af-ok" />}
+                    </div>
+                  </React.Fragment>
+                );
+              }
               return (
                 <div className={"add-field" + (isAsk ? " ask" : "")} key={f.k}>
                   <span className="afk">{f.k}</span>
-                  {isPlatform ? (
-                    <input
-                      className="afv-input"
-                      list="hodd-platform-list"
-                      value={/^Confirm/i.test(String(f.v)) ? "" : f.v}
-                      placeholder={isAsk ? "Platform" : ""}
-                      onChange={e => setField(i, e.target.value)}
-                      autoComplete="off"
-                    />
-                  ) : dropOpts ? (
+                  {dropOpts ? (
                     <select
                       className="afv-input"
                       value={/^Confirm/i.test(String(f.v)) ? "" : f.v}

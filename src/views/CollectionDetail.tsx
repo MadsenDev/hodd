@@ -174,16 +174,10 @@ export function CollectionDetail({ collId, ctx }: CollectionDetailProps) {
     exitSelectMode();
   }
 
-  if (loading) return <Loading />;
-  if (error) return <ErrorState error={error} onRetry={refetch} />;
-  if (!data) return <EmptyState title="Collection not found" />;
+  const items = data?.items ?? [];
+  const type = data?.type;
+  const sq = search.trim().toLowerCase();
 
-  const { name, sub, accent, owned, missing, pct, type } = data;
-  const items = data.items ?? [];
-  const ownedItemCount = items.filter((i: any) => i.owned !== false).length;
-  const missingCount = items.filter((i: any) => i.owned === false).length;
-
-  // Fix 5: Memoize expensive filter/sort/progress calculations
   const progressLabel = React.useMemo(
     () => type === "game" ? "Played" : type === "book" ? "Read" : type === "movie" ? "Watched" : null,
     [type]
@@ -209,14 +203,8 @@ export function CollectionDetail({ collId, ctx }: CollectionDetailProps) {
     [progressField, items]
   );
 
-  const sq = search.trim().toLowerCase();
-
-  // Fix 4: Truncate long search strings in EmptyState title
-  const displaySearch = search.length > 60 ? search.slice(0, 60) + '…' : search;
-
-  const { filtered, shown } = React.useMemo(() => {
+  const shown = React.useMemo(() => {
     const filtered = items.filter((i: any) => {
-      // Fix 2: Normalize i.owned — undefined and true both mean owned
       const isOwned = i.owned !== false;
       if (filter !== "all" && (filter === "owned" ? !isOwned : isOwned)) return false;
       if (progressField && statusFilter !== "all") {
@@ -243,8 +231,19 @@ export function CollectionDetail({ collId, ctx }: CollectionDetailProps) {
       }
       return 0;
     });
-    return { filtered, shown };
+    return shown;
   }, [items, filter, statusFilter, sort, sq, progressField, type]);
+
+  if (loading) return <Loading />;
+  if (error) return <ErrorState error={error} onRetry={refetch} />;
+  if (!data) return <EmptyState title="Collection not found" />;
+
+  const { name, sub, accent, owned, missing, pct } = data;
+  const ownedItemCount = items.filter((i: any) => i.owned !== false).length;
+  const missingCount = items.filter((i: any) => i.owned === false).length;
+
+  // Fix 4: Truncate long search strings in EmptyState title
+  const displaySearch = search.length > 60 ? search.slice(0, 60) + '…' : search;
 
   const shownIds = shown.map((i: any) => i.id);
   const allShownSelected = shownIds.length > 0 && shownIds.every((id: string) => selected.has(id));

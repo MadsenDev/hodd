@@ -547,7 +547,6 @@ export function Sidebar({ active, onNav, user, onSettings }: SidebarProps) {
             className={"nav-item" + (active === id ? " active" : "")}
             onClick={() => onNav(id)}
             aria-current={active === id ? "page" : undefined}
-            style={{ background: "none", border: "none", cursor: "pointer", width: "100%", textAlign: "left", padding: 0 }}
           >
             <Ic size={20} stroke={1.7} />
             <span>{label}</span>
@@ -559,7 +558,6 @@ export function Sidebar({ active, onNav, user, onSettings }: SidebarProps) {
         type="button"
         className="nav-item"
         onClick={() => onNav("settings")}
-        style={{ background: "none", border: "none", cursor: "pointer", width: "100%", textAlign: "left", padding: 0 }}
       >
         <I.settings size={20} stroke={1.6} /><span>Settings</span>
       </button>

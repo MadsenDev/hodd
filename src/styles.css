@@ -160,6 +160,8 @@ body {
   border-radius: 11px; color: var(--dim); cursor: pointer;
   font-size: 14.5px; font-weight: 500; letter-spacing: .005em;
   transition: background .2s, color .2s; position: relative; border: 1px solid transparent;
+  /* button reset */
+  background: none; text-align: left; width: 100%;
 }
 .nav-item:hover { color: var(--text); background: rgba(128,124,116,0.10); }
 .nav-item.active { color: var(--accent-deep); background: var(--accent-wash); border-color: transparent; }
@@ -516,12 +518,13 @@ body {
 .modal {
   width: min(680px, 100%); background: var(--panel); border: 1px solid var(--border);
   border-radius: var(--radius-lg); box-shadow: 0 40px 100px -40px rgba(28,26,22,0.45); overflow: hidden; animation: rise .3s var(--ease);
+  max-height: calc(100vh - 48px); display: flex; flex-direction: column;
 }
-.modal-head { display: flex; align-items: center; justify-content: space-between; padding: 22px 26px; border-bottom: 1px solid var(--border-soft); }
+.modal-head { display: flex; align-items: center; justify-content: space-between; padding: 22px 26px; border-bottom: 1px solid var(--border-soft); flex-shrink: 0; }
 .modal-head .t { display: flex; align-items: center; gap: 11px; }
 .modal-head .t .lbl { font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: var(--gold-soft); }
 .modal-head h3 { font-family: var(--display); font-size: 25px; font-weight: 700; margin: 2px 0 0; letter-spacing: -0.02em; }
-.modal-body { padding: 26px; }
+.modal-body { padding: 26px; overflow-y: auto; flex: 1 1 auto; }
 .ai-input-wrap { position: relative; }
 .ai-input {
   width: 100%; background: var(--bg-2); border: 1px solid var(--border); border-radius: 13px;
@@ -549,7 +552,7 @@ body {
 .conf.ask { background: rgba(201,162,76,0.16); color: var(--gold-soft); }
 .field.editable .fv { border-bottom: 1px dashed var(--border); cursor: text; }
 
-.modal-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 20px 26px; border-top: 1px solid var(--border-soft); }
+.modal-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 20px 26px; border-top: 1px solid var(--border-soft); flex-shrink: 0; }
 
 /* Search results */
 .search-translate { background: var(--panel); border: 1px solid var(--border-soft); border-radius: var(--radius); padding: 20px 22px; margin: 18px 0 26px; }
