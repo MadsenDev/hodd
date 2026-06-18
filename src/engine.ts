@@ -1,4 +1,5 @@
 // Heuristic on-device search + shorthand parser. Pure functions, no network.
+import MiniSearch from 'minisearch';
 
 // ── Type vocabulary ──────────────────────────────────────────────────────────
 
@@ -256,20 +257,70 @@ export interface SearchResult {
   summary: string;
 }
 
-export function searchHoard(query: string, idx: any[]): SearchResult {
+export interface StructuredFilters {
+  type?: string;
+  status?: 'owned' | 'missing' | 'favorites';
+}
+
+// MiniSearch index cache — rebuilt automatically when idx reference changes
+let _msCache: { src: any[]; ms: MiniSearch } | null = null;
+
+function getMS(idx: any[]): MiniSearch {
+  if (_msCache && _msCache.src === idx) return _msCache.ms;
+  const ms = new MiniSearch({
+    idField: 'id',
+    fields: ['title', 'series', 'sub', 'format', 'edition', 'coll'],
+    storeFields: ['id'],
+    processTerm: (term: string) =>
+      term.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''),
+    searchOptions: {
+      boost: { title: 3, series: 2, sub: 1.5 },
+      fuzzy: 0.15,
+      prefix: true,
+      combineWith: 'AND',
+    },
+  });
+  // Deduplicate by id to prevent MiniSearch from throwing on duplicates
+  const seen = new Set<unknown>();
+  ms.addAll(idx.filter(i => i.id && !seen.has(i.id) && seen.add(i.id)));
+  _msCache = { src: idx, ms };
+  return ms;
+}
+
+export function searchHoard(query: string, idx: any[], filters?: StructuredFilters): SearchResult {
   const q = norm(query);
   idx = idx || [];
   const tokens: [string, string][] = [];
   let res = idx.slice();
 
-  // ── 1. Type detection ──────────────────────────────────────────────────────
-  let typeHit: string | null = null;
-  for (const [type, kws] of Object.entries(TYPE_KW)) {
-    if (kws.some(k => q.includes(norm(k)))) { typeHit = type; break; }
-  }
+  // ── 0. Structured filters from filter bar (take precedence over text) ─────
+  let typeHit: string | null = filters?.type ?? null;
+  let intent: string | null = null;
+
   if (typeHit) {
-    tokens.push(["Type", TYPE_LABEL[typeHit]]);
+    tokens.push(['Type', TYPE_LABEL[typeHit]]);
     res = res.filter(i => i.type === typeHit);
+  }
+  if (filters?.status === 'owned') {
+    intent = 'owned'; tokens.push(['Status', 'Owned']);
+    res = res.filter(i => i.owned !== false);
+  } else if (filters?.status === 'missing') {
+    intent = 'missing'; tokens.push(['Status', 'Missing']);
+    res = res.filter(i => i.owned === false);
+  } else if (filters?.status === 'favorites') {
+    tokens.push(['Filter', 'Favorites']);
+    res = res.filter(i => i.favorite);
+  }
+
+  // ── 1. Type detection (skip if already set via filter bar) ────────────────
+  if (!typeHit) {
+    for (const [type, kws] of Object.entries(TYPE_KW)) {
+      if (kws.some(k => q.includes(norm(k)))) { typeHit = type; break; }
+    }
+    if (typeHit) {
+      tokens.push(["Type", TYPE_LABEL[typeHit]]);
+      res = res.filter(i => i.type === typeHit);
+    }
   }
 
   // ── 2. Platform ────────────────────────────────────────────────────────────
@@ -335,9 +386,8 @@ export function searchHoard(query: string, idx: any[]): SearchResult {
     res = res.filter(i => i.year == +exactYr[1]);
   }
 
-  // ── 5. Ownership / status ──────────────────────────────────────────────────
-  let intent: string | null = null;
-  if (/missing|don'?t have|haven'?t got|still need|looking for|want to (get|buy|find)/.test(q)) {
+  // ── 5. Ownership / status (skip if already set via filter bar) ───────────
+  if (!intent && /missing|don'?t have|haven'?t got|still need|looking for|want to (get|buy|find)/.test(q)) {
     intent = "missing"; tokens.push(["Status", "Missing"]);
     res = res.filter(i => i.owned === false);
   } else if (/\bown\b|owned|i have|in my|my collection/.test(q)) {
@@ -440,7 +490,7 @@ export function searchHoard(query: string, idx: any[]): SearchResult {
   // but label it properly when series field matches
   let seriesHit: string | null = null;
 
-  // ── 12. Keyword matching (accent-normalised, scored) ──────────────────────
+  // ── 12. Keyword matching via MiniSearch (fuzzy, BM25, prefix) ────────────
   const STOP = new Set([
     "the", "and", "for", "with", "that", "this", "they", "them", "from", "into",
     "have", "been", "are", "was", "what", "which", "where", "when", "but", "all",
@@ -453,7 +503,6 @@ export function searchHoard(query: string, idx: any[]): SearchResult {
     "collection", "hoard", "library", "item", "items", "series", "franchise",
     "before", "after", "since", "between", "decade",
   ]);
-  // Remove words consumed by previous filters
   const consumed = new Set([
     ...(platformHit ? norm(platformHit).split(" ") : []),
     ...(publisherHit ? norm(publisherHit).split(" ") : []),
@@ -463,37 +512,26 @@ export function searchHoard(query: string, idx: any[]): SearchResult {
   const words = q.split(/\s+/).filter(w => w.length > 2 && !STOP.has(w) && !consumed.has(w));
 
   if (words.length) {
-    const scored = res.map(i => {
-      const fields = [
-        norm(i.title), norm(i.series), norm(i.sub),
-        norm(i.publisher || ""), norm(i.format || ""),
-        norm(i.edition || ""), norm(i.coll || ""),
-      ].join(" ");
-      const hits = words.filter(w => fields.includes(w));
-      // Bonus for series match
-      const seriesMatch = words.some(w => norm(i.series || "").includes(w));
-      return { i, score: hits.length + (seriesMatch ? 0.5 : 0), hits };
-    }).filter(({ score }) => score > 0);
-
-    if (scored.length) {
-      // Detect if we matched on series
-      const seriesMatches = scored.filter(s => words.some(w => norm(s.i.series || "").includes(w)));
-      if (seriesMatches.length === scored.length && scored[0].i.series) {
-        seriesHit = scored[0].i.series;
-        tokens.push(["Series", seriesHit!]);
-      } else {
-        const kw = [...new Set(scored.flatMap(s => s.hits))].join(", ");
-        if (kw) tokens.push(["Keywords", kw]);
+    const ms = getMS(idx);
+    const msRes = ms.search(words.join(' '));
+    if (msRes.length) {
+      const msIds = new Set(msRes.map(r => r.id));
+      const msScore = new Map(msRes.map(r => [r.id, r.score]));
+      const matched = res.filter(i => msIds.has(i.id));
+      if (matched.length) {
+        res = matched.sort((a, b) => (msScore.get(b.id) ?? 0) - (msScore.get(a.id) ?? 0));
+        const allSeries = matched.every(i => i.series && words.some(w => norm(i.series || '').includes(w)));
+        if (allSeries && matched[0].series) {
+          seriesHit = matched[0].series;
+          tokens.push(['Series', seriesHit!]);
+        } else {
+          tokens.push(['Keywords', words.join(', ')]);
+        }
       }
-      const maxScore = Math.max(...scored.map(s => s.score));
-      res = scored
-        .filter(s => s.score >= Math.max(1, maxScore * 0.5))
-        .sort((a, b) => b.score - a.score)
-        .map(s => s.i);
     }
   }
 
-  const summary = writeAnswer(query, res, { typeHit, intent, platformHit, publisherHit, seriesHit });
+  const summary = writeAnswer(query, res, { typeHit, intent, platformHit, publisherHit, seriesHit, hasKeywords: words.length > 0 });
   return { tokens, results: res.slice(0, 24), total: res.length, summary };
 }
 
@@ -503,6 +541,7 @@ interface WriteAnswerCtx {
   platformHit: string | null;
   publisherHit: string | null;
   seriesHit: string | null;
+  hasKeywords?: boolean;
 }
 
 function writeAnswer(query: string, res: any[], ctx: WriteAnswerCtx): string {
@@ -529,6 +568,11 @@ function writeAnswer(query: string, res: any[], ctx: WriteAnswerCtx): string {
   if (ctx.publisherHit) return `${n} ${ctx.publisherHit} title${s}: ${list(res)}.`;
 
   const typeLabel = ctx.typeHit ? TYPE_LABEL[ctx.typeHit].toLowerCase() : "item";
+  // Filter-only (no keyword): simpler summary
+  if (!ctx.hasKeywords) {
+    if (n === 1) return `One ${typeLabel} in your hoard.`;
+    return `${n} ${typeLabel}${s} in your hoard.`;
+  }
   if (n === 1) return `One matching ${typeLabel}: ${res[0].title}.`;
   if (n <= 6) return `${n} ${typeLabel}${s} match: ${list(res)}.`;
   return `Found ${n} ${typeLabel}${s}. Top matches: ${list(res)}.`;

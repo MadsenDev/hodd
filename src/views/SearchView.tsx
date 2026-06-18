@@ -3,7 +3,7 @@ import { I } from '../icons';
 import { Cover, Loading, ErrorState } from '../components';
 import { useSearchIndex } from '../hooks';
 import { OllamaClient } from '../api';
-import { searchHoard } from '../engine';
+import { searchHoard, StructuredFilters, TYPE_LABEL } from '../engine';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -58,6 +58,56 @@ function buildSuggestions(idx: any[]): string[] {
   return out.slice(0, 6);
 }
 
+// ── Filter bar ────────────────────────────────────────────────────────────────
+
+const ALL_TYPES = ['game', 'book', 'movie', 'coin', 'comic', 'vinyl'] as const;
+const ALL_STATUSES = [
+  { key: 'owned',     label: 'Owned' },
+  { key: 'missing',  label: 'Missing' },
+  { key: 'favorites', label: 'Favorites' },
+] as const;
+
+interface FilterBarProps {
+  availableTypes: string[];
+  activeType: string | null;
+  activeStatus: string | null;
+  onTypeChange: (t: string | null) => void;
+  onStatusChange: (s: string | null) => void;
+}
+
+function FilterBar({ availableTypes, activeType, activeStatus, onTypeChange, onStatusChange }: FilterBarProps) {
+  const types = ALL_TYPES.filter(t => availableTypes.includes(t));
+  if (types.length === 0) return null;
+
+  const chipStyle = (active: boolean): React.CSSProperties => active
+    ? { borderColor: 'var(--accent)', color: 'var(--accent)', background: 'var(--accent-wash)' }
+    : {};
+
+  return (
+    <div style={{ marginTop: 12, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+      {types.map(t => (
+        <button key={t} className="chip" style={chipStyle(activeType === t)}
+          onClick={() => onTypeChange(activeType === t ? null : t)}>
+          {TYPE_LABEL[t]}
+        </button>
+      ))}
+      <div style={{ width: 1, height: 16, background: 'var(--border)', margin: '0 2px', flexShrink: 0 }} />
+      {ALL_STATUSES.map(({ key, label }) => (
+        <button key={key} className="chip" style={chipStyle(activeStatus === key)}
+          onClick={() => onStatusChange(activeStatus === key ? null : key)}>
+          {label}
+        </button>
+      ))}
+      {(activeType || activeStatus) && (
+        <button className="chip" style={{ color: 'var(--mute)', fontSize: 12 }}
+          onClick={() => { onTypeChange(null); onStatusChange(null); }}>
+          Clear
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function SearchView({ initial, ctx, ollamaModel }: SearchViewProps) {
@@ -71,8 +121,9 @@ export function SearchView({ initial, ctx, ollamaModel }: SearchViewProps) {
   const [savedFilters, setSavedFilters] = React.useState<SavedFilter[]>([]);
   const [savingFilter, setSavingFilter] = React.useState(false);
   const [saveFilterName, setSaveFilterName] = React.useState("");
-  // Fix 9: track AI search failures so we can show the user a message
   const [aiError, setAiError] = React.useState(false);
+  const [activeType, setActiveType] = React.useState<string | null>(null);
+  const [activeStatus, setActiveStatus] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     OllamaClient.isRunning().then((r: boolean) => setOllamaAvail(r));
@@ -84,19 +135,27 @@ export function SearchView({ initial, ctx, ollamaModel }: SearchViewProps) {
     api.getSavedFilters().then(setSavedFilters).catch(() => {});
   }, []);
 
+  // Apply heuristic search synchronously — used by both run() and filter changes.
+  const applyHeuristic = React.useCallback((query: string, type: string | null, status: string | null) => {
+    if (!index.data) return;
+    const filters: StructuredFilters = {};
+    if (type) filters.type = type;
+    if (status) filters.status = status as StructuredFilters['status'];
+    setPhase("thinking");
+    setAiError(false);
+    const heuristic: SearchResult = { ...searchHoard(query, index.data, filters), q: query, aiPowered: false };
+    setOut(heuristic);
+    setTimeout(() => setPhase("done"), 220);
+  }, [index.data]);
+
   // Fix 11: wrap `run` in useCallback so it has a stable identity and can be
   // listed in the useEffect dependency array without causing infinite loops.
   const run = React.useCallback(async (q?: string) => {
     const query = (q == null ? value : q);
-    if (!query.trim() || !index.data) return;
+    if (!query.trim() && !activeType && !activeStatus) return;
+    if (!index.data) return;
     setValue(query);
-    setPhase("thinking");
-    setAiError(false);
-
-    // Always run heuristic for instant token tags
-    const heuristic: SearchResult = { ...searchHoard(query, index.data), q: query, aiPowered: false };
-    setOut(heuristic);
-    setTimeout(() => setPhase("done"), 220);
+    applyHeuristic(query, activeType, activeStatus);
 
     if (ollamaOn && ollamaAvail && ollamaModel) {
       setAiPending(true);
@@ -104,14 +163,24 @@ export function SearchView({ initial, ctx, ollamaModel }: SearchViewProps) {
         const result = await OllamaClient.ollamaSearch(query, index.data as Record<string, unknown>[], ollamaModel);
         if (result) { setOut(result as SearchResult); setPhase("done"); }
       } catch (_) {
-        // Fix 9: exit AI loading state and surface failure to the user
         setPhase("done");
         setAiError(true);
-        // Heuristic results (set above) are still shown to the user.
       }
       setAiPending(false);
     }
-  }, [value, index.data, ollamaOn, ollamaAvail, ollamaModel]);
+  }, [value, index.data, ollamaOn, ollamaAvail, ollamaModel, activeType, activeStatus, applyHeuristic]);
+
+  const handleTypeChange = React.useCallback((t: string | null) => {
+    setActiveType(t);
+    if (!value.trim() && !t && !activeStatus) { setOut(null); setPhase("idle"); return; }
+    applyHeuristic(value, t, activeStatus);
+  }, [value, activeStatus, applyHeuristic]);
+
+  const handleStatusChange = React.useCallback((s: string | null) => {
+    setActiveStatus(s);
+    if (!value.trim() && !activeType && !s) { setOut(null); setPhase("idle"); return; }
+    applyHeuristic(value, activeType, s);
+  }, [value, activeType, applyHeuristic]);
 
   React.useEffect(() => {
     if (initial && index.data) run(initial);
@@ -137,6 +206,13 @@ export function SearchView({ initial, ctx, ollamaModel }: SearchViewProps) {
         />
         <button className="ai-go" onClick={() => run()}><I.sparkle size={18} /></button>
       </div>
+      <FilterBar
+        availableTypes={[...new Set((index.data || []).map((i: any) => i.type).filter(Boolean))]}
+        activeType={activeType}
+        activeStatus={activeStatus}
+        onTypeChange={handleTypeChange}
+        onStatusChange={handleStatusChange}
+      />
       <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
         {ollamaAvail ? (
           <button className={"btn" + (ollamaOn ? " solid" : "")} style={{ padding: "5px 12px", fontSize: 12 }}
