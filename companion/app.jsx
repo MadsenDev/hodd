@@ -72,9 +72,18 @@ function App() {
   const [prefs, setPrefs] = useS({ resolveDefault: true, autoAdd: false, beep: true, torch: false });
   const setPref = (k, v) => setPrefs((p) => ({ ...p, [k]: v }));
 
-  const [paired, setPaired] = useS(false);
-  const [linked, setLinked] = useS(true);
-  const [pairingOpen, setPairingOpen] = useS(true);
+  const [paired, setPaired] = useS(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlToken = params.get('token');
+    if (urlToken) {
+      localStorage.setItem('hodd_token', urlToken);
+      window.history.replaceState({}, '', window.location.pathname);
+      return true;
+    }
+    return !!localStorage.getItem('hodd_token');
+  });
+  const [linked, setLinked] = useS(false);
+  const [pairingOpen, setPairingOpen] = useS(() => !localStorage.getItem('hodd_token'));
 
   const [torch, setTorch] = useS(false);
   const [scanMode, setScanMode] = useS("resolve");
@@ -90,18 +99,39 @@ function App() {
 
   useE(() => { setScanMode(prefs.resolveDefault ? "resolve" : "push"); }, [prefs.resolveDefault]);
 
+  useE(() => {
+    const token = localStorage.getItem('hodd_token');
+    if (!token) return;
+    const ctrl = new AbortController();
+    fetch(window.location.origin + '/api/status', { signal: ctrl.signal })
+      .then(r => { if (r.ok) setLinked(true); })
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, []);
+
   const flash = (msg) => { setToast(msg); clearTimeout(flash._t); flash._t = setTimeout(() => setToast(null), 2400); };
   const todayCount = captures.filter((c) => /now|m ago/.test(c.ago || "")).length;
 
   const addCapture = (item, coll, via) => {
     const uid = D.newUid();
+    const collectionId = coll || item.collection || 'games';
     const cap = {
       uid, title: item.title, type: item.type, sub: item.sub, color: item.color,
-      collection: coll || item.collection, via: via === "manual" ? "manual" : "scan",
+      collection: collectionId, via: via === "manual" ? "manual" : "scan",
       state: linked ? "syncing" : "queued", ago: "now",
     };
     setCaptures((cs) => [cap, ...cs]);
-    if (linked) setTimeout(() => setCaptures((cs) => cs.map((c) => c.uid === uid ? { ...c, state: "synced" } : c)), 950);
+
+    const token = localStorage.getItem('hodd_token');
+    if (linked && token) {
+      fetch(window.location.origin + '/api/items/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ collectionId, draft: { title: item.title, sub: item.sub, year: item.year } }),
+      })
+        .then(r => setCaptures(cs => cs.map(c => c.uid === uid ? { ...c, state: r.ok ? 'synced' : 'failed' } : c)))
+        .catch(() => setCaptures(cs => cs.map(c => c.uid === uid ? { ...c, state: 'queued' } : c)));
+    }
   };
 
   const onResult = (item) => {

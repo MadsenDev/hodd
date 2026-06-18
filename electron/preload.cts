@@ -71,6 +71,7 @@ contextBridge.exposeInMainWorld('hoddDesktop', {
 
   printToPdf: (title: string) => ipcRenderer.invoke('hodd:print:pdf', title),
   getCompanionStatus: () => ipcRenderer.invoke('hodd:companion:status'),
+  regenerateCompanionToken: () => ipcRenderer.invoke('hodd:companion:regenerate-token'),
 
   // Ollama local AI
   ollama: {

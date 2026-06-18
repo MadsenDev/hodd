@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import QRCode from 'qrcode';
 import { I } from '../icons';
 import { Loading } from '../components';
 import { getSettings, saveSetting, exportData, importData, OllamaClient, saveCatalog, getSearchIndex, invalidateCache } from '../api';
@@ -7,12 +8,33 @@ import { OllamaSetupCard } from './OllamaSetupCard';
 import { toaster } from '../toaster';
 
 function CompanionSection() {
-  const [status, setStatus] = React.useState<{ url: string } | null>(null);
+  const [pairUrl, setPairUrl] = React.useState<string | null>(null);
+  const [qrSvg, setQrSvg] = React.useState<string | null>(null);
+  const [regenerating, setRegenerating] = React.useState(false);
+
+  async function applyPairUrl(url: string) {
+    setPairUrl(url);
+    const svg = await QRCode.toString(url, { type: 'svg', width: 200, margin: 2, color: { dark: '#0f0e13', light: '#ffffff' } });
+    setQrSvg(svg);
+  }
+
   React.useEffect(() => {
-    (window as any).hoddDesktop?.getCompanionStatus?.().then(setStatus).catch(() => {});
+    (window as any).hoddDesktop?.getCompanionStatus?.()
+      .then((s: { pairUrl: string }) => applyPairUrl(s.pairUrl))
+      .catch(() => {});
   }, []);
 
-  if (!status) return null;
+  async function handleRegenerate() {
+    setRegenerating(true);
+    try {
+      const result = await (window as any).hoddDesktop?.regenerateCompanionToken?.();
+      if (result?.pairUrl) await applyPairUrl(result.pairUrl);
+    } finally {
+      setRegenerating(false);
+    }
+  }
+
+  if (!pairUrl) return null;
 
   return (
     <div className="panel settings-panel">
@@ -20,17 +42,25 @@ function CompanionSection() {
         <div className="eyebrow">Companion App</div>
       </div>
       <p className="settings-hint">
-        Access your collection from your phone on the same WiFi network.
-        Open the URL below in your phone's browser.
+        Scan the QR code with your phone camera to open and pair the companion app.
+        Both devices must be on the same Wi-Fi network.
       </p>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: "var(--surface, var(--panel-2))", borderRadius: 10, border: "1px solid var(--border-soft)", marginTop: 12 }}>
-        <code style={{ fontSize: 16, fontWeight: 600, flex: 1, wordBreak: "break-all" }}>{status.url}</code>
-        <button className="btn" style={{ fontSize: 13, padding: "6px 12px" }} onClick={() => navigator.clipboard.writeText(status.url)}>
-          Copy
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, marginTop: 16 }}>
+        {qrSvg ? (
+          <div style={{ background: "#ffffff", borderRadius: 14, padding: 12, boxShadow: "0 0 0 1px var(--border-soft)" }}>
+            <div dangerouslySetInnerHTML={{ __html: qrSvg }} style={{ display: "block", width: 200, height: 200 }} />
+          </div>
+        ) : (
+          <div style={{ width: 224, height: 224, borderRadius: 14, background: "var(--surface)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: "var(--mute)" }}>
+            Generating…
+          </div>
+        )}
+        <button className="btn" onClick={handleRegenerate} disabled={regenerating} style={{ fontSize: 13 }}>
+          {regenerating ? "Regenerating…" : "Regenerate QR (revokes current access)"}
         </button>
       </div>
-      <div style={{ fontSize: 12, color: "var(--mute)", marginTop: 8 }}>
-        Make sure your phone is on the same WiFi network as this computer.
+      <div style={{ fontSize: 12, color: "var(--mute)", marginTop: 10, textAlign: "center" }}>
+        Regenerating creates a new code and immediately disconnects all paired phones.
       </div>
     </div>
   );

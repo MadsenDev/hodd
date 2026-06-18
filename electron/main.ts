@@ -153,6 +153,7 @@ async function lookupMetadata(
 let mainWindow: BrowserWindow | null = null;
 let companionServerPort = 0;
 let companionServer: ReturnType<typeof createServer> | null = null;
+let companionToken: string = crypto.randomUUID();
 
 function titleBarOverlay(dark: boolean) {
   return {
@@ -176,11 +177,9 @@ function startCompanionServer(): void {
   const server = createServer(async (req, res) => {
     const url = new URL(req.url || '/', `http://localhost`);
 
-    // Fix 2 — Restrict CORS: companion is localhost-only so wildcard is not needed.
-    // Respond with null origin (suitable for file:// and localhost contexts) instead of *.
-    res.setHeader('Access-Control-Allow-Origin', 'null');
+    res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
     if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
@@ -198,6 +197,16 @@ function startCompanionServer(): void {
     }
 
     const pathname = url.pathname;
+
+    // All /api/* routes except /api/status require a valid pairing token
+    if (pathname.startsWith('/api/') && pathname !== '/api/status') {
+      const auth = req.headers['authorization'] ?? '';
+      const provided = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+      if (provided !== companionToken) {
+        json({ error: 'Unauthorized' }, 401);
+        return;
+      }
+    }
 
     if (pathname === '/api/status') {
       // Fix 6 — Use APP_VERSION from package.json instead of hardcoded string
@@ -264,8 +273,7 @@ function startCompanionServer(): void {
     }
   });
 
-  // Fix 1 — Bind to 127.0.0.1 only; the companion server must not be reachable from the network
-  server.listen(0, '127.0.0.1', () => {
+  server.listen(0, '0.0.0.0', () => {
     const addr = server.address();
     companionServerPort = typeof addr === 'object' && addr ? addr.port : 7842;
     console.log(`[HODD companion] Server on port ${companionServerPort}`);
@@ -947,12 +955,23 @@ function registerIpc(): void {
   ipcMain.handle('hodd:profile:active', () => db.getActiveProfile());
   ipcMain.handle('hodd:profile:switch', (_e, id: string) => db.setActiveProfile(id));
 
-  // Companion server status
-  ipcMain.handle('hodd:companion:status', () => ({
-    port: companionServerPort,
-    ip: getLocalIP(),
-    url: `http://${getLocalIP()}:${companionServerPort}`,
-  }));
+  // Companion server status + pairing URL
+  ipcMain.handle('hodd:companion:status', () => {
+    const ip = getLocalIP();
+    return {
+      port: companionServerPort,
+      ip,
+      url: `http://${ip}:${companionServerPort}`,
+      pairUrl: `http://${ip}:${companionServerPort}?token=${companionToken}`,
+    };
+  });
+
+  // Regenerate the pairing token — immediately revokes all currently paired devices
+  ipcMain.handle('hodd:companion:regenerate-token', () => {
+    companionToken = crypto.randomUUID();
+    const ip = getLocalIP();
+    return { pairUrl: `http://${ip}:${companionServerPort}?token=${companionToken}` };
+  });
 
   // Print to PDF
   ipcMain.handle('hodd:print:pdf', async (_e, title: string) => {
