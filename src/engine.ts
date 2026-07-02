@@ -150,13 +150,15 @@ export function parseOne(line: string): ParsedItem {
   const title = known ? known.title : cleanTitle(line);
   const color = (known && known.color) ? known.color : TYPE_COLOR[type];
 
+  const typeConfident = !!(known || det.strong);
+
   const fields: ParsedField[] = [];
   fields.push({ k: "Title", v: title, c: "high" });
-  fields.push({ k: "Type", v: TYPE_LABEL[type], c: known || det.strong ? "high" : "ask" });
-  if (type === "game") fields.push({ k: "Platform", v: (known && known.platform) || "Confirm platform", c: known && known.platform ? "high" : "ask" });
-  if (type === "book") fields.push({ k: "Author", v: (known && known.author) || "Confirm author", c: known && known.author ? "high" : "ask" });
-  if (type === "vinyl") fields.push({ k: "Artist", v: (known && known.artist) || "Confirm artist", c: known && known.artist ? "high" : "ask" });
-  if (type === "coin") fields.push({ k: "Mint", v: mint || "Confirm mint", c: mint ? "high" : "ask" });
+  fields.push({ k: "Type", v: TYPE_LABEL[type], c: typeConfident ? "high" : "ask" });
+  if (type === "game" && typeConfident) fields.push({ k: "Platform", v: (known && known.platform) || "Confirm platform", c: known && known.platform ? "high" : "ask" });
+  if (type === "book" && typeConfident) fields.push({ k: "Author", v: (known && known.author) || "Confirm author", c: known && known.author ? "high" : "ask" });
+  if (type === "vinyl" && typeConfident) fields.push({ k: "Artist", v: (known && known.artist) || "Confirm artist", c: known && known.artist ? "high" : "ask" });
+  if (type === "coin" && typeConfident) fields.push({ k: "Mint", v: mint || "Confirm mint", c: mint ? "high" : "ask" });
   fields.push({ k: "Year", v: year || "Confirm year", c: year ? "high" : "ask" });
   fields.push({ k: "Edition", v: edition || "Standard", c: edition ? "high" : "ask" });
   fields.push({ k: type === "coin" ? "Grade" : "Condition", v: "Add a grade", c: "ask" });

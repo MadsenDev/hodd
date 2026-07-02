@@ -4,7 +4,7 @@ import { Cover, FluidCover, useNarrow, StarRating } from '../components';
 import { useCollection, useStory } from '../hooks';
 import { saveCatalog, saveStory, saveHolding, removeHolding, removeItem, setItemOwned, toggleFavorite, OllamaClient, saveRating, getCachedSuggestions } from '../api';
 import { useFavorite } from '../hooks';
-import { ItemEditForm, ItemRecord, SUBLABELS, OWNERSHIP_LABEL } from '../forms';
+import { ItemEditForm, ItemEditFormHandle, ItemRecord, SUBLABELS, OWNERSHIP_LABEL, formatDate } from '../forms';
 import { toaster } from '../toaster';
 
 // ── Local interfaces ──────────────────────────────────────────────────────────
@@ -57,6 +57,7 @@ interface AppCtx {
   back: () => void;
   openItem: (item: ItemLike, collection?: CollectionLike | null) => void;
   addToCollection: (coll: any, prefill?: any) => void;
+  updateItem: (item: ItemLike) => void;
 }
 
 interface ItemDetailProps {
@@ -103,6 +104,8 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }: 
   const [ratingOptimistic, setRatingOptimistic] = React.useState<number | null>(null);
   const rating = ratingOptimistic !== null ? ratingOptimistic : (item.rating ?? null);
   const [itemSuggestions, setItemSuggestions] = React.useState<ItemLike[]>([]);
+  const editFormRef = React.useRef<ItemEditFormHandle>(null);
+  const saveBeforeLeave = () => { if (editing) editFormRef.current?.trySave(); };
   React.useEffect(() => {
     setItem(initialItem);
     setEditing(false);
@@ -145,9 +148,10 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }: 
 
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (editing || (e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') return;
-      if (e.key === 'ArrowLeft'  && prevItem) ctx.openItem({ ...prevItem, type: relType }, collection);
-      if (e.key === 'ArrowRight' && nextItem) ctx.openItem({ ...nextItem, type: relType }, collection);
+      if ((e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') return;
+      if (editing) return;
+      if (e.key === 'ArrowLeft'  && prevItem) { saveBeforeLeave(); ctx.openItem({ ...prevItem, type: relType }, collection); }
+      if (e.key === 'ArrowRight' && nextItem) { saveBeforeLeave(); ctx.openItem({ ...nextItem, type: relType }, collection); }
       if (e.key === 'f' && item.owned !== false) { toggleFavorite(item.id, fav); setFavOptimistic(!fav); }
     }
     window.addEventListener('keydown', onKey);
@@ -180,14 +184,14 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }: 
     owned && type === "book"  && typeof item.watched === "boolean" && ["Read",    item.watched ? "Yes" : "Not yet"],
     owned && ["Condition", item.condition],
     ...(owned && Array.isArray(item.custom) ? item.custom.map((x: { label: string; value: string }) => [x.label, x.value]) : []),
-    owned && ["Acquired", item.acquired],
+    owned && ["Acquired", formatDate(item.acquired)],
     owned && item.notes && ["Notes", item.notes],
     owned && item.ownership === "borrowed" && item.loan_from && ["Borrowed from", item.loan_from],
-    owned && item.ownership === "borrowed" && item.loan_date && ["Since", item.loan_date],
+    owned && item.ownership === "borrowed" && item.loan_date && ["Since", formatDate(item.loan_date)],
     owned && item.purchase_price && ["Paid", `${item.purchase_currency || "USD"} ${item.purchase_price}`],
     owned && item.current_value && ["Est. value", `${item.purchase_currency || "USD"} ${item.current_value}`],
     owned && item.loan_to && ["Lent to", item.loan_to],
-    owned && item.loan_to && item.loan_to_date && ["Since (lent)", item.loan_to_date],
+    owned && item.loan_to && item.loan_to_date && ["Since (lent)", formatDate(item.loan_to_date)],
   ];
   const facts: [string, unknown][] = rawFacts.filter(Boolean).filter(
     (f): f is [string, unknown] => Array.isArray(f) && f.length >= 2 && typeof f[0] === 'string' && f[1] != null && f[1] !== ""
@@ -199,14 +203,14 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }: 
         {/* Fix 6: semantic <button> instead of <span> for keyboard/AT accessibility */}
         <button
           type="button"
-          onClick={ctx.back}
+          onClick={() => { saveBeforeLeave(); ctx.back(); }}
           style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", background: "none", border: "none", padding: 0 }}>
           <I.arrowLeft size={16} /> Back
         </button>
         {(prevItem || nextItem) && (
           <span style={{ display: "inline-flex", gap: 2, marginLeft: 16 }}>
             <button
-              onClick={() => prevItem && ctx.openItem({ ...prevItem, type: relType }, collection)}
+              onClick={() => { if (prevItem) { saveBeforeLeave(); ctx.openItem({ ...prevItem, type: relType }, collection); } }}
               disabled={!prevItem}
               style={{ background: "none", border: "none", cursor: prevItem ? "pointer" : "default",
                 color: prevItem ? "var(--text-2)" : "var(--mute)", padding: "2px 6px", borderRadius: 6,
@@ -215,7 +219,7 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }: 
               <I.arrowLeft size={15} />
             </button>
             <button
-              onClick={() => nextItem && ctx.openItem({ ...nextItem, type: relType }, collection)}
+              onClick={() => { if (nextItem) { saveBeforeLeave(); ctx.openItem({ ...nextItem, type: relType }, collection); } }}
               disabled={!nextItem}
               style={{ background: "none", border: "none", cursor: nextItem ? "pointer" : "default",
                 color: nextItem ? "var(--text-2)" : "var(--mute)", padding: "2px 6px", borderRadius: 6,
@@ -354,7 +358,7 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }: 
           )}
 
           {editing
-            ? <ItemEditForm item={item as ItemRecord} type={type} subLabel={subLabel} story={story}
+            ? <ItemEditForm ref={editFormRef} item={item as ItemRecord} type={type} subLabel={subLabel} story={story}
                 onCancel={() => setEditing(false)}
                 onSave={({ owned: isOwned, holding, canonical, story: paras }) => {
                   if (canonical) {
@@ -370,15 +374,18 @@ export function ItemDetail({ item: initialItem, collection, ctx, ollamaModel }: 
                     gallery: Array.isArray(canonical?.gallery) ? (canonical.gallery as string[])
                       : (canonical?.gallery ? (() => { try { return JSON.parse(canonical.gallery as string) as string[]; } catch (_) { return item.gallery; } })() : null),
                   };
+                  let updatedItem: ItemLike;
                   if (isOwned === false) {
                     removeHolding(item.id);
                     if (isUserItem) setItemOwned(item.id, false);
-                    setItem({ ...item, ...(canonical || {}), ...photoUpdate, owned: false, format: null, completeness: null, completed: null, grade: null, pressing: null, edition: null, condition: null, acquired: null, watched: undefined, notes: null, ownership: null, loan_from: null, loan_date: null, purchase_price: null, purchase_currency: null, current_value: null, loan_to: null, loan_to_date: null });
+                    updatedItem = { ...item, ...(canonical || {}), ...photoUpdate, owned: false, format: null, completeness: null, completed: null, grade: null, pressing: null, edition: null, condition: null, acquired: null, watched: undefined, notes: null, ownership: null, loan_from: null, loan_date: null, purchase_price: null, purchase_currency: null, current_value: null, loan_to: null, loan_to_date: null };
                   } else {
                     if (holding) saveHolding(item.id, holding as Parameters<typeof saveHolding>[1]);
                     if (isUserItem && item.owned === false) setItemOwned(item.id, true);
-                    setItem({ ...item, ...(canonical || {}), ...photoUpdate, owned: true, ...(holding || {}) });
+                    updatedItem = { ...item, ...(canonical || {}), ...photoUpdate, owned: true, ...(holding || {}) };
                   }
+                  setItem(updatedItem);
+                  ctx.updateItem(updatedItem);
                   setEditing(false);
                 }} />
             : <div className="facts">

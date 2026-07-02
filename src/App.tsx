@@ -80,6 +80,7 @@ export interface NavigationContext {
   search(q: string): void;
   newCollection(): void;
   addToCollection(coll: any, prefill?: any): void;
+  updateItem(it: any): void;
 }
 
 function applyEnrichment(item: any, enrich: any, aiPass = false, skipTitle = false) {
@@ -253,7 +254,27 @@ function AddCard({ item, onChange, onRemove, collOpts }: {
             <div className="add-card-meta">
               <span className="add-type">{typeIcon(item.type, { size: 13, stroke: 1.8 })} {TYPE_LABEL[item.type]}</span>
               <span className="add-arrow">→</span>
-              <select className="add-coll" value={item.collection} onChange={e => onChange({ ...item, collection: e.target.value })}>
+              <select className="add-coll" value={item.collection} onChange={e => {
+                const newColl = e.target.value;
+                const newType = Object.entries(TYPE_COLL).find(([, coll]) => coll === newColl)?.[0] || item.type;
+                if (newType === item.type) { onChange({ ...item, collection: newColl }); return; }
+                const TYPE_SPECIFIC: Record<string, { k: string; v: string; c: "ask" }> = {
+                  game:  { k: "Platform", v: "Confirm platform",  c: "ask" },
+                  book:  { k: "Author",   v: "Confirm author",    c: "ask" },
+                  vinyl: { k: "Artist",   v: "Confirm artist",    c: "ask" },
+                  coin:  { k: "Mint",     v: "Confirm mint",      c: "ask" },
+                };
+                const TYPE_SPECIFIC_KEYS = new Set(["Platform", "Author", "Artist", "Mint"]);
+                let fields = item.fields
+                  .filter((f: any) => !TYPE_SPECIFIC_KEYS.has(f.k))
+                  .map((f: any) => f.k === "Type" ? { ...f, v: TYPE_LABEL[newType] || newType } : f);
+                const newSpecific = TYPE_SPECIFIC[newType];
+                if (newSpecific) {
+                  const titleIdx = fields.findIndex((f: any) => f.k === "Title");
+                  fields = [...fields.slice(0, titleIdx + 1), newSpecific, ...fields.slice(titleIdx + 1)];
+                }
+                onChange({ ...item, collection: newColl, type: newType, color: TYPE_COLOR[newType] || item.color, fields, askCount: fields.filter((f: any) => f.c === "ask").length });
+              }}>
                 {(opts as string[]).map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
@@ -712,6 +733,10 @@ export default function App() {
     search(q: string) { setSearchInit(q || ""); push("search"); scrollTop(); },
     newCollection() { setCreateCollOpen(true); },
     addToCollection(coll: any, prefill?: any) { setAddItemColl({ coll, prefill }); },
+    updateItem(it: any) {
+      setItem(it);
+      setItemColl((prev: any) => prev ? { ...prev, items: (prev.items || []).map((i: any) => i.id === it.id ? it : i) } : prev);
+    },
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [view, collId, item, itemColl]);
 

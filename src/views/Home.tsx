@@ -3,6 +3,7 @@ import React from 'react';
 import { I, typeIcon } from '../icons';
 import { Cover, CompletionRing, CoverShelf, SpineMosaic, useNarrow, Loading, ErrorState, rgba, shade } from '../components';
 import { useHome, useCollections, useCollectionsFull } from '../hooks';
+import { formatDate } from '../forms';
 
 function StatLine({ D }) {
   const by = {};
@@ -170,7 +171,7 @@ export function Home({ ctx }) {
             <div className="rediscover">
               <Cover item={redis} h={188} onClick={openRediscover} />
               <div className="copy">
-                <div className="ago">You acquired this {redis.acquired}</div>
+                <div className="ago">You acquired this {formatDate(redis.acquired) || redis.acquired}</div>
                 <h3>{redis.title}</h3>
                 <div className="auth">{redis.sub}</div>
                 <div className="fmt">{redis.format}{redis.edition ? ` · ${redis.edition}` : ""}</div>
@@ -189,7 +190,7 @@ export function Home({ ctx }) {
                 <Cover item={it} h={phone ? 150 : 196} />
                 <div className="title">{it.title}</div>
                 <div className="sub">{it.sub}</div>
-                <div className="date">{it.acquired || (it.created_at ? new Date(it.created_at).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "")}</div>
+                <div className="date">{formatDate(it.acquired) || it.acquired || (it.created_at ? new Date(it.created_at).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "")}</div>
               </div>
             ))}
           </div>
@@ -332,7 +333,7 @@ export function HomeNew({ ctx, art = "Covers" }) {
             <Cover item={it} h={phone ? 150 : 196} />
             <div className="title">{it.title}</div>
             <div className="sub">{it.sub}</div>
-            <div className="date">{it.acquired || (it.created_at ? new Date(it.created_at).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "")}</div>
+            <div className="date">{formatDate(it.acquired) || it.acquired || (it.created_at ? new Date(it.created_at).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "")}</div>
           </div>
         ))}
       </div>
@@ -359,7 +360,7 @@ export function HomeNew({ ctx, art = "Covers" }) {
             <div className="rediscover">
               <Cover item={redis} h={188} onClick={openRediscover} />
               <div className="copy">
-                <div className="ago">You acquired this {redis.acquired}</div>
+                <div className="ago">You acquired this {formatDate(redis.acquired) || redis.acquired}</div>
                 <h3>{redis.title}</h3>
                 <div className="auth">{redis.sub}</div>
                 <div className="fmt">{redis.format}{redis.edition ? ` · ${redis.edition}` : ""}</div>

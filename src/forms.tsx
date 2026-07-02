@@ -62,6 +62,10 @@ interface ItemEditFormProps {
   }) => void;
 }
 
+export interface ItemEditFormHandle {
+  trySave: () => void;
+}
+
 interface AddItemModalProps {
   collection: CollectionRecord;
   onClose: () => void;
@@ -260,6 +264,32 @@ export function EFCombobox({ label, value, options, placeholder, onChange }: EFC
   );
 }
 
+export function formatDate(s: string | null | undefined): string {
+  if (!s) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const d = new Date(s + "T12:00:00");
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  }
+  return s;
+}
+
+interface EFDateProps {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}
+
+export function EFDate({ label, value, onChange }: EFDateProps) {
+  const isoValue = /^\d{4}-\d{2}-\d{2}$/.test(value || "") ? value : "";
+  return (
+    <label className="ef-field">
+      <span className="ef-k">{label}</span>
+      <input className="ef-control ef-date" type="date" value={isoValue}
+        onChange={e => onChange(e.target.value)} />
+    </label>
+  );
+}
+
 interface EFTextareaProps {
   label: string;
   value: string;
@@ -299,7 +329,8 @@ export function EFToggle({ label, value, onChange, hint }: EFToggleProps) {
 
 const ipc = () => (window as any).hoddDesktop?.api;
 
-export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }: ItemEditFormProps) {
+export const ItemEditForm = React.forwardRef<ItemEditFormHandle, ItemEditFormProps>(
+function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }, ref) {
   const init = {
     format: item.format && item.format !== "—" && item.format !== "Owned" ? item.format : "",
     completeness: item.completeness || "",
@@ -406,6 +437,10 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }: 
     ? "Year must be a number between 1000 and 2099"
     : null;
   const titleError = c.title.trim().length > 300 ? "Title is too long (max 300 characters)" : null;
+
+  React.useImperativeHandle(ref, () => ({
+    trySave: () => { if (c.title.trim() && !yearError && !titleError) handleSave(); },
+  }));
 
   function handleSave() {
     if (!c.title.trim()) {
@@ -540,7 +575,7 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }: 
             {etype === "vinyl" && <EFText label="Pressing" value={f.pressing} placeholder="e.g. 180g" onChange={v => set("pressing", v)} />}
             {etype === "book"  && <EFText label="Edition" value={f.edition} placeholder="e.g. First Edition" onChange={v => set("edition", v)} />}
             <EFSelect label="Condition" value={f.condition} options={CONDITION_OPTIONS} placeholder="Condition" onChange={v => set("condition", v)} />
-            <EFText label="Acquired" value={f.acquired} placeholder="e.g. May 2024" onChange={v => set("acquired", v)} />
+            <EFDate label="Acquired" value={f.acquired} onChange={v => set("acquired", v)} />
             <EFText label="Purchase price" value={f.purchase_price} placeholder="e.g. 25.00" onChange={v => set("purchase_price", v)} />
             <EFSelect label="Currency" value={f.purchase_currency} options={["USD", "EUR", "GBP", "CAD", "AUD", "JPY", "DKK", "SEK", "NOK", "CHF"]} placeholder={false} onChange={v => set("purchase_currency", v)} />
             <EFText label="Current value" value={f.current_value} placeholder="Estimated market value" onChange={v => set("current_value", v)} />
@@ -550,13 +585,13 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }: 
             {ownership === "borrowed" && (
               <>
                 <EFText label="Borrowed from" value={f.loan_from} placeholder="Name or place" onChange={v => set("loan_from", v)} />
-                <EFText label="Since" value={f.loan_date} placeholder="e.g. March 2024" onChange={v => set("loan_date", v)} />
+                <EFDate label="Since" value={f.loan_date} onChange={v => set("loan_date", v)} />
               </>
             )}
             {ownership === "owned" && (
               <>
                 <EFText label="Lent to" value={f.loan_to} placeholder="Who has it?" onChange={v => set("loan_to", v)} />
-                <EFText label="Since (lent)" value={f.loan_to_date} placeholder="e.g. March 2024" onChange={v => set("loan_to_date", v)} />
+                <EFDate label="Since (lent)" value={f.loan_to_date} onChange={v => set("loan_to_date", v)} />
               </>
             )}
             <EFText label="Notes" value={f.notes} placeholder="Quick note about this copy…" onChange={v => set("notes", v)} wide />
@@ -593,7 +628,7 @@ export function ItemEditForm({ item, type, subLabel, story, onCancel, onSave }: 
       </div>
     </div>
   );
-}
+});
 
 interface ColorPickerProps {
   value: string;
@@ -820,7 +855,7 @@ export function AddItemModal({ collection, onClose, onAdded, prefill = null }: A
                 {type === "vinyl" && <EFText label="Pressing" value={f.pressing} placeholder="e.g. 180g" onChange={v => set("pressing", v)} />}
                 {type === "book"  && <EFText label="Edition" value={f.edition} placeholder="e.g. First Edition" onChange={v => set("edition", v)} />}
                 <EFSelect label="Condition" value={f.condition} options={CONDITION_OPTIONS} placeholder="Condition" onChange={v => set("condition", v)} />
-                <EFText label="Acquired" value={f.acquired} placeholder="e.g. May 2024" onChange={v => set("acquired", v)} />
+                <EFDate label="Acquired" value={f.acquired} onChange={v => set("acquired", v)} />
                 <EFText label="Purchase price" value={f.purchase_price || ""} placeholder="e.g. 25.00" onChange={v => set("purchase_price", v)} />
                 <EFSelect label="Currency" value={f.purchase_currency || "USD"} options={["USD", "EUR", "GBP", "CAD", "AUD", "JPY", "DKK", "SEK", "NOK", "CHF"]} placeholder={false} onChange={v => set("purchase_currency", v)} />
                 <EFText label="Current value" value={f.current_value || ""} placeholder="Estimated market value" onChange={v => set("current_value", v)} />

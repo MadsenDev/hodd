@@ -437,6 +437,9 @@ body {
   padding: 10px 12px; outline: none; transition: border-color .15s, box-shadow .15s;
 }
 .ef-control:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }
+input[type="date"].ef-control { cursor: pointer; color-scheme: light; }
+[data-theme="dark"] input[type="date"].ef-control { color-scheme: dark; }
+input[type="date"].ef-control::-webkit-calendar-picker-indicator { opacity: 0.45; cursor: pointer; margin-left: 4px; }
 .ef-select-wrap { position: relative; display: flex; }
 .ef-select-wrap select.ef-control { appearance: none; -webkit-appearance: none; padding-right: 34px; cursor: pointer; }
 .ef-chev { position: absolute; right: 11px; top: 50%; transform: translateY(-50%); color: var(--mute); pointer-events: none; display: flex; }
